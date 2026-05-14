@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+const API_BASE = (typeof window !== 'undefined' && (window as any).__ENV?.VITE_API_URL) ? `${(window as any).__ENV.VITE_API_URL}/api` : import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api';
 
 let authToken: string | null = null;
 

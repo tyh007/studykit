@@ -7,6 +7,11 @@
     <title>StudyKit</title>
   </head>
   <body>
+    <script>
+      // Runtime env vars (injected by Render/Fly.io deployment)
+      window.__ENV = window.__ENV || {};
+      window.__ENV.VITE_API_URL = window.__ENV.VITE_API_URL || '';
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

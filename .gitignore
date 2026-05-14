@@ -7,6 +7,8 @@ dist/
 uploads/
 exports/
 .env.save
+.env.template
 zeabur.json
 railway.json
 .continue/
+*.zip
