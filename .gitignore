@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+.DS_Store
+uploads/
+exports/
+.env.save
+zeabur.json
+railway.json
+.continue/
