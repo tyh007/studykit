@@ -16,23 +16,24 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
     modules, setModules, selectedModuleId, selectModule,
     lectures, setLectures, selectedLectureId, selectLecture,
     addModule, addLecture, removeModule, removeLecture,
+    updateModule, updateLecture,
   } = useStore();
 
-  // Multi-select state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: SelectableItem } | null>(null);
-
-  // Delete confirmation
   const [deleteConfirm, setDeleteConfirm] = useState<{
     items: SelectableItem[];
     checkboxAccepted: boolean;
   } | null>(null);
   const [showTrash, setShowTrash] = useState(false);
 
-  // Drag state
   const dragItem = useRef<SelectableItem | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
-  // Close context menu on outside click
+  const [renamingItem, setRenamingItem] = useState<SelectableItem | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (!contextMenu) return;
     const close = () => setContextMenu(null);
@@ -40,10 +41,23 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
     return () => window.removeEventListener('click', close);
   }, [contextMenu]);
 
-  // ===== Helpers =====
+  useEffect(() => {
+    if (renamingItem && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [renamingItem]);
+
   const getModuleLectures = useCallback((moduleId: string) => {
     return lectures.filter((l) => l.module_id === moduleId);
   }, [lectures]);
+
+  const getItemTitle = useCallback((item: SelectableItem): string => {
+    if (item.type === 'module') {
+      return modules.find((m) => m.id === item.id)?.title || '';
+    }
+    return lectures.find((l) => l.id === item.id)?.title || '';
+  }, [modules, lectures]);
 
   const isSelected = (id: string) => selectedIds.has(id);
 
@@ -63,7 +77,36 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
 
   const clearSelection = () => setSelectedIds(new Set());
 
-  // ===== Copy =====
+  const startRename = (item: SelectableItem) => {
+    setRenamingItem(item);
+    setRenameValue(getItemTitle(item));
+    setContextMenu(null);
+  };
+
+  const confirmRename = async () => {
+    if (!renamingItem || !renameValue.trim()) {
+      setRenamingItem(null);
+      return;
+    }
+    const newTitle = renameValue.trim();
+    try {
+      if (renamingItem.type === 'module') {
+        await modulesApi.update(renamingItem.id, { title: newTitle });
+        updateModule(renamingItem.id, { title: newTitle as any });
+      } else {
+        await lecturesApi.update(renamingItem.id, { title: newTitle });
+        updateLecture(renamingItem.id, { title: newTitle as any });
+      }
+    } catch (err) {
+      console.error('Rename failed:', err);
+    }
+    setRenamingItem(null);
+  };
+
+  const cancelRename = () => {
+    setRenamingItem(null);
+  };
+
   const handleCopy = useCallback(async (item: SelectableItem) => {
     try {
       if (item.type === 'module') {
@@ -75,7 +118,6 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
           colour: mod.colour,
         });
         addModule(copy);
-        // Copy lectures too
         const moduleLectures = lectures.filter((l) => l.module_id === item.id);
         for (const lec of moduleLectures) {
           await lecturesApi.create({
@@ -84,7 +126,6 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
             week_label: lec.week_label,
           });
         }
-        // Reload lectures for this module
         const updated = await lecturesApi.list(copy.id);
         setLectures([...lectures, ...updated]);
       } else {
@@ -103,7 +144,6 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
     }
   }, [modules, lectures, addModule, addLecture, setLectures]);
 
-  // ===== Delete (soft delete to trash) =====
   const handleDeleteConfirm = useCallback(async () => {
     if (!deleteConfirm) return;
     try {
@@ -111,7 +151,6 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
         if (item.type === 'module') {
           await modulesApi.delete(item.id);
           removeModule(item.id);
-          // Soft-delete all lectures in this module locally
           const moduleLectures = lectures.filter((l) => l.module_id === item.id);
           for (const lec of moduleLectures) {
             await db.noteBlocks.where('lecture_id').equals(lec.id).modify({ deleted_at: new Date().toISOString() });
@@ -129,46 +168,64 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
     }
   }, [deleteConfirm, lectures, removeModule, removeLecture]);
 
-  // ===== Drag & Drop =====
-  const handleDragStart = (item: SelectableItem) => {
+  const handleDragStart = (e: React.DragEvent, item: SelectableItem) => {
     dragItem.current = item;
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => {
+      (e.target as HTMLElement).style.opacity = '0.5';
+    }, 0);
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    (e.target as HTMLElement).style.opacity = '1';
+    setDragOverId(null);
+    dragItem.current = null;
   };
 
   const handleDragOver = (e: React.DragEvent, targetId: string) => {
     e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverId(targetId);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverId(null);
   };
 
   const handleDrop = async (e: React.DragEvent, targetItem: SelectableItem) => {
     e.preventDefault();
+    setDragOverId(null);
     const source = dragItem.current;
     if (!source || source.id === targetItem.id) return;
+
+    (e.target as HTMLElement).style.opacity = '1';
 
     try {
       if (source.type === 'module' && targetItem.type === 'module') {
         const sourceIdx = modules.findIndex((m) => m.id === source.id);
         const targetIdx = modules.findIndex((m) => m.id === targetItem.id);
         if (sourceIdx === -1 || targetIdx === -1) return;
-
         const reordered = [...modules];
         const [moved] = reordered.splice(sourceIdx, 1);
         reordered.splice(targetIdx, 0, moved);
-
         for (let i = 0; i < reordered.length; i++) {
           await modulesApi.update(reordered[i].id, { sort_order: i });
         }
         setModules(reordered);
       } else if (source.type === 'lecture' && targetItem.type === 'lecture') {
+        const sourceLecture = lectures.find((l) => l.id === source.id);
         const targetLecture = lectures.find((l) => l.id === targetItem.id);
-        if (!targetLecture) return;
-        const moduleLectures = lectures.filter((l) => l.module_id === targetLecture.module_id).sort((a, b) => a.sort_order - b.sort_order);
+        if (!sourceLecture || !targetLecture) return;
+        if (sourceLecture.module_id !== targetLecture.module_id) return;
+        const moduleLectures = lectures
+          .filter((l) => l.module_id === targetLecture.module_id)
+          .sort((a, b) => a.sort_order - b.sort_order);
         const sourceIdx = moduleLectures.findIndex((l) => l.id === source.id);
         const targetIdx = moduleLectures.findIndex((l) => l.id === targetItem.id);
         if (sourceIdx === -1 || targetIdx === -1) return;
-
         const reordered = [...moduleLectures];
         const [moved] = reordered.splice(sourceIdx, 1);
         reordered.splice(targetIdx, 0, moved);
-
         for (let i = 0; i < reordered.length; i++) {
           await lecturesApi.update(reordered[i].id, { sort_order: i });
         }
@@ -176,14 +233,27 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
           const updated = reordered.find((r) => r.id === l.id);
           return updated ? { ...l, sort_order: updated.sort_order } : l;
         }));
+      } else if (source.type === 'lecture' && targetItem.type === 'module') {
+        const lecture = lectures.find((l) => l.id === source.id);
+        const targetModule = modules.find((m) => m.id === targetItem.id);
+        if (!lecture || !targetModule) return;
+        if (lecture.module_id === targetItem.id) return;
+        await lecturesApi.update(source.id, { module_id: targetItem.id });
+        const targetLectures = lectures
+          .filter((l) => l.module_id === targetItem.id && l.id !== source.id)
+          .sort((a, b) => a.sort_order - b.sort_order);
+        const newSortOrder = targetLectures.length > 0
+          ? targetLectures[targetLectures.length - 1].sort_order + 1
+          : 0;
+        await lecturesApi.update(source.id, { sort_order: newSortOrder });
+        updateLecture(source.id, { module_id: targetItem.id, sort_order: newSortOrder } as any);
       }
     } catch (err) {
-      console.error('Reorder failed:', err);
+      console.error('Reorder/move failed:', err);
     }
     dragItem.current = null;
   };
 
-  // ===== Batch operations =====
   const batchDelete = () => {
     const items: SelectableItem[] = [];
     selectedIds.forEach((id) => {
@@ -208,9 +278,13 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
     }
   };
 
-  // ===== Context menu actions =====
+  const isLectureDragging = () => {
+    return dragItem.current?.type === 'lecture';
+  };
+
   const contextActions = (item: SelectableItem) => (
     <div className="context-menu" style={{ position: 'fixed', left: contextMenu!.x, top: contextMenu!.y, zIndex: 1000 }}>
+      <button onClick={() => startRename(item)}>✏️ Rename</button>
       <button onClick={() => { handleCopy(item); setContextMenu(null); }}>📋 Copy</button>
       <button onClick={() => { setContextMenu(null); setDeleteConfirm({ items: [item], checkboxAccepted: false }); }}>🗑️ Delete</button>
       {item.type === 'lecture' && (
@@ -289,38 +363,25 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
       <div className="sidebar-header">
         <h2>{showTrash ? 'Trash' : 'Modules'}</h2>
         <div className="flex gap-1">
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => { setShowTrash(!showTrash); clearSelection(); }}
-            title={showTrash ? 'Back to modules' : 'Trash'}
-          >
+          <button className="btn btn-ghost btn-sm" onClick={() => { setShowTrash(!showTrash); clearSelection(); }} title={showTrash ? 'Back to modules' : 'Trash'}>
             {showTrash ? '← Back' : '🗑️'}
           </button>
-          {!showTrash && (
-            <button className="btn btn-ghost btn-sm" onClick={onShowNewModule}>+ New</button>
-          )}
+          {!showTrash && <button className="btn btn-ghost btn-sm" onClick={onShowNewModule}>+ New</button>}
         </div>
       </div>
 
       <div className="sidebar-content">
         {showTrash ? (
-          <TrashView
-            onRestore={() => {
-              modulesApi.list().then(setModules).catch(console.error);
-              if (selectedModuleId) {
-                lecturesApi.list(selectedModuleId).then(setLectures).catch(console.error);
-              }
-            }}
-          />
+          <TrashView onRestore={() => {
+            modulesApi.list().then(setModules).catch(console.error);
+            if (selectedModuleId) lecturesApi.list(selectedModuleId).then(setLectures).catch(console.error);
+          }} />
         ) : (
           <>
             {modules.length === 0 && (
-              <p className="text-sm text-muted" style={{ padding: '0.75rem' }}>
-                No modules yet. Create your first module to get started.
-              </p>
+              <p className="text-sm text-muted" style={{ padding: '0.75rem' }}>No modules yet. Create your first module to get started.</p>
             )}
 
-            {/* Batch action bar */}
             {selectedIds.size > 0 && (
               <div className="batch-bar">
                 <span className="text-xs">{selectedIds.size} selected</span>
@@ -330,115 +391,107 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
               </div>
             )}
 
-            {modules.map((mod) => (
-              <div key={mod.id}>
-                {/* Module item */}
-                <div
-                  className={`module-item ${selectedModuleId === mod.id ? 'active' : ''} ${isSelected(mod.id) ? 'selected' : ''}`}
-                  draggable
-                  onDragStart={() => handleDragStart({ type: 'module', id: mod.id })}
-                  onDragOver={(e) => handleDragOver(e, mod.id)}
-                  onDrop={(e) => handleDrop(e, { type: 'module', id: mod.id })}
-                  onClick={(e) => {
-                    if (e.ctrlKey || e.metaKey || e.shiftKey) {
-                      toggleSelect(mod.id, e);
-                    } else {
-                      clearSelection();
-                      selectModule(mod.id);
-                    }
-                  }}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    setContextMenu({ x: e.clientX, y: e.clientY, item: { type: 'module', id: mod.id } });
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    className="item-checkbox"
-                    aria-label={`Select ${mod.title}`}
-                    checked={isSelected(mod.id)}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      toggleSelect(mod.id, e as any);
+            {modules.map((mod) => {
+              const isDragOver = dragOverId === mod.id;
+              const lectureDropHint = isLectureDragging();
+
+              return (
+                <div key={mod.id}>
+                  <div className={`module-item ${selectedModuleId === mod.id ? 'active' : ''} ${isSelected(mod.id) ? 'selected' : ''} ${isDragOver && lectureDropHint ? 'drag-over drop-target' : ''} ${isDragOver && !lectureDropHint ? 'drag-over-same' : ''}`}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, { type: 'module', id: mod.id })}
+                    onDragEnd={handleDragEnd}
+                    onDragOver={(e) => handleDragOver(e, mod.id)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, { type: 'module', id: mod.id })}
+                    onClick={(e) => {
+                      if (renamingItem) return;
+                      if (e.ctrlKey || e.metaKey || e.shiftKey) { toggleSelect(mod.id, e); }
+                      else { clearSelection(); selectModule(mod.id); }
                     }}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                  <span className="colour-dot" style={{ background: mod.colour || 'var(--color-primary)' }} />
-                  <span className="module-title">{mod.title}</span>
-                  {mod.code && <span className="module-code">{mod.code}</span>}
-                  <span className="drag-handle" title="Drag to reorder">⠿</span>
-                </div>
+                    onDoubleClick={() => startRename({ type: 'module', id: mod.id })}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setContextMenu({ x: e.clientX, y: e.clientY, item: { type: 'module', id: mod.id } });
+                    }}
+                  >
+                    <input type="checkbox" className="item-checkbox" aria-label={`Select ${mod.title}`} checked={isSelected(mod.id)}
+                      onChange={(e) => { e.stopPropagation(); toggleSelect(mod.id, e as any); }} onClick={(e) => e.stopPropagation()} />
+                    <span className="colour-dot" style={{ background: mod.colour || 'var(--color-primary)' }} />
+                    {renamingItem?.type === 'module' && renamingItem.id === mod.id ? (
+                      <input ref={renameInputRef} className="rename-input" value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onBlur={confirmRename}
+                        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') confirmRename(); if (e.key === 'Escape') cancelRename(); }}
+                        onClick={(e) => e.stopPropagation()} />
+                    ) : (
+                      <span className="module-title">{mod.title}</span>
+                    )}
+                    {mod.code && !renamingItem && <span className="module-code">{mod.code}</span>}
+                    <span className="drag-handle" title="Drag to reorder">⠿</span>
+                  </div>
 
-                {/* Lectures under this module */}
-                {selectedModuleId === mod.id && getModuleLectures(mod.id).length > 0 && (
-                  <div className="lecture-list">
-                    {getModuleLectures(mod.id).sort((a, b) => a.sort_order - b.sort_order).map((lec) => (
-                      <div
-                        key={lec.id}
-                        className={`lecture-item ${selectedLectureId === lec.id ? 'active' : ''} ${isSelected(lec.id) ? 'selected' : ''}`}
-                        draggable
-                        onDragStart={() => handleDragStart({ type: 'lecture', id: lec.id })}
-                        onDragOver={(e) => handleDragOver(e, lec.id)}
-                        onDrop={(e) => handleDrop(e, { type: 'lecture', id: lec.id })}
-                        onClick={(e) => {
-                          if (e.ctrlKey || e.metaKey || e.shiftKey) {
-                            toggleSelect(lec.id, e);
-                          } else {
-                            clearSelection();
-                            selectLecture(lec.id);
-                          }
-                        }}
-                        onContextMenu={(e) => {
-                          e.preventDefault();
-                          setContextMenu({ x: e.clientX, y: e.clientY, item: { type: 'lecture', id: lec.id } });
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          className="item-checkbox"
-                          aria-label={`Select ${lec.title}`}
-                          checked={isSelected(lec.id)}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            toggleSelect(lec.id, e as any);
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        <div style={{ flex: 1 }}>
-                          <div>{lec.title}</div>
-                          {lec.week_label && <div className="lecture-week">{lec.week_label}</div>}
-                        </div>
-                        <span className="drag-handle" title="Drag to reorder">⠿</span>
+                  {selectedModuleId === mod.id && (
+                    <div className={`lecture-list ${isDragOver && lectureDropHint ? 'drag-over-zone' : ''}`}
+                      onDragOver={(e) => { if (lectureDropHint) { e.preventDefault(); setDragOverId(mod.id); } }}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => { if (lectureDropHint) handleDrop(e, { type: 'module', id: mod.id }); }}
+                    >
+                      {getModuleLectures(mod.id).length > 0 ? (
+                        getModuleLectures(mod.id).sort((a, b) => a.sort_order - b.sort_order).map((lec) => (
+                          <div key={lec.id}
+                            className={`lecture-item ${selectedLectureId === lec.id ? 'active' : ''} ${isSelected(lec.id) ? 'selected' : ''} ${dragOverId === lec.id ? 'drag-over' : ''}`}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, { type: 'lecture', id: lec.id })}
+                            onDragEnd={handleDragEnd}
+                            onDragOver={(e) => handleDragOver(e, lec.id)}
+                            onDragLeave={handleDragLeave}
+                            onDrop={(e) => handleDrop(e, { type: 'lecture', id: lec.id })}
+                            onClick={(e) => {
+                              if (renamingItem) return;
+                              if (e.ctrlKey || e.metaKey || e.shiftKey) { toggleSelect(lec.id, e); }
+                              else { clearSelection(); selectLecture(lec.id); }
+                            }}
+                            onDoubleClick={() => startRename({ type: 'lecture', id: lec.id })}
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              setContextMenu({ x: e.clientX, y: e.clientY, item: { type: 'lecture', id: lec.id } });
+                            }}
+                          >
+                            <input type="checkbox" className="item-checkbox" aria-label={`Select ${lec.title}`} checked={isSelected(lec.id)}
+                              onChange={(e) => { e.stopPropagation(); toggleSelect(lec.id, e as any); }} onClick={(e) => e.stopPropagation()} />
+                            <div style={{ flex: 1 }}>
+                              {renamingItem?.type === 'lecture' && renamingItem.id === lec.id ? (
+                                <input ref={renameInputRef} className="rename-input" value={renameValue}
+                                  onChange={(e) => setRenameValue(e.target.value)}
+                                  onBlur={confirmRename}
+                                  onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') confirmRename(); if (e.key === 'Escape') cancelRename(); }}
+                                  onClick={(e) => e.stopPropagation()} />
+                              ) : (
+                                <div>{lec.title}</div>
+                              )}
+                              {lec.week_label && <div className="lecture-week">{lec.week_label}</div>}
+                            </div>
+                            <span className="drag-handle" title="Drag to reorder">⠿</span>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-muted" style={{ padding: '0.375rem 0.625rem' }}>No lectures yet</p>
+                      )}
+                      <div style={{ padding: '0.375rem 0.625rem' }}>
+                        <button className="btn btn-ghost btn-sm" onClick={onShowNewLecture} style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>+ Add lecture</button>
                       </div>
-                    ))}
-                    <div style={{ padding: '0.375rem 0.625rem' }}>
-                      <button className="btn btn-ghost btn-sm" onClick={onShowNewLecture} style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                        + Add lecture
-                      </button>
                     </div>
-                  </div>
-                )}
-
-                {selectedModuleId === mod.id && getModuleLectures(mod.id).length === 0 && (
-                  <div className="lecture-list">
-                    <p className="text-xs text-muted" style={{ padding: '0.375rem 0.625rem' }}>No lectures yet</p>
-                    <div style={{ padding: '0.375rem 0.625rem' }}>
-                      <button className="btn btn-ghost btn-sm" onClick={onShowNewLecture} style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                        + Add lecture
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
+                  )}
+                </div>
+              );
+            })}
           </>
         )}
       </div>
 
-      {/* Context menu */}
       {contextMenu && contextActions(contextMenu.item)}
 
-      {/* Delete confirmation dialog */}
       {deleteConfirm && (
         <div className="modal-overlay" onClick={() => setDeleteConfirm(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 380 }}>
@@ -454,22 +507,13 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
               Deleted items will be moved to trash. Notes and annotations will also be soft-deleted.
             </p>
             <label className="delete-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', cursor: 'pointer', fontSize: '0.85rem' }}>
-              <input
-                type="checkbox"
-                checked={deleteConfirm.checkboxAccepted}
-                onChange={(e) => setDeleteConfirm({ ...deleteConfirm, checkboxAccepted: e.target.checked })}
-              />
+              <input type="checkbox" checked={deleteConfirm.checkboxAccepted}
+                onChange={(e) => setDeleteConfirm({ ...deleteConfirm, checkboxAccepted: e.target.checked })} />
               I understand, move to trash
             </label>
             <div className="flex gap-1" style={{ justifyContent: 'flex-end' }}>
               <button className="btn btn-ghost btn-sm" onClick={() => setDeleteConfirm(null)}>Cancel</button>
-              <button
-                className="btn btn-danger btn-sm"
-                disabled={!deleteConfirm.checkboxAccepted}
-                onClick={handleDeleteConfirm}
-              >
-                Move to Trash
-              </button>
+              <button className="btn btn-danger btn-sm" disabled={!deleteConfirm.checkboxAccepted} onClick={handleDeleteConfirm}>Move to Trash</button>
             </div>
           </div>
         </div>
@@ -478,26 +522,20 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
   );
 }
 
-// ===== Trash View =====
 function TrashView({ onRestore }: { onRestore: () => void }) {
   const { modules, setModules, removeModule, lectures, setLectures, removeLecture, selectedModuleId } = useStore();
   const [loading, setLoading] = useState(true);
   const [trashedModules, setTrashedModules] = useState<any[]>([]);
   const [trashedLectures, setTrashedLectures] = useState<any[]>([]);
 
-  // Load trashed items from API
   useEffect(() => {
     const load = async () => {
       try {
-        // Fetch all modules (including trashed) — API only returns non-deleted normally
-        // We'll use Dexie for the trash view
         const dbModules = await db.modules.toArray();
         const dbLectures = await db.lectures.toArray();
         setTrashedModules(dbModules.filter((m: any) => m.deleted_at));
         setTrashedLectures(dbLectures.filter((l: any) => l.deleted_at));
-      } catch (err) {
-        console.error('Failed to load trash:', err);
-      }
+      } catch (err) { console.error('Failed to load trash:', err); }
       setLoading(false);
     };
     load();
@@ -514,13 +552,9 @@ function TrashView({ onRestore }: { onRestore: () => void }) {
         await lecturesApi.restore(id);
         await db.lectures.update(id, { deleted_at: undefined as any });
         setTrashedLectures((prev) => prev.filter((l) => l.id !== id));
-        if (selectedModuleId) {
-          lecturesApi.list(selectedModuleId).then(setLectures).catch(console.error);
-        }
+        if (selectedModuleId) lecturesApi.list(selectedModuleId).then(setLectures).catch(console.error);
       }
-    } catch (err) {
-      console.error('Restore failed:', err);
-    }
+    } catch (err) { console.error('Restore failed:', err); }
   };
 
   const handlePermanentDelete = async (type: 'module' | 'lecture', id: string) => {
@@ -528,11 +562,8 @@ function TrashView({ onRestore }: { onRestore: () => void }) {
       if (type === 'module') {
         await modulesApi.permanentDelete(id);
         await db.modules.delete(id);
-        // Also delete associated lectures from Dexie
         const moduleLectures = await db.lectures.where('module_id').equals(id).toArray();
-        for (const lec of moduleLectures) {
-          await db.lectures.delete(lec.id);
-        }
+        for (const lec of moduleLectures) await db.lectures.delete(lec.id);
         setTrashedModules((prev) => prev.filter((m) => m.id !== id));
         setTrashedLectures((prev) => prev.filter((l) => !moduleLectures.some((ml) => ml.id === l.id)));
       } else {
@@ -540,28 +571,20 @@ function TrashView({ onRestore }: { onRestore: () => void }) {
         await db.lectures.delete(id);
         setTrashedLectures((prev) => prev.filter((l) => l.id !== id));
       }
-    } catch (err) {
-      console.error('Permanent delete failed:', err);
-    }
+    } catch (err) { console.error('Permanent delete failed:', err); }
   };
 
   if (loading) return <p className="text-sm text-muted" style={{ padding: '0.75rem' }}>Loading trash...</p>;
-
   if (trashedModules.length === 0 && trashedLectures.length === 0) {
     return <p className="text-sm text-muted" style={{ padding: '0.75rem', textAlign: 'center' }}>Trash is empty.</p>;
   }
 
   return (
     <div>
-      <p className="text-xs text-muted" style={{ padding: '0 0 0.5rem 0' }}>
-        Deleted items appear here. You can restore or permanently delete them.
-      </p>
+      <p className="text-xs text-muted" style={{ padding: '0 0 0.5rem 0' }}>Deleted items appear here. You can restore or permanently delete them.</p>
       {trashedModules.map((mod: any) => (
         <div key={mod.id} className="trash-item">
-          <div className="trash-item-info">
-            <span className="trash-item-type">Module</span>
-            <span>{mod.title}</span>
-          </div>
+          <div className="trash-item-info"><span className="trash-item-type">Module</span><span>{mod.title}</span></div>
           <div className="flex gap-1">
             <button className="btn btn-ghost btn-sm" onClick={() => handleRestore('module', mod.id)}>↩ Restore</button>
             <button className="btn btn-ghost btn-sm" style={{ color: 'var(--color-danger)' }} onClick={() => handlePermanentDelete('module', mod.id)}>🗑️ Delete</button>
@@ -570,10 +593,7 @@ function TrashView({ onRestore }: { onRestore: () => void }) {
       ))}
       {trashedLectures.map((lec: any) => (
         <div key={lec.id} className="trash-item">
-          <div className="trash-item-info">
-            <span className="trash-item-type">Lecture</span>
-            <span>{lec.title}</span>
-          </div>
+          <div className="trash-item-info"><span className="trash-item-type">Lecture</span><span>{lec.title}</span></div>
           <div className="flex gap-1">
             <button className="btn btn-ghost btn-sm" onClick={() => handleRestore('lecture', lec.id)}>↩ Restore</button>
             <button className="btn btn-ghost btn-sm" style={{ color: 'var(--color-danger)' }} onClick={() => handlePermanentDelete('lecture', lec.id)}>🗑️ Delete</button>

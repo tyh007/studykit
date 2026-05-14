@@ -1036,6 +1036,53 @@ body {
   cursor: pointer;
 }
 
+/* ===== Drag & Drop visual feedback ===== */
+.module-item.drag-over.drop-target,
+.lecture-item.drag-over {
+  outline: 2px dashed var(--color-primary);
+  outline-offset: 2px;
+  background: var(--color-primary-light);
+  transform: scale(1.02);
+  transition: all 0.15s ease;
+  box-shadow: 0 0 12px rgba(79, 70, 229, 0.15);
+}
+
+.module-item.drag-over-same {
+  outline: 2px dashed var(--color-text-muted);
+  outline-offset: 2px;
+  background: var(--color-bg-tertiary);
+}
+
+.lecture-list.drag-over-zone {
+  border-left-color: var(--color-primary);
+  background: rgba(79, 70, 229, 0.03);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  transition: all 0.15s ease;
+}
+
+.module-item[draggable="true"],
+.lecture-item[draggable="true"] {
+  transition: opacity 0.2s ease, transform 0.15s ease;
+}
+
+/* ===== Rename input ===== */
+.rename-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.125rem 0.375rem;
+  font-size: 0.875rem;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-primary-light);
+}
+
+.lecture-item .rename-input {
+  font-size: 0.825rem;
+}
+
 /* ===== Module item drag states ===== */
 .module-item[draggable="true"]:active,
 .lecture-item[draggable="true"]:active {
