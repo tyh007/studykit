@@ -39,7 +39,10 @@ export default function PDFViewer({
     setLoading(true);
     setError(null);
 
-    const pdfUrl = `/uploads/${document.storage_key}`;
+    const apiBase = (typeof window !== 'undefined' && (window as any).__ENV?.VITE_API_URL)
+      ? (window as any).__ENV.VITE_API_URL
+      : import.meta.env.VITE_API_URL || '';
+    const pdfUrl = apiBase ? `${apiBase}/uploads/${document.storage_key}` : `/uploads/${document.storage_key}`;
 
     pdfjsLib.getDocument(pdfUrl).promise
       .then((pdf) => {
