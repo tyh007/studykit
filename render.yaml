@@ -4,7 +4,6 @@ services:
   - type: web
     name: studykit-backend
     runtime: docker
-    plan: starter
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     region: frankfurt
@@ -45,7 +44,6 @@ services:
   - type: web
     name: studykit-frontend
     runtime: static
-    plan: starter
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
     pullRequestPreviewsEnabled: false
