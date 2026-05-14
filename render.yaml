@@ -1,13 +1,13 @@
-# Render Blueprint - 一键部署 StudyKit
-# 在 https://render.com 上使用 "Blueprint" 功能导入此文件可一次性部署所有服务
-
+# Render Blueprint - 一键部署 StudyKit（免费计划）
 services:
-  # ===== Backend API =====
+  # ===== Backend API (Express + Docker) =====
   - type: web
     name: studykit-backend
-    env: docker
+    runtime: docker
+    plan: free
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
+    region: frankfurt
     envVars:
       - key: NODE_ENV
         value: production
@@ -41,10 +41,11 @@ services:
           name: studykit-frontend
           property: host
 
-  # ===== Frontend =====
+  # ===== Frontend (React Static Site) =====
   - type: web
     name: studykit-frontend
-    env: static
+    runtime: static
+    plan: free
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
     pullRequestPreviewsEnabled: false
@@ -60,3 +61,4 @@ databases:
     databaseName: studykit
     user: studykit
     plan: free
+    region: frankfurt
