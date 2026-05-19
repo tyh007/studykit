@@ -115,11 +115,11 @@ export class OllamaClient {
         stream: request.stream || false,
         ...(request.format ? { format: request.format } : {}),
         options: {
-          temperature: 0.1,
+          temperature: 0.3,
           top_p: 0.9,
           max_tokens: 2000,
-          repeat_penalty: 1.1,
-          num_ctx: 2048,
+          repeat_penalty: 1.15,
+          num_ctx: 8192,
           ...request.options
         }
       })

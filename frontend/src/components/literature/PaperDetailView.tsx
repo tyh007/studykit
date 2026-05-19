@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { literaturePapersApi, literatureAiApi } from '../../lib/literature-api';
 import type { LiteraturePaper, ExtractedData } from '../../types';
+import { PromptBuilder } from '../../lib/literature/prompt-builder';
+import { buildFocusedPaperContext, truncatePaperText } from '../../lib/literature/local-ollama-ai';
 
 interface PaperDetailViewProps {
   paper: LiteraturePaper | null;
@@ -33,7 +35,14 @@ export default function PaperDetailView({ paper, onClose, projectId, onUpdated }
     if (!paper.full_text) return;
     setExtracting(true);
     try {
-      const result = await literatureAiApi.extract({ paperText: paper.full_text, detailLevel: 'brief' });
+      const prompt = PromptBuilder.buildExtractionPrompt(
+        buildFocusedPaperContext(truncatePaperText(paper.full_text)),
+        'brief',
+      );
+      const result = await literatureAiApi.extract({
+        systemPrompt: prompt.systemPrompt,
+        userPrompt: prompt.userPrompt,
+      });
       if (result.success && result.extractedData) {
         await literaturePapersApi.update(paper.id, { extracted_data: result.extractedData });
         onUpdated();

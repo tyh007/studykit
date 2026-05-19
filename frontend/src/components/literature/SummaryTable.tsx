@@ -145,7 +145,7 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
       || (p.abstract || '').toLowerCase().includes(q);
   });
 
-  const customFieldNames = litCustomFields.map(f => f.name);
+  const customFieldColumns = litCustomFields.map(f => ({ id: f.id, name: f.name }));
 
   // Column resize handlers
   const startColResize = useCallback((col: string, e: React.MouseEvent) => {
@@ -310,10 +310,10 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
                     <div className="resize-handle" onMouseDown={(e) => startColResize(field, e)} />
                   </th>
                 ))}
-                {customFieldNames.map(name => (
-                  <th key={name} style={{ width: 160 }}>
-                    {name}
-                    <div className="resize-handle" onMouseDown={(e) => startColResize(name, e)} />
+                {customFieldColumns.map(col => (
+                  <th key={col.id} style={{ width: 160 }}>
+                    {col.name}
+                    <div className="resize-handle" onMouseDown={(e) => startColResize(col.id, e)} />
                   </th>
                 ))}
               </tr>
@@ -349,10 +349,9 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
                     {EXTRACTED_COLUMNS.map(field => (
                       <td key={field}>{renderExtractedCell(paper, field)}</td>
                     ))}
-                    {customFieldNames.map(name => {
-                      const key = name.toLowerCase().replace(/\s+/g, '_');
-                      return <td key={name}>{renderExtractedCell(paper, key)}</td>;
-                    })}
+                    {customFieldColumns.map(col => (
+                      <td key={col.id}>{renderExtractedCell(paper, col.id)}</td>
+                    ))}
                   </tr>
                 );
               })}

@@ -116,13 +116,12 @@ const TEMPLATE_PHRASES = [
 ]
 
 function looksLikeTemplateOutput(text: string): boolean {
-  const lower = text.toLowerCase()
-  const exactMatch = TEMPLATE_PHRASES.some(phrase => lower === phrase.toLowerCase())
-  if (exactMatch) return true
-  if (text.length < 80 && text !== 'Not mentioned') {
-    const templateOverlap = TEMPLATE_PHRASES.filter(phrase => lower.includes(phrase)).length
-    if (templateOverlap >= 2) return true
-  }
+  if (text === 'Not mentioned' || !text) return false
+  const lower = text.toLowerCase().trim()
+  // Exact match of a template phrase = definitely template output
+  if (TEMPLATE_PHRASES.some(phrase => lower === phrase.toLowerCase())) return true
+  // Short text that matches ANY template phrase = probable template output
+  if (text.length < 100 && TEMPLATE_PHRASES.some(phrase => lower.includes(phrase))) return true
   return false
 }
 
@@ -181,7 +180,7 @@ function isNoiseLine(line: string) {
     !line ||
     /@/.test(line) ||
     /^(figure|table)\s+\d+/i.test(line) ||
-    /\b(?:chi|barcelona|spain|copyright|permission to make|acm|proceedings)\b/.test(lower) ||
+    /\b(?:copyright|permission to make|acm|proceedings)\b/.test(lower) ||
     /\b(?:university|department|school|college|laboratory|institute)\b/.test(lower)
   )
 }
@@ -219,7 +218,7 @@ function collectSectionBlocks(text: string) {
 
     if (currentHeading) {
       const bucket = sections.get(currentHeading)
-      if (bucket && bucket.join(' ').length < 4000) {
+      if (bucket && bucket.join(' ').length < 8000) {
         bucket.push(line)
       }
     }
@@ -232,7 +231,7 @@ function takeSentences(text: string, count: number, maxChars: number) {
   const sentences = text
     .split(/(?<=[.!?])\s+/)
     .map(sentence => normalizeWhitespace(sentence))
-    .filter(sentence => sentence.length > 20 && !isNoiseLine(sentence))
+    .filter(sentence => sentence.length > 10 && !isNoiseLine(sentence))
 
   if (sentences.length === 0) {
     return normalizeWhitespace(text).slice(0, maxChars)
@@ -482,9 +481,9 @@ export function extractPaperWithRules(text: string): ExtractedData {
   const abstract = extractAbstractBlock(cleanedText)
   const referenceSafeText = stripTrailingNoise(cleanedText)
   const output = {} as Record<SectionField, string>
-  const usedValues = new Set<string>()
 
   for (const config of SECTION_FIELD_CONFIG) {
+    const usedValues = new Set<string>()
     let candidate = ''
 
     for (const heading of config.headings) {

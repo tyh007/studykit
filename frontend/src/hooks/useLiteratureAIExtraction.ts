@@ -1,12 +1,12 @@
 import { useState, useCallback, useEffect } from 'react'
-import { getLocalOllamaAvailability, extractPaperWithLocalOllama } from '../lib/literature/local-ollama-ai'
+import { getLocalOllamaAvailability, extractPaperWithLocalOllama, buildFocusedPaperContext, truncatePaperText } from '../lib/literature/local-ollama-ai'
 import { getCustomAIAvailability, extractPaperWithCustomAI } from '../lib/literature/custom-ai-extraction'
 import { readOllamaSettings, saveOllamaSettings, DEFAULT_OLLAMA_SETTINGS } from '../lib/literature/ollama-settings'
 import { readCustomAISettings, saveCustomAISettings } from '../lib/literature/custom-ai-settings'
 import { readAIProviderConfig, saveAIProviderConfig, type AIProvider } from '../lib/literature/ai-provider-config'
 import type { CustomFieldDefinition } from '../lib/literature/types'
-import { PSYCHOLOGY_CUSTOM_FIELDS } from '../lib/literature/prompt-builder'
-import { literaturePapersApi } from '../lib/literature-api'
+import { PromptBuilder, PSYCHOLOGY_CUSTOM_FIELDS } from '../lib/literature/prompt-builder'
+import { literaturePapersApi, literatureAiApi } from '../lib/literature-api'
 
 export interface AIExtractionState {
   isAvailable: boolean
@@ -135,6 +135,25 @@ export function useLiteratureAIExtraction() {
           processing_status: 'completed'
         })
         return { success: true, extractedData: result.extractedData, model: result.model }
+      } else if (config.provider === 'gemini') {
+        const prompt = PromptBuilder.buildExtractionPrompt(
+          buildFocusedPaperContext(truncatePaperText(paperText)),
+          detailLevel,
+          customFields.length > 0 ? customFields : undefined,
+        )
+        const result = await literatureAiApi.extract({
+          systemPrompt: prompt.systemPrompt,
+          userPrompt: prompt.userPrompt,
+          geminiModel: config.geminiModel,
+        })
+        if (!result.success || !result.extractedData) {
+          return { success: false, error: 'Gemini extraction failed' }
+        }
+        await literaturePapersApi.update(paperId, {
+          extracted_data: result.extractedData,
+          processing_status: 'completed'
+        })
+        return { success: true, extractedData: result.extractedData, model: 'Gemini (cloud)' }
       } else {
         const result = await extractPaperWithLocalOllama(
           paperText, detailLevel,

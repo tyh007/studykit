@@ -85,7 +85,7 @@ export const literatureCustomFieldsApi = {
 
 export const literatureAiApi = {
   check: () => litRequest<{ available: boolean }>('/literature/ai/check', { method: 'POST' }),
-  extract: (data: { paperText: string; detailLevel?: string; customFields?: any[]; userApiKey?: string }) =>
+  extract: (data: { systemPrompt: string; userPrompt: string; detailLevel?: string; geminiModel?: string; userApiKey?: string }) =>
     litRequest<{ success: boolean; extractedData: any; error?: string }>('/literature/ai/extract', {
       method: 'POST',
       body: JSON.stringify(data),

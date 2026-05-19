@@ -4,7 +4,6 @@ import { extractPaperWithLocalOllama, extractPaperWithRules, getLocalOllamaAvail
 import { extractPaperWithCustomAI, getCustomAIAvailability } from './custom-ai-extraction'
 import { readAIProviderConfig, type AIProvider } from './ai-provider-config'
 import { PromptBuilder } from './prompt-builder'
-import type { AIExtractionService } from './ai-extraction-service'
 
 async function tryOllama(paperText: string, detailLevel: 'brief' | 'detailed', customFields?: CustomFieldDefinition[]): Promise<{ extractedData: ExtractedData; method: string } | null> {
   try {
@@ -78,7 +77,13 @@ function getFallbackOrder(configuredProvider: AIProvider): Array<typeof tryOllam
   return [...locals, tryGemini]
 }
 
-export function createAIExtractionService(): AIExtractionService {
+export function createAIExtractionService(): {
+  extractWithFallback(
+    paperText: string,
+    detailLevel?: 'brief' | 'detailed',
+    customFields?: CustomFieldDefinition[]
+  ): Promise<{ extractedData: ExtractedData; method: string }>
+} {
   return {
     async extractWithFallback(
       paperText: string,
