@@ -288,12 +288,33 @@ body {
   flex-shrink: 0;
   transition: width 0.2s, opacity 0.2s;
   overflow: hidden;
+  position: relative;
 }
+.sidebar.resizing { transition: none; }
 
 .sidebar.closed {
-  width: 0;
+  width: 0 !important;
   border-right: none;
   opacity: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Sidebar resize handle */
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0; right: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+  background: transparent;
+  transition: background 0.15s;
+}
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle.active {
+  background: var(--color-primary);
+  opacity: 0.4;
 }
 
 .sidebar-header {
@@ -402,6 +423,8 @@ body {
   overflow: hidden;
   background: var(--color-bg);
 }
+/* Allow literature table to scroll horizontally in main content */
+.main-content.literature-active { overflow-x: auto; }
 
 .main-content.empty {
   display: flex;
@@ -534,6 +557,7 @@ body {
 .note-editor-container {
   flex: 1;
   overflow-y: auto;
+  overflow-x: auto;
   padding: 1rem 1.25rem;
 }
 
@@ -1322,8 +1346,8 @@ a:focus-visible {
 .lit-project-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Summary table */
-.lit-table-container { overflow-x: auto; flex: 1; }
-.lit-table { border-collapse: collapse; width: 100%; min-width: 800px; font-size: 0.8rem; }
+.lit-table-container { overflow-x: auto; overflow-y: auto; flex: 1; width: 100%; min-height: 0; }
+.lit-table { border-collapse: collapse; min-width: max(800px, 100%); font-size: 0.8rem; }
 .lit-table th {
   position: sticky; top: 0; background: var(--color-bg-secondary); z-index: 1;
   padding: 0.5rem; text-align: left; font-weight: 600; color: var(--color-text-secondary);

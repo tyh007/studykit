@@ -142,7 +142,7 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
   const allColumns = [...EXTRACTED_COLUMNS, ...customFieldNames.map(n => n.toLowerCase().replace(/\s+/g, '_'))];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
       {/* Filter bar */}
       <div className="lit-filter-bar">
         <input

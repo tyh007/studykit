@@ -122,6 +122,40 @@ export default function App() {
 }
 
 function StudyKitApp() {
+  const STORAGE_KEY = 'studykit-sidebar-width';
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+    return saved ? Math.max(180, Math.min(600, parseInt(saved, 10))) : 280;
+  });
+  const [sidebarResizing, setSidebarResizing] = useState(false);
+  const sidebarWidthRef = useRef(sidebarWidth);
+  sidebarWidthRef.current = sidebarWidth;
+  const sidebarResizeStart = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  const handleSidebarResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setSidebarResizing(true);
+    sidebarResizeStart.current = { startX: e.clientX, startWidth: sidebarWidthRef.current };
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      if (!sidebarResizeStart.current) return;
+      const diff = ev.clientX - sidebarResizeStart.current.startX;
+      const newWidth = Math.max(180, Math.min(600, sidebarResizeStart.current.startWidth + diff));
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      setSidebarResizing(false);
+      sidebarResizeStart.current = null;
+      localStorage.setItem(STORAGE_KEY, String(sidebarWidthRef.current));
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, []);
+
   const {
     modules, setModules, addModule, selectedModuleId, selectModule,
     lectures, setLectures, addLecture, selectedLectureId, selectLecture,
@@ -258,11 +292,17 @@ function StudyKitApp() {
 
       <div className="app-body">
         {/* Sidebar */}
-        <aside className={`sidebar ${sidebarOpen ? '' : 'closed'}`} aria-label="Module navigation">
+        <aside className={`sidebar ${sidebarOpen ? '' : 'closed'} ${sidebarResizing ? 'resizing' : ''}`} aria-label="Module navigation" style={{ width: sidebarOpen ? sidebarWidth : 0 }}>
           <SidebarContent
             onShowNewModule={() => setShowNewModule(true)}
             onShowNewLecture={() => setShowNewLecture(true)}
           />
+          {sidebarOpen && (
+            <div
+              className={`sidebar-resize-handle ${sidebarResizing ? 'active' : ''}`}
+              onMouseDown={handleSidebarResizeStart}
+            />
+          )}
 
           {/* New module form (outside SidebarContent for simplicity) */}
           {showNewModule && (
@@ -302,7 +342,7 @@ function StudyKitApp() {
         </aside>
 
         {/* Main content */}
-        <main id="main-content" className={`main-content ${!selectedLecture ? 'empty' : ''}`}>
+        <main id="main-content" className={`main-content ${!selectedLecture ? (sidebarMode === 'literature' && selectedLitProjectId ? 'literature-active' : 'empty') : ''}`}>
           {!selectedLecture ? (
             sidebarMode === 'literature' && selectedLitProjectId ? (
               <SummaryTable projectId={selectedLitProjectId} />

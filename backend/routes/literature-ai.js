@@ -101,11 +101,17 @@ router.post('/proxy', async (req, res) => {
     if (!url) return res.status(400).json({ error: 'url is required' });
 
     // Security: only allow local addresses
-    const parsedUrl = new URL(url);
+    let parsedUrl = new URL(url);
     const hostname = parsedUrl.hostname;
     if (!['localhost', '127.0.0.1', '::1', 'host.docker.internal'].includes(hostname)) {
       return res.status(403).json({ error: 'Only local addresses are allowed' });
     }
+
+    // In Docker, localhost refers to the container, not the host
+    if (process.env.DOCKER_CONTAINER === 'true' && ['localhost', '127.0.0.1'].includes(hostname)) {
+      parsedUrl.hostname = 'host.docker.internal';
+    }
+    const resolvedUrl = parsedUrl.toString();
 
     const fetchOptions = {
       method: method || 'GET',
@@ -115,7 +121,7 @@ router.post('/proxy', async (req, res) => {
       fetchOptions.body = typeof body === 'string' ? body : JSON.stringify(body);
     }
 
-    const response = await fetch(url, fetchOptions);
+    const response = await fetch(resolvedUrl, fetchOptions);
 
     let data;
     const contentType = response.headers.get('content-type') || '';

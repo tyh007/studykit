@@ -29,6 +29,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
       UPLOAD_DIR: /data/uploads
       EXPORT_DIR: /data/exports
+      DOCKER_CONTAINER: "true"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - upload_data:/data/uploads
       - export_data:/data/exports
