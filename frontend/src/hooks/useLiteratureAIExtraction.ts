@@ -145,6 +145,7 @@ export function useLiteratureAIExtraction() {
           systemPrompt: prompt.systemPrompt,
           userPrompt: prompt.userPrompt,
           geminiModel: config.geminiModel,
+          userApiKey: config.geminiApiKey,
         })
         if (!result.success || !result.extractedData) {
           return { success: false, error: 'Gemini extraction failed' }

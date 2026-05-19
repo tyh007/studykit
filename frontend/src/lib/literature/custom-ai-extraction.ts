@@ -3,7 +3,6 @@ import { CustomAIClient } from './custom-ai-client'
 import { readCustomAISettings, type CustomAISettings } from './custom-ai-settings'
 import { PromptBuilder } from './prompt-builder'
 import {
-  extractPaperWithRules,
   parseExtractionResponse,
   validateExtractedData,
   truncatePaperText,
@@ -47,11 +46,7 @@ export async function extractPaperWithCustomAI(
   const client = getClient({ ...settings, model: resolvedModel })
 
   if (!resolvedModel) {
-    console.warn('Custom AI: no model specified, falling back to rule-based')
-    return {
-      extractedData: extractPaperWithRules(paperText),
-      model: 'rule-based extraction (no model configured)'
-    }
+    throw new Error('Custom AI: no model configured. Please set a model in settings.')
   }
 
   try {
@@ -64,22 +59,12 @@ export async function extractPaperWithCustomAI(
     const extractedData = parseExtractionResponse(result.parsed)
 
     if (!validateExtractedData(extractedData)) {
-      console.warn('Custom AI extraction validation failed. Attempting rule-based fallback...')
-      const ruleBasedData = extractPaperWithRules(paperText)
-      return {
-        extractedData: ruleBasedData,
-        model: `${result.model} (with rule-based fallback)`
-      }
+      throw new Error(`Custom AI (${result.model}) produced low-quality extraction — validation failed`)
     }
 
     return { extractedData, model: result.model }
   } catch (error) {
-    console.warn('Custom AI extraction error, using rule-based fallback:', error instanceof Error ? error.message : String(error))
-    const fallbackData = extractPaperWithRules(paperText)
-    return {
-      extractedData: fallbackData,
-      model: 'rule-based extraction (error fallback)'
-    }
+    throw new Error(`Custom AI extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
 }
 

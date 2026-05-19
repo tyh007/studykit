@@ -390,7 +390,7 @@ function findKeywordParagraph(text: string, keywords: string[]) {
   return undefined
 }
 
-export function buildFocusedPaperContext(text: string, context?: { title?: string; abstract?: string }) {
+function buildFocusedPaperContext(text: string, context?: { title?: string; abstract?: string }) {
   const sections = collectSectionBlocks(text)
   const parts: string[] = []
 
@@ -535,7 +535,7 @@ function formatAsBulletPoints(text: string, maxBullets: number = 3): string {
   return uniqueSentences.slice(0, maxBullets).map(s => `• ${s}`).join('\n')
 }
 
-export function extractPaperWithRules(text: string): ExtractedData {
+function extractPaperWithRules(text: string): ExtractedData {
   const cleanedText = cleanAndNormalizeText(text)
   const sections = collectSectionBlocks(cleanedText)
   const abstract = extractAbstractBlock(cleanedText)
@@ -660,22 +660,12 @@ export async function extractPaperWithLocalOllama(
     const extractedData = parseExtractionResponse(result.parsed)
 
     if (!validateExtractedData(extractedData)) {
-      console.warn('Ollama extraction validation failed. Attempting rule-based fallback...')
-      const ruleBasedData = extractPaperWithRules(paperText)
-      return {
-        extractedData: ruleBasedData,
-        model: `${result.model} (with rule-based fallback)`
-      }
+      throw new Error(`Ollama (${result.model}) produced low-quality extraction — validation failed`)
     }
 
     return { extractedData, model: result.model }
   } catch (error) {
-    console.warn('Ollama extraction error, using rule-based fallback:', error instanceof Error ? error.message : String(error))
-    const fallbackData = extractPaperWithRules(paperText)
-    return {
-      extractedData: fallbackData,
-      model: 'rule-based extraction (error fallback)'
-    }
+    throw new Error(`Ollama extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
 }
 

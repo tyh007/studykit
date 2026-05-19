@@ -1,6 +1,6 @@
 import { getAuthToken } from '../api'
 import type { ExtractedData, CustomFieldDefinition } from './types'
-import { extractPaperWithLocalOllama, extractPaperWithRules, getLocalOllamaAvailability, truncatePaperText, parseExtractionResponse } from './local-ollama-ai'
+import { extractPaperWithLocalOllama, getLocalOllamaAvailability, truncatePaperText, parseExtractionResponse } from './local-ollama-ai'
 import { extractPaperWithCustomAI, getCustomAIAvailability } from './custom-ai-extraction'
 import { readAIProviderConfig, type AIProvider } from './ai-provider-config'
 import { PromptBuilder } from './prompt-builder'
@@ -51,6 +51,7 @@ async function tryGemini(paperText: string, detailLevel: 'brief' | 'detailed', c
         expectedFields: prompt.expectedFields,
         detailLevel,
         geminiModel: config.geminiModel || 'gemini-2.0-flash',
+        userApiKey: config.geminiApiKey,
       })
     })
     if (response.ok) {
@@ -99,11 +100,8 @@ export function createAIExtractionService(): {
         if (result) return result
       }
 
-      // Final fallback: rule-based extraction
-      return {
-        extractedData: extractPaperWithRules(paperText),
-        method: 'rule-based extraction (final fallback)'
-      }
+      // All AI providers failed — propagate the error, never use rule-based fallback
+      throw new Error('All AI providers failed. Check your AI provider configuration (API key, connectivity).')
     }
   }
 }
