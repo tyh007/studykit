@@ -86,8 +86,12 @@ function ensureFormattedString(value: string): string {
 export function parseExtractionResponse(parsed: Record<string, unknown>): ExtractedData {
   const reserved = new Set([
     'background', 'theory', 'methodology', 'measures',
-    'results', 'implications', 'limitations'
+    'results', 'implications', 'limitations', 'paper_type'
   ])
+
+  const paperType = typeof parsed.paper_type === 'string'
+    ? parsed.paper_type
+    : undefined
 
   const customEntries = Object.entries(parsed)
     .filter(([key, value]) => !reserved.has(key) && typeof value === 'string')
@@ -102,6 +106,7 @@ export function parseExtractionResponse(parsed: Record<string, unknown>): Extrac
     results: ensureFormattedString(readString(parsed.results)),
     implications: ensureFormattedString(readString(parsed.implications)),
     limitations: ensureFormattedString(readString(parsed.limitations)),
+    paperType,
     customFields: customEntries.length > 0 ? Object.fromEntries(customEntries) : undefined
   }
 }

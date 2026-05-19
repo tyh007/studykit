@@ -1,6 +1,100 @@
 import type { ExtractedData } from './types'
 import type { CustomFieldDefinition } from './types'
 
+export type PaperType = 'A' | 'B' | 'C'
+
+export interface FieldDefinition {
+  key: string
+  label: string
+  definitionA: string
+  definitionB: string
+  definitionC: string
+  sourceScope: string
+  antiExample: string
+  maxWords: number
+  maxBullets: number
+}
+
+const EXTRACTION_FIELDS: FieldDefinition[] = [
+  {
+    key: 'background',
+    label: 'Background',
+    definitionA: 'Research context, problem statement, gap this study addresses',
+    definitionB: 'Review topic, scope, rationale for why this review matters',
+    definitionC: 'Research question, theoretical context, motivation for the meta-analysis',
+    sourceScope: 'Abstract, Introduction',
+    antiExample: 'Individual study findings, methodology details, or results',
+    maxWords: 60,
+    maxBullets: 3,
+  },
+  {
+    key: 'theory',
+    label: 'Theory & Hypotheses',
+    definitionA: 'Theoretical framework, key concepts, specific hypotheses tested',
+    definitionB: 'Central thesis, organizing framework, core argument of the review',
+    definitionC: 'Theoretical model, moderator variables examined, predictions about effect variation',
+    sourceScope: 'Introduction, Theory sections, end of Introduction',
+    antiExample: 'Background context, methodology, or individual study findings',
+    maxWords: 60,
+    maxBullets: 3,
+  },
+  {
+    key: 'methodology',
+    label: 'Methodology',
+    definitionA: 'Research design, sample (size, characteristics), procedures, conditions, analytical approach',
+    definitionB: 'Search strategy, databases, scope of literature covered (or "Not mentioned" if absent)',
+    definitionC: 'Databases searched, inclusion/exclusion criteria, screening process, number of screened/included studies',
+    sourceScope: 'Methods/Methodology section',
+    antiExample: 'Results, instruments, statistical tests, or theoretical framework',
+    maxWords: 80,
+    maxBullets: 3,
+  },
+  {
+    key: 'measures',
+    label: 'Measures',
+    definitionA: 'Specific instruments, scales, tasks, questionnaires used to collect data',
+    definitionB: 'Key themes, dimensions, categories used to organize and structure the review',
+    definitionC: 'Number of studies (k), total participants (N), range of years, types of studies included',
+    sourceScope: 'Measures/Materials subsection (A), thematic structure (B), study selection (C)',
+    antiExample: 'Participant demographics, procedure steps, effect sizes, or statistical results',
+    maxWords: 60,
+    maxBullets: 3,
+  },
+  {
+    key: 'results',
+    label: 'Results',
+    definitionA: 'Main findings, key statistics, effect sizes, significance values, direction of effects',
+    definitionB: '3-5 representative findings from cited studies, each as a one-line summary per study',
+    definitionC: 'Overall effect size with confidence interval, heterogeneity statistics, key moderator effects',
+    sourceScope: 'Results section',
+    antiExample: 'Discussion, interpretation, implications, or methodology (for B: NOT background or thesis)',
+    maxWords: 100,
+    maxBullets: 4,
+  },
+  {
+    key: 'implications',
+    label: 'Implications',
+    definitionA: 'Theoretical contributions, practical applications, what findings mean for the field',
+    definitionB: 'Synthesis the review offers, theoretical contributions, what the literature collectively shows',
+    definitionC: 'What the meta-analytic findings mean for theory and practice',
+    sourceScope: 'Discussion, Conclusion',
+    antiExample: 'Repeating results, listing limitations, or individual study findings',
+    maxWords: 60,
+    maxBullets: 3,
+  },
+  {
+    key: 'limitations',
+    label: 'Limitations',
+    definitionA: 'Study limitations, caveats, generalizability concerns, future research directions',
+    definitionB: 'Research gaps, what remains unknown, limitations of the existing literature, future directions',
+    definitionC: 'Limitations of the meta-analysis, publication bias, generalizability concerns',
+    sourceScope: 'Limitations section, end of Discussion',
+    antiExample: 'Results, main implications, or specific study findings',
+    maxWords: 60,
+    maxBullets: 3,
+  },
+]
+
 export interface ExtractionPrompt {
   systemPrompt: string
   userPrompt: string
@@ -18,16 +112,18 @@ export class PromptBuilder {
     limitations: 'Summarize study limitations, caveats, generalizability concerns, and future research directions noted.'
   }
 
-  private static readonly BASE_SYSTEM_PROMPT = `You are an AI research assistant. Extract key information from academic papers into short bullet points.
+  private static readonly BASE_SYSTEM_PROMPT = `You are an AI research assistant. Extract structured data from academic papers into concise bullet points.
 
-Strict rules:
+STRICT RULES:
 1. Extract ONLY from the paper text — do not make up or guess
-2. If a field has no information, respond with exactly: "Not mentioned"
-3. Each bullet = ONE sentence. Maximum 20 words per bullet.
+2. If a field has no applicable content for this paper type, respond with exactly: "Not mentioned"
+3. Each bullet = ONE short sentence (10-20 words maximum)
 4. 2-4 bullets per field maximum
-5. Each field must have UNIQUE content — no repeating across fields
-6. Use the paper's own terminology and specific numbers/statistics when available
-7. All 7 fields MUST be in the output — use "Not mentioned" for empty fields`
+5. Each field must have UNIQUE content — no repeating information across fields
+6. Synthesize in your own words — do NOT copy sentences verbatim from the paper
+7. Use the paper's own terminology and specific numbers/statistics when available
+8. ADAPT each field's meaning to the paper's type (empirical vs review vs meta-analysis)
+9. Return ALL 7 standard fields PLUS paper_type in the JSON — use "Not mentioned" for empty fields`
 
   private static readonly BRIEF_MODE_INSTRUCTIONS = `Keep each bullet to ONE short sentence (10-20 words). Be direct.
 Format each bullet starting with • on its own line.
@@ -54,64 +150,77 @@ Wrong (too long, multiple ideas in one bullet):
 
 ${modeInstructions}
 
-Please extract the following information from the paper and respond with a valid JSON object containing these exact fields:`
+Return valid JSON with: paper_type, background, theory, methodology, measures, results, implications, limitations.
+Format each field value as bullet points (•) separated by \\n (literal backslash-n).
+Example: "background": "• First point here.\\n• Second key finding."`
 
-    const fields = [
-      'background',
-      'theory',
-      'methodology',
-      'measures',
-      'results',
-      'implications',
-      'limitations'
-    ]
+    const fields = ['background', 'theory', 'methodology', 'measures', 'results', 'implications', 'limitations']
 
-    let fieldDescriptions = `
-Fields to fill:
-- background: ${this.FIELD_GUIDANCE.background}
-- theory: ${this.FIELD_GUIDANCE.theory}
-- methodology: ${this.FIELD_GUIDANCE.methodology}
-- measures: ${this.FIELD_GUIDANCE.measures}
-- results: ${this.FIELD_GUIDANCE.results}
-- implications: ${this.FIELD_GUIDANCE.implications}
-- limitations: ${this.FIELD_GUIDANCE.limitations}`
+    let fieldDefinitionsText = ''
+    for (const fd of EXTRACTION_FIELDS) {
+      fieldDefinitionsText += `
+${fields.indexOf(fd.key) + 1}. ${fd.label} (max ${fd.maxWords} words, ${fd.maxBullets} bullets)
+   [A] ${fd.definitionA}
+   [B] ${fd.definitionB}
+   [C] ${fd.definitionC}
+   Extract from: ${fd.sourceScope}
+   Do NOT include: ${fd.antiExample}`
+    }
 
     if (customFields && customFields.length > 0) {
       customFields.forEach(field => {
         fields.push(field.id)
-        fieldDescriptions += `
-- ${field.id}: ${field.description}`
+        fieldDefinitionsText += `
+${fields.indexOf(field.id) + 1}. ${field.name}
+   [ALL] ${field.description}
+   Extract from: Entire paper text
+   Do NOT include: information already covered in other fields`
       })
     }
 
+    const outputKeys = ['paper_type', ...fields]
     const outputTemplate = JSON.stringify(
-      Object.fromEntries(fields.map(field => [field, ''])),
+      Object.fromEntries(outputKeys.map(f => [f, ''])),
       null,
       2
     )
 
-    const userPrompt = `Extract key information from this paper into short, one-sentence bullet points per field:
-
+    const userPrompt = `PAPER TEXT:
 ${paperText}
 
-${fieldDescriptions}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Return valid JSON with ALL 7 fields using these exact keys:
+STEP 1 — CLASSIFY the paper type:
+Read the paper text above and determine its type.
+[A] Empirical study: has original data collection (participants, experiments, studies with results)
+[B] Review / theoretical paper: surveys, synthesizes existing literature without new data collection
+[C] Meta-analysis or systematic review: has systematic search criteria and pooled statistical results
+
+Include "paper_type": "A", "B", or "C" in your JSON output.
+
+STEP 2 — EXTRACT content for each field:
+For your detected type, use the [A], [B], or [C] definition for each field below.
+- Only extract from the specified "Extract from" sections
+- Never include the "Do NOT include" content
+- Respect the word limit per field
+- Write in your own words — synthesize, do NOT copy sentences verbatim
+- Format each field as bullet points (•) separated by literal \\n
+
+FIELD DEFINITIONS (adapt to detected paper type):${fieldDefinitionsText}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Return ONLY valid JSON using these exact keys:
 ${outputTemplate}
 
-Format each field as bullet points (•) separated by \\n.
-Example for a field with content:
-  "background": "• Participants were 64 female students in minimal groups.\\n• Social Simon effect tested with compatible vs incompatible trials."
-
-If a field has no information, use exactly: "Not mentioned"
+If a field has no applicable content, use exactly: "Not mentioned"
 Do NOT wrap in markdown code blocks.
-Each bullet = ONE sentence (max 20 words).
-IMPORTANT: All 7 fields must be present in the output JSON.`
+IMPORTANT: paper_type plus all fields must be present.`
 
     return {
       systemPrompt,
       userPrompt,
-      expectedFields: fields
+      expectedFields: outputKeys
     }
   }
 
@@ -146,30 +255,43 @@ Respond with the extracted information only. Do not include explanations or form
     fieldsToUpdate: string[],
     detailLevel: 'brief' | 'detailed' = 'brief'
   ): ExtractionPrompt {
+    const paperType = existingExtraction.paperType || 'unknown'
     const modeInstructions = detailLevel === 'brief'
       ? this.BRIEF_MODE_INSTRUCTIONS
       : this.DETAILED_MODE_INSTRUCTIONS
+
+    let fieldGuidance = ''
+    for (const fd of EXTRACTION_FIELDS) {
+      if (!fieldsToUpdate.includes(fd.key)) continue
+      const typeDef = paperType === 'B' ? fd.definitionB : paperType === 'C' ? fd.definitionC : fd.definitionA
+      fieldGuidance += `
+${fd.label} (max ${fd.maxWords} words, ${fd.maxBullets} bullets)
+   Definition: ${typeDef}
+   Extract from: ${fd.sourceScope}
+   Do NOT include: ${fd.antiExample}`
+    }
 
     const systemPrompt = `${this.BASE_SYSTEM_PROMPT}
 
 ${modeInstructions}
 
-You are updating an existing extraction for a psychology research paper. Please focus only on the specified fields and provide improved, more accurate information.
+You are updating an existing extraction. Paper type: ${paperType === 'A' ? 'Empirical study' : paperType === 'B' ? 'Review paper' : paperType === 'C' ? 'Meta-analysis' : 'Unknown'}.
 
-Fields to update: ${fieldsToUpdate.join(', ')}
+Focus only on these fields: ${fieldsToUpdate.join(', ')}
 
-Current extraction data:
+Current extraction (for reference):
 ${JSON.stringify(existingExtraction, null, 2)}
 
-Please respond with a complete JSON object containing all original fields with updates for the specified fields only.`
+Provide improved content ONLY for the specified fields. Keep all other fields as-is.`
 
-    const userPrompt = `Please re-analyze the following psychology research paper text and provide improved extractions for the specified fields:
+    const userPrompt = `Re-analyze the paper text and provide improved extraction for the specified fields:
 
 ${paperText}
 
-Focus on providing more accurate, detailed information for: ${fieldsToUpdate.join(', ')}
+Field definitions for this paper (adapt per paper type):
+${fieldGuidance}
 
-Respond with valid JSON only. Include all fields from the original extraction with improvements for the specified fields.`
+Respond with a complete JSON object containing ALL original fields. Improve only: ${fieldsToUpdate.join(', ')}. All other fields must match the current extraction exactly.`
 
     return {
       systemPrompt,

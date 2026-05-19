@@ -296,6 +296,7 @@ export interface ExtractedData {
   results: string;
   implications: string;
   limitations: string;
+  paperType?: string;
   customFields?: Record<string, string>;
 }
 

@@ -6,13 +6,13 @@ import PaperDetailView from './PaperDetailView';
 import AIStatusIndicator from './AIStatusIndicator';
 import type { LiteraturePaper, ExtractedData } from '../../types';
 
-const FIELD_LABELS: Record<keyof ExtractedData, string> = {
+const FIELD_LABELS: Partial<Record<keyof ExtractedData, string>> = {
   background: 'Background', theory: 'Theory', methodology: 'Methodology',
   measures: 'Measures', results: 'Results', implications: 'Implications', limitations: 'Limitations',
   customFields: 'Custom Fields',
 };
 
-const EXTRACTED_COLUMNS: (keyof ExtractedData)[] = [
+const EXTRACTED_COLUMNS: Exclude<keyof ExtractedData, 'paperType' | 'customFields'>[] = [
   'background', 'theory', 'methodology', 'measures', 'results', 'implications', 'limitations'
 ];
 
