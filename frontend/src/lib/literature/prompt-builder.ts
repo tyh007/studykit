@@ -9,40 +9,30 @@ export interface ExtractionPrompt {
 
 export class PromptBuilder {
   private static readonly FIELD_GUIDANCE: Record<string, string> = {
-    background: 'ONLY research context, problem statement, motivation, and why the study matters. Do NOT include methodology, measures, results, or implications here. Format as bullet points.',
-    theory: 'ONLY theoretical framework, key hypotheses, conceptual propositions, or theoretical mechanisms. Do NOT mention methodology or results. Use bullet point format.',
-    methodology: 'ONLY research design, sample size, participants, study procedures, and analytical methods. Do NOT include instruments/measures - those go to the measures field. Present as distinct bullet points.',
-    measures: 'ONLY scales, instruments, tasks, questionnaires, or operational definitions used. If not explicitly mentioned, say "Not mentioned". List each measure separately.',
-    results: 'ONLY main findings, statistical results, effect sizes, or quantitative/qualitative outcomes. Do NOT include implications or methodology.',
-    implications: 'ONLY theoretical contributions, practical implications, or applications. Do NOT discuss limitations - those are separate.',
-    limitations: 'ONLY study limitations, caveats, generalizability issues, or future research directions. Do NOT duplicate information from other fields.'
+    background: 'Summarize the research context, problem statement, motivation, and why the study matters. What gap does it address?',
+    theory: 'Summarize the theoretical framework, key hypotheses, and core concepts the study builds on.',
+    methodology: 'Summarize research design, sample size, participants, study procedures, and analytical methods used.',
+    measures: 'List the scales, instruments, tasks, questionnaires, or operational definitions used. If not mentioned, say "Not mentioned".',
+    results: 'Summarize main findings, key statistics, effect sizes, and outcomes. Focus on what the study actually found.',
+    implications: 'Summarize theoretical contributions, practical applications, and what the findings mean for the field.',
+    limitations: 'Summarize study limitations, caveats, generalizability concerns, and future research directions noted.'
   }
 
-  private static readonly BASE_SYSTEM_PROMPT = `You are a highly skilled academic researcher and psychologist with expertise in quantitative and qualitative research methods. Your task is to carefully analyze psychology research papers and extract structured information with precision and accuracy.
+  private static readonly BASE_SYSTEM_PROMPT = `You are an AI research assistant. Your job is to read academic papers and extract key information into clear, concise bullet points.
 
-Guidelines:
-1. Be thorough but concise - focus on the most important information from the ACTUAL PAPER TEXT
-2. Use academic language and maintain objectivity
-3. If information is not explicitly stated in the text, respond with EXACTLY: "Not mentioned"
-4. Extract specific details rather than general statements or placeholders
-5. Pay attention to sample sizes, statistical values, and methodological details
-6. Preserve the original meaning and context of the research
-7. CRITICAL: Never provide generic template content - always extract from the specific paper provided
-8. CRITICAL: Do NOT repeat the task description or field guidance in your responses
-9. CRITICAL: Each field must contain UNIQUE content specific to this paper - no generic descriptions`
+Rules:
+1. Extract ONLY from the paper text provided — do not make up or guess information
+2. If a field has no information in the text, respond with exactly: "Not mentioned"
+3. Use bullet points (•) — each bullet is one distinct fact or finding
+4. Keep bullets concise but complete (1 sentence per bullet is ideal)
+5. 2-4 bullets per field is the sweet spot
+6. Each field should contain unique, non-repeating information
+7. Use the paper's own terminology and specific numbers/statistics when available`
 
-  private static readonly BRIEF_MODE_INSTRUCTIONS = `Provide concise, bullet-point style responses focusing on the most essential information.
-For each field, format your response as:
-- Use bullet points (•) for key items
-- Keep each bullet point to 1 complete sentence maximum
-- Aim for 2-4 bullet points per field
-- Be specific and avoid repetition AT ALL COSTS
-- Never repeat the same information in different words
-- Each field MUST contain entirely different information from other fields
-- If a topic is already mentioned in another field, skip it and mention other details
-- If no information available, respond with exactly: "Not mentioned"`
+  private static readonly BRIEF_MODE_INSTRUCTIONS = `Keep each field to 2-4 bullet points. Be concise and direct.
+Format each bullet starting with • on its own line.`
 
-  private static readonly DETAILED_MODE_INSTRUCTIONS = `Provide comprehensive, detailed responses including specific statistics, methodological details, and nuanced findings. Include relevant quotes or specific details from the text when available.`
+  private static readonly DETAILED_MODE_INSTRUCTIONS = `Provide comprehensive, detailed bullet points including specific statistics, methodological details, and nuanced findings. Include specific details from the text.`
 
   static buildExtractionPrompt(
     paperText: string,
@@ -57,7 +47,7 @@ For each field, format your response as:
 
 ${modeInstructions}
 
-Please extract the following information from the psychology research paper and respond with a valid JSON object containing these exact fields:`
+Please extract the following information from the paper and respond with a valid JSON object containing these exact fields:`
 
     const fields = [
       'background',
@@ -93,30 +83,18 @@ Fields to fill:
       2
     )
 
-    const userPrompt = `Please analyze the following psychology research paper text and extract the requested information:
+    const userPrompt = `Read this paper and extract key information into bullet points:
 
 ${paperText}
 
 ${fieldDescriptions}
 
-Return valid JSON only using exactly these keys:
+Return valid JSON with these exact keys:
 ${outputTemplate}
 
-Output format instructions:
-- For each field, provide bullet points ONLY if there is content. Each bullet point MUST be on a new line.
-- Use this format for each bullet: • [Complete sentence]
-- Example of correct format:
-  "background": "• First key point with complete information\\n• Second key point with complete information\\n• Third key point with complete information"
-- CRITICAL: Each bullet MUST be unique and complete - NEVER repeat similar information
-- CRITICAL: Do NOT use dashes (-) or other symbols - use only bullet (•) with space
-- Do NOT include markdown code blocks or extra formatting
-- Replace every empty string with real paper-specific content or exactly "Not mentioned"
-- If a field is truly unavailable, use exactly: "Not mentioned"
-- Do not copy the field descriptions above
-- Do not include any explanations or extra keys
-- Ensure NO text is truncated, incomplete, or repeated
-- Use maximum 3 distinct bullet points per field unless more content is natural
-- Line breaks MUST be literal \\n characters in the JSON string`
+Format each field as bullet points (•) separated by \\n for line breaks.
+Example: "background": "• First key point\\n• Second key point\\n• Third key point"
+Do NOT wrap in markdown code blocks. If a field has no information, use exactly: "Not mentioned"`
 
     return {
       systemPrompt,

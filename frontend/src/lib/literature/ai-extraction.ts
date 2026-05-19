@@ -1,8 +1,9 @@
 import { getAuthToken } from '../api'
 import type { ExtractedData, CustomFieldDefinition } from './types'
-import { extractPaperWithLocalOllama, extractPaperWithRules, getLocalOllamaAvailability } from './local-ollama-ai'
+import { extractPaperWithLocalOllama, extractPaperWithRules, getLocalOllamaAvailability, buildFocusedPaperContext, truncatePaperText, parseExtractionResponse } from './local-ollama-ai'
 import { extractPaperWithCustomAI, getCustomAIAvailability } from './custom-ai-extraction'
 import { readAIProviderConfig, type AIProvider } from './ai-provider-config'
+import { PromptBuilder } from './prompt-builder'
 import type { AIExtractionService } from './ai-extraction-service'
 
 async function tryOllama(paperText: string, detailLevel: 'brief' | 'detailed', customFields?: CustomFieldDefinition[]): Promise<{ extractedData: ExtractedData; method: string } | null> {
@@ -34,6 +35,11 @@ async function tryCustomAPI(paperText: string, detailLevel: 'brief' | 'detailed'
 async function tryGemini(paperText: string, detailLevel: 'brief' | 'detailed', customFields?: CustomFieldDefinition[]): Promise<{ extractedData: ExtractedData; method: string } | null> {
   try {
     const config = readAIProviderConfig()
+    const prompt = PromptBuilder.buildExtractionPrompt(
+      buildFocusedPaperContext(truncatePaperText(paperText)),
+      detailLevel,
+      customFields
+    )
     const token = getAuthToken()
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (token) headers['Authorization'] = `Bearer ${token}`
@@ -41,20 +47,18 @@ async function tryGemini(paperText: string, detailLevel: 'brief' | 'detailed', c
       method: 'POST',
       headers,
       body: JSON.stringify({
-        paperText,
+        systemPrompt: prompt.systemPrompt,
+        userPrompt: prompt.userPrompt,
+        expectedFields: prompt.expectedFields,
         detailLevel,
         geminiModel: config.geminiModel || 'gemini-2.0-flash',
-        customFields: customFields?.map(cf => ({
-          name: cf.name,
-          description: cf.description,
-          prompt: cf.prompt
-        }))
       })
     })
     if (response.ok) {
       const data = await response.json()
       if (data.success && data.extractedData) {
-        return { extractedData: data.extractedData, method: 'Gemini (cloud)' }
+        const extractedData = parseExtractionResponse(data.extractedData)
+        return { extractedData, method: 'Gemini (cloud)' }
       }
     }
   } catch (err) {
