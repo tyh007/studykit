@@ -79,7 +79,8 @@ function ensureFormattedString(value: string): string {
     return normalized
   }
 
-  return formatAsBulletPoints(value, 3)
+  const lines = normalized.split('\n').filter(l => l.trim())
+  return lines.map(line => `• ${line.trim()}`).join('\n')
 }
 
 export function parseExtractionResponse(parsed: Record<string, unknown>): ExtractedData {
@@ -646,7 +647,7 @@ export async function extractPaperWithLocalOllama(
 ) {
   try {
     const prompt = PromptBuilder.buildExtractionPrompt(
-      buildFocusedPaperContext(truncatePaperText(paperText), context),
+      truncatePaperText(paperText),
       detailLevel,
       customFields
     )

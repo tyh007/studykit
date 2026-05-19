@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { literaturePapersApi, literatureAiApi } from '../../lib/literature-api';
 import type { LiteraturePaper, ExtractedData } from '../../types';
 import { PromptBuilder } from '../../lib/literature/prompt-builder';
-import { buildFocusedPaperContext, truncatePaperText } from '../../lib/literature/local-ollama-ai';
+import { truncatePaperText, parseExtractionResponse } from '../../lib/literature/local-ollama-ai';
 
 interface PaperDetailViewProps {
   paper: LiteraturePaper | null;
@@ -36,7 +36,7 @@ export default function PaperDetailView({ paper, onClose, projectId, onUpdated }
     setExtracting(true);
     try {
       const prompt = PromptBuilder.buildExtractionPrompt(
-        buildFocusedPaperContext(truncatePaperText(paper.full_text)),
+        truncatePaperText(paper.full_text),
         'brief',
       );
       const result = await literatureAiApi.extract({
@@ -44,7 +44,8 @@ export default function PaperDetailView({ paper, onClose, projectId, onUpdated }
         userPrompt: prompt.userPrompt,
       });
       if (result.success && result.extractedData) {
-        await literaturePapersApi.update(paper.id, { extracted_data: result.extractedData });
+        const parsed = parseExtractionResponse(result.extractedData as Record<string, unknown>);
+        await literaturePapersApi.update(paper.id, { extracted_data: parsed });
         onUpdated();
       }
     } catch (err) {

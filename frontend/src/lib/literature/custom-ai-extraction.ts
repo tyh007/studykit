@@ -6,7 +6,6 @@ import {
   extractPaperWithRules,
   parseExtractionResponse,
   validateExtractedData,
-  buildFocusedPaperContext,
   truncatePaperText,
 } from './local-ollama-ai'
 
@@ -57,7 +56,7 @@ export async function extractPaperWithCustomAI(
 
   try {
     const prompt = PromptBuilder.buildExtractionPrompt(
-      buildFocusedPaperContext(truncatePaperText(paperText), context),
+      truncatePaperText(paperText),
       detailLevel,
       customFields
     )

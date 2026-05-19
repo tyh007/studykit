@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { getLocalOllamaAvailability, extractPaperWithLocalOllama, buildFocusedPaperContext, truncatePaperText } from '../lib/literature/local-ollama-ai'
+import { getLocalOllamaAvailability, extractPaperWithLocalOllama, truncatePaperText, parseExtractionResponse } from '../lib/literature/local-ollama-ai'
 import { getCustomAIAvailability, extractPaperWithCustomAI } from '../lib/literature/custom-ai-extraction'
 import { readOllamaSettings, saveOllamaSettings, DEFAULT_OLLAMA_SETTINGS } from '../lib/literature/ollama-settings'
 import { readCustomAISettings, saveCustomAISettings } from '../lib/literature/custom-ai-settings'
@@ -137,7 +137,7 @@ export function useLiteratureAIExtraction() {
         return { success: true, extractedData: result.extractedData, model: result.model }
       } else if (config.provider === 'gemini') {
         const prompt = PromptBuilder.buildExtractionPrompt(
-          buildFocusedPaperContext(truncatePaperText(paperText)),
+          truncatePaperText(paperText),
           detailLevel,
           customFields.length > 0 ? customFields : undefined,
         )
@@ -149,11 +149,12 @@ export function useLiteratureAIExtraction() {
         if (!result.success || !result.extractedData) {
           return { success: false, error: 'Gemini extraction failed' }
         }
+        const parsed = parseExtractionResponse(result.extractedData as Record<string, unknown>)
         await literaturePapersApi.update(paperId, {
-          extracted_data: result.extractedData,
+          extracted_data: parsed,
           processing_status: 'completed'
         })
-        return { success: true, extractedData: result.extractedData, model: 'Gemini (cloud)' }
+        return { success: true, extractedData: parsed, model: 'Gemini (cloud)' }
       } else {
         const result = await extractPaperWithLocalOllama(
           paperText, detailLevel,

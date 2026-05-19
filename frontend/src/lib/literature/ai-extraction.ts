@@ -1,6 +1,6 @@
 import { getAuthToken } from '../api'
 import type { ExtractedData, CustomFieldDefinition } from './types'
-import { extractPaperWithLocalOllama, extractPaperWithRules, getLocalOllamaAvailability, buildFocusedPaperContext, truncatePaperText, parseExtractionResponse } from './local-ollama-ai'
+import { extractPaperWithLocalOllama, extractPaperWithRules, getLocalOllamaAvailability, truncatePaperText, parseExtractionResponse } from './local-ollama-ai'
 import { extractPaperWithCustomAI, getCustomAIAvailability } from './custom-ai-extraction'
 import { readAIProviderConfig, type AIProvider } from './ai-provider-config'
 import { PromptBuilder } from './prompt-builder'
@@ -35,7 +35,7 @@ async function tryGemini(paperText: string, detailLevel: 'brief' | 'detailed', c
   try {
     const config = readAIProviderConfig()
     const prompt = PromptBuilder.buildExtractionPrompt(
-      buildFocusedPaperContext(truncatePaperText(paperText)),
+      truncatePaperText(paperText),
       detailLevel,
       customFields
     )
