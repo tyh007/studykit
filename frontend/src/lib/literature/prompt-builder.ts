@@ -18,21 +18,28 @@ export class PromptBuilder {
     limitations: 'Summarize study limitations, caveats, generalizability concerns, and future research directions noted.'
   }
 
-  private static readonly BASE_SYSTEM_PROMPT = `You are an AI research assistant. Your job is to read academic papers and extract key information into clear, concise bullet points.
+  private static readonly BASE_SYSTEM_PROMPT = `You are an AI research assistant. Extract key information from academic papers into short bullet points.
 
-Rules:
-1. Extract ONLY from the paper text provided — do not make up or guess information
-2. If a field has no information in the text, respond with exactly: "Not mentioned"
-3. Use bullet points (•) — each bullet is one distinct fact or finding
-4. Keep bullets concise but complete (1 sentence per bullet is ideal)
-5. 2-4 bullets per field is the sweet spot
-6. Each field should contain unique, non-repeating information
-7. Use the paper's own terminology and specific numbers/statistics when available`
+Strict rules:
+1. Extract ONLY from the paper text — do not make up or guess
+2. If a field has no information, respond with exactly: "Not mentioned"
+3. Each bullet = ONE sentence. Maximum 20 words per bullet.
+4. 2-4 bullets per field maximum
+5. Each field must have UNIQUE content — no repeating across fields
+6. Use the paper's own terminology and specific numbers/statistics when available
+7. All 7 fields MUST be in the output — use "Not mentioned" for empty fields`
 
-  private static readonly BRIEF_MODE_INSTRUCTIONS = `Keep each field to 2-4 bullet points. Be concise and direct.
-Format each bullet starting with • on its own line.`
+  private static readonly BRIEF_MODE_INSTRUCTIONS = `Keep each bullet to ONE short sentence (10-20 words). Be direct.
+Format each bullet starting with • on its own line.
 
-  private static readonly DETAILED_MODE_INSTRUCTIONS = `Provide comprehensive, detailed bullet points including specific statistics, methodological details, and nuanced findings. Include specific details from the text.`
+Correct (short, one fact per bullet):
+• Social Simon Effect: irrelevant spatial info interferes in joint tasks.
+• Prior group membership studies gave conflicting results.
+
+Wrong (too long, multiple ideas in one bullet):
+• This reflects The second factor that we discussed in the introduction the extra computational demands in mentally representing the concerned the potential role of motivation due to inherent social partner's actions simultaneously with one's own.`
+
+  private static readonly DETAILED_MODE_INSTRUCTIONS = `Provide detailed bullet points with specific statistics, methodological details, and nuanced findings. Each bullet should still be ONE sentence.`
 
   static buildExtractionPrompt(
     paperText: string,
@@ -83,18 +90,23 @@ Fields to fill:
       2
     )
 
-    const userPrompt = `Read this paper and extract key information into bullet points:
+    const userPrompt = `Extract key information from this paper into short, one-sentence bullet points per field:
 
 ${paperText}
 
 ${fieldDescriptions}
 
-Return valid JSON with these exact keys:
+Return valid JSON with ALL 7 fields using these exact keys:
 ${outputTemplate}
 
-Format each field as bullet points (•) separated by \\n for line breaks.
-Example: "background": "• First key point\\n• Second key point\\n• Third key point"
-Do NOT wrap in markdown code blocks. If a field has no information, use exactly: "Not mentioned"`
+Format each field as bullet points (•) separated by \\n.
+Example for a field with content:
+  "background": "• Participants were 64 female students in minimal groups.\\n• Social Simon effect tested with compatible vs incompatible trials."
+
+If a field has no information, use exactly: "Not mentioned"
+Do NOT wrap in markdown code blocks.
+Each bullet = ONE sentence (max 20 words).
+IMPORTANT: All 7 fields must be present in the output JSON.`
 
     return {
       systemPrompt,
