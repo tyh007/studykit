@@ -1350,15 +1350,33 @@ a:focus-visible {
 .lit-table { border-collapse: collapse; min-width: max(800px, 100%); font-size: 0.8rem; }
 .lit-table th {
   position: sticky; top: 0; background: var(--color-bg-secondary); z-index: 1;
-  padding: 0.5rem; text-align: left; font-weight: 600; color: var(--color-text-secondary);
-  border-bottom: 2px solid var(--color-border); white-space: nowrap; cursor: col-resize; user-select: none;
+  padding: 0.5rem; padding-right: 8px; text-align: left; font-weight: 600;
+  color: var(--color-text-secondary); border-bottom: 2px solid var(--color-border);
+  white-space: nowrap; user-select: none;
 }
-.lit-table td { padding: 0.5rem; border-bottom: 1px solid var(--color-border-light); vertical-align: top; }
+.lit-table th .resize-handle {
+  position: absolute; right: 0; top: 0; bottom: 0; width: 6px;
+  cursor: col-resize; z-index: 10;
+}
+.lit-table th .resize-handle::after {
+  content: ''; position: absolute; inset: 0 -3px;
+}
+.lit-table th .resize-handle:hover { background: var(--color-primary); opacity: 0.4; }
+.lit-table td { padding: 0.5rem; border-bottom: 1px solid var(--color-border-light); vertical-align: top; position: relative; }
 .lit-table tr:hover td { background: var(--color-bg-secondary); }
-.lit-table .lit-cell-content { max-height: 80px; overflow-y: auto; line-height: 1.4; }
+.lit-table .lit-cell-content { max-height: 80px; overflow: hidden; line-height: 1.4; }
+.lit-table .lit-cell-content.expanded { max-height: none; overflow: visible; }
 .lit-table .lit-cell-content p { margin: 0; }
 .lit-row-checkbox { width: 32px; }
 .lit-row-checkbox input { cursor: pointer; }
+.lit-row-resizable { position: relative; }
+/* Row resize handle — 4px hit area at the bottom of each cell */
+.lit-row-resizable td::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0;
+  height: 5px; cursor: row-resize; z-index: 3;
+  background: transparent; transition: background 0.15s;
+}
+.lit-row-resizable:hover td::after { background: var(--color-primary); opacity: 0.18; border-radius: 2px; }
 
 /* Filter bar */
 .lit-filter-bar {

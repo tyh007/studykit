@@ -134,8 +134,8 @@ export class CustomAIClient {
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
-      temperature: 0.1,
-      max_tokens: 2000,
+      temperature: 0.5,
+      max_tokens: 4096,
       stream: false,
       response_format: { type: 'json_object' }
     })

@@ -113,22 +113,16 @@ const TEMPLATE_PHRASES = [
   'main findings, statistical results',
   'theoretical and practical contributions',
   'study limitations acknowledged by authors',
-  'not explicitly stated',
-  'not clearly specified',
-  'not provided in the text',
-  'not mentioned in the paper',
-  'information not available',
-  'not specified in the paper',
-  'unclear from the text',
-  'not stated in the paper'
 ]
 
 function looksLikeTemplateOutput(text: string): boolean {
   const lower = text.toLowerCase()
-  if (text.length < 40) return true
-  const exactTemplateMatches = TEMPLATE_PHRASES.filter(phrase => lower === phrase.toLowerCase()).length
-  if (exactTemplateMatches > 0) return true
-  if (text.length < 80 && TEMPLATE_PHRASES.some(phrase => lower.includes(phrase))) return true
+  const exactMatch = TEMPLATE_PHRASES.some(phrase => lower === phrase.toLowerCase())
+  if (exactMatch) return true
+  if (text.length < 80 && text !== 'Not mentioned') {
+    const templateOverlap = TEMPLATE_PHRASES.filter(phrase => lower.includes(phrase)).length
+    if (templateOverlap >= 2) return true
+  }
   return false
 }
 
@@ -365,18 +359,18 @@ export function buildFocusedPaperContext(text: string, context?: { title?: strin
       candidate = findKeywordParagraph(text, config.keywords) || ''
     }
     if (!candidate) {
-      candidate = pickSentencesByKeywords(text, config.keywords, 8, 1500) || ''
+      candidate = pickSentencesByKeywords(text, config.keywords, 12, 2500) || ''
     }
     if (candidate) {
-      parts.push(`${config.key.toUpperCase()}: ${takeSentences(candidate, 8, 1200)}`)
+      parts.push(`${config.key.toUpperCase()}: ${takeSentences(candidate, 12, 2500)}`)
     }
   }
 
   if (parts.length === 0) {
-    parts.push(stripTrailingNoise(text).slice(0, 6000))
+    parts.push(stripTrailingNoise(text).slice(0, 12000))
   }
 
-  return parts.join('\n\n').slice(0, 10000)
+  return parts.join('\n\n').slice(0, 16000)
 }
 
 function tryLooseFieldExtraction(raw: string): Record<string, unknown> | null {
@@ -552,8 +546,8 @@ async function chatForJson(
     stream: false,
     format: 'json',
     options: {
-      temperature: 0.1,
-      max_tokens: 2000
+      temperature: 0.5,
+      max_tokens: 4096
     }
   })
 
