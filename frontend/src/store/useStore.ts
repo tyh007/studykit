@@ -6,10 +6,36 @@ import type {
   SourcePage,
   NoteBlock,
   Annotation,
+  LiteratureProject,
+  LiteraturePaper,
+  LiteratureCustomField,
 } from '../types';
 import { db } from '../lib/db';
 
 interface StudyKitState {
+  // Sidebar mode
+  sidebarMode: 'modules' | 'literature';
+  setSidebarMode: (mode: 'modules' | 'literature') => void;
+
+  // Literature Projects
+  litProjects: LiteratureProject[];
+  selectedLitProjectId: string | null;
+  setLitProjects: (projects: LiteratureProject[]) => void;
+  selectLitProject: (id: string | null) => void;
+
+  // Literature Papers
+  litPapers: LiteraturePaper[];
+  selectedLitPaperId: string | null;
+  setLitPapers: (papers: LiteraturePaper[]) => void;
+  selectLitPaper: (id: string | null) => void;
+
+  // Literature Custom Fields
+  litCustomFields: LiteratureCustomField[];
+  setLitCustomFields: (fields: LiteratureCustomField[]) => void;
+
+  // UI: active tab within a lecture
+  activeLectureTab: 'notes' | 'literature';
+  setActiveLectureTab: (tab: 'notes' | 'literature') => void;
   // Workspace
   workspace_id: string | null;
   setWorkspaceId: (id: string | null) => void;
@@ -91,6 +117,30 @@ export const useStore = create<StudyKitState>((set, get) => ({
   // Workspace
   workspace_id: null,
   setWorkspaceId: (id) => set({ workspace_id: id }),
+
+  // Sidebar mode
+  sidebarMode: 'modules',
+  setSidebarMode: (mode) => set({ sidebarMode: mode }),
+
+  // Literature Projects
+  litProjects: [],
+  selectedLitProjectId: null,
+  setLitProjects: (projects) => set({ litProjects: projects }),
+  selectLitProject: (id) => set({ selectedLitProjectId: id, selectedLitPaperId: null }),
+
+  // Literature Papers
+  litPapers: [],
+  selectedLitPaperId: null,
+  setLitPapers: (papers) => set({ litPapers: papers }),
+  selectLitPaper: (id) => set({ selectedLitPaperId: id }),
+
+  // Literature Custom Fields
+  litCustomFields: [],
+  setLitCustomFields: (fields) => set({ litCustomFields: fields }),
+
+  // UI: active lecture tab
+  activeLectureTab: 'notes',
+  setActiveLectureTab: (tab) => set({ activeLectureTab: tab }),
 
   // Modules
   modules: [],
@@ -198,5 +248,12 @@ export const useStore = create<StudyKitState>((set, get) => ({
     zoom: 100,
     syncStatus: 'offline',
     deviceId: generateDeviceId(),
+    sidebarMode: 'modules',
+    litProjects: [],
+    selectedLitProjectId: null,
+    litPapers: [],
+    selectedLitPaperId: null,
+    litCustomFields: [],
+    activeLectureTab: 'notes',
   }),
 }));

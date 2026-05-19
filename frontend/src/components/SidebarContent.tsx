@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useStore } from '../store/useStore';
 import { modulesApi, lecturesApi } from '../lib/api';
 import { db } from '../lib/db';
+import ProjectSidebar from './literature/ProjectSidebar';
 import type { Module, Lecture } from '../types';
 
 interface SidebarContentProps {
@@ -358,8 +359,24 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
     </div>
   );
 
+  const { sidebarMode, setSidebarMode } = useStore();
+
   return (
     <>
+      {/* Mode toggle: Modules / Literature */}
+      <div className="lit-mode-toggle">
+        <button className={sidebarMode === 'modules' ? 'active' : ''} onClick={() => setSidebarMode('modules')}>
+          📚 Modules
+        </button>
+        <button className={sidebarMode === 'literature' ? 'active' : ''} onClick={() => setSidebarMode('literature')}>
+          📄 Literature
+        </button>
+      </div>
+
+      {sidebarMode === 'literature' ? (
+        <ProjectSidebar />
+      ) : (
+        <>
       <div className="sidebar-header">
         <h2>{showTrash ? 'Trash' : 'Modules'}</h2>
         <div className="flex gap-1">
@@ -518,7 +535,9 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
           </div>
         </div>
       )}
-    </>
+      </>  {/* end else fragment */}
+      )}  {/* end ternary */}
+    </>  {/* end outer fragment */}
   );
 }
 

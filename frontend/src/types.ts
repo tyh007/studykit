@@ -250,6 +250,65 @@ export interface SyncOperation {
   applied_at?: string;
 }
 
+// ===== Literature (Integrated from PsycScholar) =====
+
+export interface LiteratureProject {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description?: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+}
+
+export interface LiteraturePaper {
+  id: string;
+  project_id: string;
+  workspace_id: string;
+  file_name: string;
+  file_size: number;
+  file_type: string;
+  uploaded_at: string;
+  processed_at?: string;
+  title?: string;
+  authors?: string;
+  year?: number;
+  journal?: string;
+  doi?: string;
+  abstract?: string;
+  full_text?: string;
+  extracted_data?: ExtractedData;
+  processing_status: 'pending' | 'processing' | 'completed' | 'error';
+  error_message?: string;
+  in_trash: boolean;
+  trashed_at?: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+}
+
+export interface ExtractedData {
+  background: string;
+  theory: string;
+  methodology: string;
+  measures: string;
+  results: string;
+  implications: string;
+  limitations: string;
+  customFields?: Record<string, string>;
+}
+
+export interface LiteratureCustomField {
+  id: string;
+  project_id: string;
+  workspace_id: string;
+  name: string;
+  description?: string;
+  prompt?: string;
+  created_at: string;
+}
+
 // ===== Local-only types =====
 
 export interface UndoEntry {

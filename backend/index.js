@@ -12,6 +12,10 @@ const sourceDocumentsRoutes = require('./routes/source-documents');
 const noteBlocksRoutes = require('./routes/note-blocks');
 const syncRoutes = require('./routes/sync');
 const exportsRoutes = require('./routes/exports');
+const literatureProjectsRoutes = require('./routes/literature-projects');
+const literaturePapersRoutes = require('./routes/literature-papers');
+const literatureCustomFieldsRoutes = require('./routes/literature-custom-fields');
+const literatureAIRoutes = require('./routes/literature-ai');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -106,6 +110,10 @@ app.use('/api/source-documents', authenticateToken, sourceDocumentsRoutes);
 app.use('/api/note-blocks', authenticateToken, noteBlocksRoutes);
 app.use('/api/sync', authenticateToken, syncRoutes);
 app.use('/api/exports', authenticateToken, exportsRoutes);
+app.use('/api/literature/projects', authenticateToken, literatureProjectsRoutes);
+app.use('/api/literature/papers', authenticateToken, literaturePapersRoutes);
+app.use('/api/literature/custom-fields', authenticateToken, literatureCustomFieldsRoutes);
+app.use('/api/literature/ai', authenticateToken, literatureAIRoutes);
 
 // Error handling
 app.use((err, req, res, next) => {

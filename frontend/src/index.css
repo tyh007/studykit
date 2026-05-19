@@ -1304,3 +1304,144 @@ a:focus-visible {
 .skip-to-content:focus {
   top: 0;
 }
+
+/* ===== Literature (PsycScholar Integration) ===== */
+
+/* Project sidebar */
+.lit-project-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s;
+}
+.lit-project-item:hover { background: var(--color-bg-tertiary); }
+.lit-project-item.active { background: var(--color-primary-light); color: var(--color-primary); font-weight: 500; }
+.lit-project-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Summary table */
+.lit-table-container { overflow-x: auto; flex: 1; }
+.lit-table { border-collapse: collapse; width: 100%; min-width: 800px; font-size: 0.8rem; }
+.lit-table th {
+  position: sticky; top: 0; background: var(--color-bg-secondary); z-index: 1;
+  padding: 0.5rem; text-align: left; font-weight: 600; color: var(--color-text-secondary);
+  border-bottom: 2px solid var(--color-border); white-space: nowrap; cursor: col-resize; user-select: none;
+}
+.lit-table td { padding: 0.5rem; border-bottom: 1px solid var(--color-border-light); vertical-align: top; }
+.lit-table tr:hover td { background: var(--color-bg-secondary); }
+.lit-table .lit-cell-content { max-height: 80px; overflow-y: auto; line-height: 1.4; }
+.lit-table .lit-cell-content p { margin: 0; }
+.lit-row-checkbox { width: 32px; }
+.lit-row-checkbox input { cursor: pointer; }
+
+/* Filter bar */
+.lit-filter-bar {
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0;
+  border-bottom: 1px solid var(--color-border); flex-wrap: wrap;
+}
+.lit-filter-bar input, .lit-filter-bar select {
+  padding: 0.375rem 0.5rem; font-size: 0.8rem;
+  border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+  background: var(--color-bg); color: var(--color-text);
+}
+
+/* Paper detail view (modal) */
+.lit-detail-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+}
+.lit-detail-modal {
+  background: var(--color-surface); border-radius: var(--radius-lg);
+  width: 90%; max-width: 800px; max-height: 85vh; overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+.lit-detail-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 1.25rem; border-bottom: 1px solid var(--color-border);
+}
+.lit-detail-header h3 { margin: 0; font-size: 1rem; }
+.lit-detail-body { padding: 1.25rem; }
+.lit-detail-section { margin-bottom: 1rem; }
+.lit-detail-section h4 { margin: 0 0 0.375rem; font-size: 0.85rem; color: var(--color-primary); }
+.lit-detail-section p { margin: 0; font-size: 0.8rem; line-height: 1.5; white-space: pre-wrap; }
+.lit-detail-meta { font-size: 0.8rem; color: var(--color-text-secondary); margin-bottom: 1rem; }
+
+/* Tabs */
+.lit-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--color-border); }
+.lit-tab {
+  padding: 0.5rem 1rem; cursor: pointer; font-size: 0.85rem;
+  border-bottom: 2px solid transparent; transition: all 0.15s; color: var(--color-text-secondary);
+}
+.lit-tab:hover { color: var(--color-text); }
+.lit-tab.active { color: var(--color-primary); border-bottom-color: var(--color-primary); font-weight: 500; }
+
+/* Cards and badges */
+.lit-card {
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); padding: 1rem;
+}
+.lit-badge {
+  display: inline-block; padding: 0.125rem 0.5rem; font-size: 0.7rem;
+  border-radius: 999px; background: var(--color-bg-tertiary); color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+/* Upload zone */
+.lit-upload-zone {
+  border: 2px dashed var(--color-border); border-radius: var(--radius-md);
+  padding: 2rem; text-align: center; cursor: pointer; transition: all 0.15s;
+  background: var(--color-bg-secondary);
+}
+.lit-upload-zone:hover, .lit-upload-zone.dragging {
+  border-color: var(--color-primary); background: var(--color-primary-light);
+}
+
+/* AI Status indicator */
+.lit-ai-status {
+  display: inline-flex; align-items: center; gap: 0.375rem;
+  padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 999px;
+  background: var(--color-bg-tertiary);
+}
+.lit-ai-status .dot { width: 8px; height: 8px; border-radius: 50%; }
+.lit-ai-status .dot.online { background: var(--color-success); }
+.lit-ai-status .dot.offline { background: var(--color-danger); }
+
+/* Progress bar */
+.lit-progress-bar {
+  width: 100%; height: 4px; background: var(--color-bg-tertiary);
+  border-radius: 2px; overflow: hidden; margin: 0.5rem 0;
+}
+.lit-progress-bar .fill {
+  height: 100%; background: var(--color-primary); transition: width 0.3s;
+}
+
+/* Sidebar mode toggle */
+.lit-mode-toggle {
+  display: flex; gap: 0; margin: 0.5rem; border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm); overflow: hidden;
+}
+.lit-mode-toggle button {
+  flex: 1; padding: 0.375rem 0.5rem; font-size: 0.78rem; cursor: pointer;
+  border: none; background: var(--color-bg); color: var(--color-text-secondary);
+  transition: all 0.15s;
+}
+.lit-mode-toggle button.active {
+  background: var(--color-primary); color: white; font-weight: 500;
+}
+.lit-mode-toggle button:not(.active):hover { background: var(--color-bg-tertiary); }
+
+/* Note panel tabs */
+.note-panel-tabs {
+  display: flex; gap: 0; margin-right: auto;
+}
+.note-panel-tab {
+  padding: 0.25rem 0.75rem; cursor: pointer; font-size: 0.8rem; font-weight: 500;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  color: var(--color-text-secondary); transition: all 0.15s;
+}
+.note-panel-tab:hover { color: var(--color-text); }
+.note-panel-tab.active {
+  color: var(--color-primary); background: var(--color-primary-light);
+}

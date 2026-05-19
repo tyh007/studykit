@@ -207,6 +207,57 @@ CREATE TABLE IF NOT EXISTS future_reserved_external_refs (
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- ===== LITERATURE PROJECTS =====
+CREATE TABLE IF NOT EXISTS literature_projects (
+  id            UUID PRIMARY KEY,
+  workspace_id  UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  name          TEXT NOT NULL,
+  description   TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at    TIMESTAMPTZ
+);
+
+-- ===== LITERATURE PAPERS =====
+CREATE TABLE IF NOT EXISTS literature_papers (
+  id                UUID PRIMARY KEY,
+  project_id        UUID NOT NULL REFERENCES literature_projects(id) ON DELETE CASCADE,
+  workspace_id      UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  file_name         TEXT NOT NULL,
+  file_size         INTEGER NOT NULL,
+  file_type         TEXT NOT NULL DEFAULT 'application/pdf',
+  uploaded_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  processed_at      TIMESTAMPTZ,
+  title             TEXT,
+  authors           TEXT,
+  year              INTEGER,
+  journal           TEXT,
+  doi               TEXT,
+  abstract          TEXT,
+  full_text         TEXT,
+  extracted_data    JSONB,
+  processing_status TEXT NOT NULL DEFAULT 'completed'
+                    CHECK (processing_status IN ('pending','processing','completed','error')),
+  error_message     TEXT,
+  in_trash          BOOLEAN NOT NULL DEFAULT FALSE,
+  trashed_at        TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at        TIMESTAMPTZ
+);
+
+-- ===== LITERATURE CUSTOM FIELDS =====
+CREATE TABLE IF NOT EXISTS literature_custom_fields (
+  id            UUID PRIMARY KEY,
+  project_id    UUID NOT NULL REFERENCES literature_projects(id) ON DELETE CASCADE,
+  workspace_id  UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  name          TEXT NOT NULL,
+  description   TEXT,
+  prompt        TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at    TIMESTAMPTZ
+);
+
 -- ===== INDEXES =====
 CREATE INDEX idx_modules_workspace ON modules(workspace_id) WHERE deleted_at IS NULL;
 CREATE INDEX idx_lectures_module ON lectures(module_id) WHERE deleted_at IS NULL;
@@ -219,3 +270,9 @@ CREATE INDEX idx_annotations_page ON annotations(source_page_id) WHERE deleted_a
 CREATE INDEX idx_annotations_lecture ON annotations(lecture_id) WHERE deleted_at IS NULL;
 CREATE INDEX idx_sync_operations_workspace ON sync_operations(workspace_id);
 CREATE INDEX idx_sync_operations_device ON sync_operations(device_id, sequence_number);
+
+-- Literature indexes
+CREATE INDEX idx_lit_projects_workspace ON literature_projects(workspace_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_lit_papers_project ON literature_papers(project_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_lit_papers_workspace ON literature_papers(workspace_id);
+CREATE INDEX idx_lit_custom_fields_project ON literature_custom_fields(project_id) WHERE deleted_at IS NULL;

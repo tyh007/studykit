@@ -146,14 +146,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     setAuthToken(null);
     clearStoredAuth();
-    // Clear device ID so next login gets a fresh one
-    localStorage.removeItem('studykit_device_id');
-    // Clear Zustand store state
+    // Keep device ID so notes can be restored on re-login
+    // localStorage.removeItem('studykit_device_id');
+    // Clear Zustand store state (but preserve deviceId)
+    const currentDeviceId = useStore.getState().deviceId;
     useStore.getState().resetStore();
-    // Clear Dexie database to prevent data leakage between users
-    db.delete().then(() => {
-      db.open();
-    }).catch(console.error);
+    useStore.setState({ deviceId: currentDeviceId });
+    // Don't delete Dexie database — we keep notes locally.
+    // If switching users, login/register will call clearLocalCache() instead.
     setState({ user: null, token: null, workspace_id: null, loading: false, error: null });
   }, []);
 

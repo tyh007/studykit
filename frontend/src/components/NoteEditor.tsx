@@ -12,6 +12,7 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { useStore } from '../store/useStore';
 import { db } from '../lib/db';
+import { getAuthToken } from '../lib/api';
 import { Equation } from './EquationNode';
 import type { NoteBlock, BlockContent, BlockType } from '../types';
 import { AddAnnotationButton } from './CornellPanel';
@@ -131,12 +132,47 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
 
     const loadNotes = async () => {
       try {
-        // Load all non-cue, non-summary, non-annotation blocks
-        const blocks = await db.noteBlocks
+        // First try to load from server (PostgreSQL)
+        let blocks: NoteBlock[] = [];
+        try {
+          const token = getAuthToken();
+          if (token) {
+            const response = await fetch(`/api/note-blocks?lecture_id=${lectureId}`, {
+              headers: { 'Authorization': `Bearer ${token}` },
+            });
+            if (response.ok) {
+              const serverBlocks = await response.json();
+              if (serverBlocks && serverBlocks.length > 0) {
+                blocks = serverBlocks;
+                // Sync server blocks to local Dexie for offline access
+                const existingLocal = await db.noteBlocks
+                  .where('lecture_id')
+                  .equals(lectureId)
+                  .filter((b: any) => !b.deleted_at)
+                  .toArray();
+                // Clear old local blocks for this lecture
+                for (const b of existingLocal) {
+                  await db.noteBlocks.update(b.id, { deleted_at: new Date().toISOString() });
+                }
+                // Save server blocks locally
+                for (const block of blocks) {
+                  await db.noteBlocks.add(block as any);
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to load from server, falling back to local:', err);
+        }
+
+        // If no server data, load from local Dexie
+        if (blocks.length === 0) {
+          blocks = await db.noteBlocks
           .where('lecture_id')
           .equals(lectureId)
           .filter((b) => !b.deleted_at && b.block_type !== 'cue' && b.block_type !== 'summary' && b.block_type !== 'annotation')
           .sortBy('sort_order');
+        }
 
         if (cancelled) return;
         setNoteBlocks(blocks);
@@ -235,6 +271,34 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
 
       for (const block of newBlocks) {
         await db.noteBlocks.add(block);
+      }
+
+      // Also save to backend PostgreSQL for persistence
+      try {
+        const token = getAuthToken();
+        if (token) {
+          await fetch('/api/note-blocks', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify(newBlocks.map(b => ({
+              id: b.id,
+              lecture_id: b.lecture_id,
+              module_id: b.module_id,
+              block_type: b.block_type,
+              content_json: b.content_json,
+              source_links_json: b.source_links_json || {},
+              sort_order: b.sort_order,
+              created_by_device_id: b.created_by_device_id,
+              version: b.version || 1,
+            }))),
+          });
+        }
+      } catch (err) {
+        console.warn('Failed to save blocks to server (offline?):', err);
+        // Silent fail — local save succeeded, will sync later
       }
 
       setNoteBlocks(newBlocks);

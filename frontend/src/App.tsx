@@ -9,6 +9,7 @@ import AnnotationLayer from './components/AnnotationLayer';
 import AnnotationPanel from './components/CornellPanel';
 import ExportDialog from './components/ExportDialog';
 import SidebarContent from './components/SidebarContent';
+import SummaryTable from './components/literature/SummaryTable';
 import type { Module, Lecture, SourceDocument, SourcePage, NoteBlock } from './types';
 
 // ===== Auth Page =====
@@ -127,6 +128,7 @@ function StudyKitApp() {
     sidebarOpen, toggleSidebar, currentLayout, syncStatus, cornellMode,
     currentDocument, setCurrentDocument, currentPages, setCurrentPages,
     selectedPageIndex, selectPage,
+    sidebarMode, litProjects, selectedLitProjectId,
   } = useStore();
 
   const { user, workspace_id: authWorkspaceId, logout } = useAuth();
@@ -302,18 +304,22 @@ function StudyKitApp() {
         {/* Main content */}
         <main id="main-content" className={`main-content ${!selectedLecture ? 'empty' : ''}`}>
           {!selectedLecture ? (
-            <div className="empty-state">
-              <h2>Welcome to StudyKit</h2>
-              <p>
-                Create a module and lecture to get started. Upload your lecture slides,
-                then take structured notes beside them.
-              </p>
-              {modules.length === 0 && (
-                <button className="btn btn-primary" onClick={() => setShowNewModule(true)}>
-                  Create your first module
-                </button>
-              )}
-            </div>
+            sidebarMode === 'literature' && selectedLitProjectId ? (
+              <SummaryTable projectId={selectedLitProjectId} />
+            ) : (
+              <div className="empty-state">
+                <h2>Welcome to StudyKit</h2>
+                <p>
+                  Create a module and lecture to get started. Upload your lecture slides,
+                  then take structured notes beside them.
+                </p>
+                {modules.length === 0 && (
+                  <button className="btn btn-primary" onClick={() => setShowNewModule(true)}>
+                    Create your first module
+                  </button>
+                )}
+              </div>
+            )
           ) : (
             <LectureView
               lecture={selectedLecture}
@@ -392,7 +398,8 @@ function LectureView({
   pages: SourcePage[];
   currentPageIndex: number;
 }) {
-  const { currentLayout, cornellMode, selectPage, setCurrentPages, setCurrentDocument } = useStore();
+  const { currentLayout, cornellMode, selectPage, setCurrentPages, setCurrentDocument,
+    activeLectureTab, setActiveLectureTab, selectedLitProjectId } = useStore();
   const [uploading, setUploading] = useState(false);
   const [slidePanelWidth, setSlidePanelWidth] = useState<number | null>(null);
   const [annotationPanelWidth, setAnnotationPanelWidth] = useState<number | null>(null);
@@ -501,7 +508,17 @@ function LectureView({
       {/* Note panel - continuous per lecture */}
       <div className="note-panel">
         <div className="note-panel-header">
-          <h3>Notes</h3>
+          <div className="note-panel-tabs">
+            <div
+              className={`note-panel-tab ${activeLectureTab === 'notes' ? 'active' : ''}`}
+              onClick={() => setActiveLectureTab('notes')}
+            >Notes</div>
+            <div
+              className={`note-panel-tab ${activeLectureTab === 'literature' ? 'active' : ''}`}
+              onClick={() => setActiveLectureTab('literature')}
+            >Literature Review</div>
+          </div>
+          {activeLectureTab === 'notes' && (
           <div className="flex gap-1">
             <button
               className={`btn btn-ghost btn-sm ${cornellMode ? 'active' : ''}`}
@@ -511,9 +528,20 @@ function LectureView({
               Annotation
             </button>
           </div>
+          )}
         </div>
         <div className="note-editor-container">
-          <NoteEditor lectureId={lecture.id} />
+          {activeLectureTab === 'notes' ? (
+            <NoteEditor lectureId={lecture.id} />
+          ) : (
+            selectedLitProjectId ? (
+              <SummaryTable projectId={selectedLitProjectId} />
+            ) : (
+              <div className="empty-state" style={{ padding: '2rem' }}>
+                <p>Select a literature project from the sidebar to view papers.</p>
+              </div>
+            )
+          )}
         </div>
       </div>
 

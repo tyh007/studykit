@@ -9,6 +9,9 @@ import type {
   Attachment,
   ExportJob,
   SyncOperation,
+  LiteratureProject,
+  LiteraturePaper,
+  LiteratureCustomField,
 } from '../types';
 
 export class StudyKitDB extends Dexie {
@@ -21,11 +24,14 @@ export class StudyKitDB extends Dexie {
   attachments!: EntityTable<Attachment, 'id'>;
   exportJobs!: EntityTable<ExportJob, 'id'>;
   syncOperations!: EntityTable<SyncOperation, 'id'>;
+  literatureProjects!: EntityTable<LiteratureProject, 'id'>;
+  literaturePapers!: EntityTable<LiteraturePaper, 'id'>;
+  literatureCustomFields!: EntityTable<LiteratureCustomField, 'id'>;
 
   constructor() {
     super('StudyKit');
 
-    this.version(2).stores({
+    this.version(3).stores({
       modules: 'id, workspace_id, title, sort_order',
       lectures: 'id, module_id, title, sort_order, lecture_date',
       sourceDocuments: 'id, lecture_id, processing_status',
@@ -35,6 +41,9 @@ export class StudyKitDB extends Dexie {
       attachments: 'id, workspace_id, module_id, lecture_id',
       exportJobs: 'id, workspace_id, lecture_id, status',
       syncOperations: 'id, workspace_id, device_id, sequence_number, target_table, created_at',
+      literatureProjects: 'id, workspace_id',
+      literaturePapers: 'id, project_id, workspace_id, processing_status, in_trash',
+      literatureCustomFields: 'id, project_id',
     });
   }
 }
