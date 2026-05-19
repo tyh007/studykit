@@ -145,6 +145,64 @@ function normalizeWhitespace(value: string) {
   return value.replace(/\s+/g, ' ').trim()
 }
 
+// Split academic text into sentences, handling periods in abbreviations,
+// statistical notation (p < .001), decimals (3.14), initials (J. Smith),
+// and other non-sentence-boundary periods common in academic papers.
+function splitSentences(text: string): string[] {
+  const result: string[] = []
+  let start = 0
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    // Only consider . ! ? as sentence terminators
+    if (ch !== '.' && ch !== '!' && ch !== '?') continue
+    // Ensure there's whitespace after the punctuation
+    const nextChar = text[i + 1]
+    if (nextChar === undefined || !/\s/.test(nextChar)) continue
+
+    // Check patterns that should NOT end a sentence:
+    const beforePeriod = text.slice(start, i)
+    const lastWord = beforePeriod.split(/\s+/).pop() || ''
+    const afterSpace = text.slice(i + 1).replace(/^\s+/, '')
+
+    // Not a sentence end if followed by lowercase (continuation)
+    if (/^[a-z]/.test(afterSpace)) continue
+
+    // Not a sentence end if the word before is a known abbreviation
+    if (ABBREVIATION_WORDS.has(lastWord.toLowerCase().replace(/[^a-z.]/g, ''))) continue
+
+    // Not a sentence end if it's a decimal number (digit before . and after)
+    const beforeCh = text[i - 1]
+    if (beforeCh && /\d/.test(beforeCh)) {
+      // Check if it's a number like 3.14 (digit.digit)
+      const afterDecimal = text.slice(i + 1).match(/^(\d+)\s/)
+      if (afterDecimal) continue
+    }
+
+    // Not a sentence end if it's a single-capital-letter initial (J. Smith)
+    if (/^[A-Z]$/.test(lastWord.trim())) continue
+
+    // Not "et al." — count as sentence end
+    // It IS a sentence boundary — split here
+    const sentenceEnd = afterSpace ? i + 1 + (text.slice(i + 1).length - afterSpace.length) : i + 1
+    const sentence = text.slice(start, sentenceEnd).trim()
+    if (sentence) result.push(sentence)
+    start = sentenceEnd
+  }
+
+  const remaining = text.slice(start).trim()
+  if (remaining) result.push(remaining)
+  if (result.length === 0) result.push(text.trim())
+  return result
+}
+
+const ABBREVIATION_WORDS = new Set([
+  'e.g', 'i.e', 'et al', 'vs', 'fig', 'eq', 'vol', 'no', 'pp', 'cf', 'etc',
+  'al', 'dept', 'est', 'approx', 'min', 'max', 'hr', 'sec', 'temp',
+  'diff', 'coeff', 'var', 'std', 'dev', 'ref', 'chap', 'eds',
+  'trans', 'diss', 'abstr', 'rev', 'col', 'dept', 'univ',
+  'dr', 'mr', 'mrs', 'ms', 'prof', 'st', 'ave', 'blvd',
+])
+
 function cleanAndNormalizeText(text: string): string {
   return text
     .replace(/[A-Z][A-Z\s–\-]{30,}(?=\n|$)/g, '')
@@ -228,8 +286,7 @@ function collectSectionBlocks(text: string) {
 }
 
 function takeSentences(text: string, count: number, maxChars: number) {
-  const sentences = text
-    .split(/(?<=[.!?])\s+/)
+  const sentences = splitSentences(text)
     .map(sentence => normalizeWhitespace(sentence))
     .filter(sentence => sentence.length > 10 && !isNoiseLine(sentence))
 
@@ -254,8 +311,7 @@ function takeSentences(text: string, count: number, maxChars: number) {
 }
 
 function getSentences(text: string) {
-  return text
-    .split(/(?<=[.!?])\s+/)
+  return splitSentences(text)
     .map(sentence => normalizeWhitespace(sentence))
     .filter(sentence => sentence.length > 20)
     .filter(sentence => !isNoiseLine(sentence))
@@ -436,8 +492,7 @@ function formatAsBulletPoints(text: string, maxBullets: number = 3): string {
     }
   }
 
-  const sentences = text
-    .split(/(?<=[.!?])\s+/)
+  const sentences = splitSentences(text)
     .map(s => s.trim())
     .filter(s => {
       if (s.length < 20) return false
@@ -447,17 +502,16 @@ function formatAsBulletPoints(text: string, maxBullets: number = 3): string {
       return true
     })
 
-  if (sentences.length === 0) return 'Not mentioned'
+  if (sentences.length === 0) return `• ${text}`
 
   const qualitySentences = sentences.filter(s => {
     const words = s.split(/\s+/)
-    if (words.length < 5) return false
+    if (words.length < 3) return false
     if (/^(and they|however,|further|additionally)\s+/i.test(s)) return false
-    if (/\s\w+$|\w+\s*$/.test(s) && !/[.!?]$/.test(s)) return false
     return true
   })
 
-  if (qualitySentences.length === 0) return 'Not mentioned'
+  if (qualitySentences.length === 0) return `• ${text}`
 
   const seenSentences = new Set<string>()
   const uniqueSentences: string[] = []
@@ -470,7 +524,7 @@ function formatAsBulletPoints(text: string, maxBullets: number = 3): string {
     }
   }
 
-  if (uniqueSentences.length === 0) return 'Not mentioned'
+  if (uniqueSentences.length === 0) return `• ${text}`
 
   return uniqueSentences.slice(0, maxBullets).map(s => `• ${s}`).join('\n')
 }
