@@ -23,6 +23,7 @@ export default function AIStatusIndicator() {
   const [customApiKey, setCustomApiKey] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
   const [geminiModel, setGeminiModel] = useState('gemini-2.0-flash');
+  const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
 
   const loadConfig = useCallback(() => {
     const config = readAIProviderConfig();
@@ -89,13 +90,15 @@ export default function AIStatusIndicator() {
     handleCustomChange();
     handleGeminiChange();
     checkAvailability();
+    setSaveFeedback('Saved!');
+    setTimeout(() => setSaveFeedback(null), 1500);
   }, [handleOllamaChange, handleCustomChange, handleGeminiChange, checkAvailability]);
 
   const modelName = provider === 'custom' ? customModel
     : provider === 'gemini' ? geminiModel
     : ollamaModel || 'local';
 
-  const statusText = checking ? 'Checking...' : available ? modelName : 'AI Offline';
+  const statusText = checking ? 'Checking...' : available ? modelName : modelName ? `${modelName} (offline)` : 'AI Offline';
   const tooltip = available
     ? `${PROVIDER_LABELS[provider]} connected (${modelName})`
     : `AI not available (${PROVIDER_LABELS[provider]})`;
@@ -172,7 +175,8 @@ export default function AIStatusIndicator() {
             </div>
           )}
 
-          <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
+          <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.35rem', justifyContent: 'flex-end', alignItems: 'center' }}>
+            {saveFeedback && <span style={{ fontSize: '0.75rem', color: 'var(--color-success, #22c55e)' }}>{saveFeedback}</span>}
             <button className="btn btn-sm" onClick={saveAll}>Save</button>
           </div>
         </div>

@@ -1,3 +1,5 @@
+import { proxyFetch } from './proxy-fetch'
+
 export interface CustomAIMessage {
   role: 'system' | 'user' | 'assistant'
   content: string
@@ -62,10 +64,10 @@ export class CustomAIClient {
 
   async checkConnection(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/models`, {
+      await proxyFetch(`${this.baseUrl}/models`, {
         headers: this.getHeaders()
       })
-      return response.ok
+      return true
     } catch {
       return false
     }
@@ -73,13 +75,9 @@ export class CustomAIClient {
 
   async getAvailableModels(): Promise<CustomAIModel[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/models`, {
+      const data = await proxyFetch(`${this.baseUrl}/models`, {
         headers: this.getHeaders()
       })
-      if (!response.ok) {
-        throw new Error(`Failed to fetch models: ${response.statusText}`)
-      }
-      const data = await response.json()
       return data.data || []
     } catch (error) {
       console.error('Failed to get available models:', error)
@@ -100,18 +98,13 @@ export class CustomAIClient {
       body.response_format = request.response_format
     }
 
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+    const data = await proxyFetch(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify(body)
     })
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Custom AI API error: ${response.status} ${response.statusText} - ${errorText}`)
-    }
-
-    return response.json()
+    return data as CustomAIResponse
   }
 
   async generateText(

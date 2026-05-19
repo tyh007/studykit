@@ -94,4 +94,42 @@ ${paperText.substring(0, 32000)}`;
   }
 });
 
+// POST /api/literature/ai/proxy — CORS proxy for local LLM (Ollama/Custom API)
+router.post('/proxy', async (req, res) => {
+  try {
+    const { url, method, headers, body } = req.body;
+    if (!url) return res.status(400).json({ error: 'url is required' });
+
+    // Security: only allow local addresses
+    const parsedUrl = new URL(url);
+    const hostname = parsedUrl.hostname;
+    if (!['localhost', '127.0.0.1', '::1', 'host.docker.internal'].includes(hostname)) {
+      return res.status(403).json({ error: 'Only local addresses are allowed' });
+    }
+
+    const fetchOptions = {
+      method: method || 'GET',
+      headers: { 'Content-Type': 'application/json', ...(headers || {}) },
+    };
+    if (body && method !== 'GET') {
+      fetchOptions.body = typeof body === 'string' ? body : JSON.stringify(body);
+    }
+
+    const response = await fetch(url, fetchOptions);
+
+    let data;
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      data = await response.text();
+    }
+
+    res.json({ success: response.ok, status: response.status, data });
+  } catch (err) {
+    console.error('Proxy error:', err.message);
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
