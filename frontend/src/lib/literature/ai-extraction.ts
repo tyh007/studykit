@@ -1,3 +1,4 @@
+import { getAuthToken } from '../api'
 import type { ExtractedData, CustomFieldDefinition } from './types'
 import { extractPaperWithLocalOllama, extractPaperWithRules, getLocalOllamaAvailability } from './local-ollama-ai'
 import { extractPaperWithCustomAI, getCustomAIAvailability } from './custom-ai-extraction'
@@ -33,9 +34,12 @@ async function tryCustomAPI(paperText: string, detailLevel: 'brief' | 'detailed'
 async function tryGemini(paperText: string, detailLevel: 'brief' | 'detailed', customFields?: CustomFieldDefinition[]): Promise<{ extractedData: ExtractedData; method: string } | null> {
   try {
     const config = readAIProviderConfig()
+    const token = getAuthToken()
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
     const response = await fetch('/api/literature/ai/extract', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         paperText,
         detailLevel,

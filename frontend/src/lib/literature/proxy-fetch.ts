@@ -1,12 +1,18 @@
 // CORS proxy helper — routes LLM requests through the backend to avoid browser CORS issues
+import { getAuthToken } from '../api';
+
 export async function proxyFetch(url: string, options: RequestInit = {}): Promise<any> {
   const body = options.body
     ? (typeof options.body === 'string' ? JSON.parse(options.body) : options.body)
     : undefined;
 
+  const token = getAuthToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
   const response = await fetch('/api/literature/ai/proxy', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
       url,
       method: options.method || 'GET',
