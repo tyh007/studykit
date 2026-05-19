@@ -434,6 +434,7 @@ openssl rand -base64 48 | head -c 64
 | Notes don't save | IndexedDB quota exceeded | Clear browser storage for the site, or increase quota |
 | Annotations misaligned at zoom | Scale calculation off | Check `AnnotationLayer.tsx` scale matches `PDFViewer.tsx` viewport |
 | Docker volumes not mounting | Wrong NAS path | Check `NAS_DATA_DIR` in `.env` — must be an existing directory |
+| Literature tables missing | Schema only initializes on fresh DB | Run: `docker exec -i studykit-db-1 psql -U studykit -d studykit < backend/schema.sql` |
 
 ---
 
