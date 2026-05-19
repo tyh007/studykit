@@ -126,7 +126,9 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
 
   // Helpers for cell rendering
   const renderExtractedCell = (paper: LiteraturePaper, field: keyof ExtractedData | string) => {
-    const text = (paper.extracted_data as Record<string, string | undefined>)?.[field];
+    const extracted = paper.extracted_data as Record<string, unknown> | undefined;
+    const raw = extracted?.[field];
+    const text = typeof raw === 'string' ? raw : undefined;
     if (!text || text === 'Not mentioned') {
       return <span className="text-muted" style={{ fontSize: '0.75rem' }}>—</span>;
     }

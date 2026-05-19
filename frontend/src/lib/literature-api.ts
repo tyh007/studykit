@@ -40,6 +40,7 @@ interface PaperCreate {
   abstract?: string;
   full_text?: string;
   extracted_data?: any;
+  processing_status?: string;
 }
 
 export const literatureProjectsApi = {

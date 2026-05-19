@@ -373,10 +373,9 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
         </button>
       </div>
 
-      {sidebarMode === 'literature' ? (
-        <ProjectSidebar />
-      ) : (
-        <>
+      {sidebarMode === 'literature'
+        ? <ProjectSidebar />
+        : <div className="sidebar-modules">
       <div className="sidebar-header">
         <h2>{showTrash ? 'Trash' : 'Modules'}</h2>
         <div className="flex gap-1">
@@ -535,9 +534,9 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
           </div>
         </div>
       )}
-      </>  {/* end else fragment */}
-      )}  {/* end ternary */}
-    </>  {/* end outer fragment */}
+      </div>
+      }
+    </>
   );
 }
 

@@ -78,7 +78,7 @@ export default function PaperDetailView({ paper, onClose, projectId, onUpdated }
               </div>
               {fieldData ? (
                 EXTRACTED_FIELDS.map(field => {
-                  const text = fieldData[field];
+                  const text = fieldData[field] as string | undefined;
                   if (!text || text === 'Not mentioned') return null;
                   return (
                     <div key={field} className="lit-detail-section">

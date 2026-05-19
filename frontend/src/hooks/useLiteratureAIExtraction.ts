@@ -4,7 +4,8 @@ import { getCustomAIAvailability, extractPaperWithCustomAI } from '../lib/litera
 import { readOllamaSettings, saveOllamaSettings, DEFAULT_OLLAMA_SETTINGS } from '../lib/literature/ollama-settings'
 import { readCustomAISettings, saveCustomAISettings } from '../lib/literature/custom-ai-settings'
 import { readAIProviderConfig, saveAIProviderConfig, type AIProvider } from '../lib/literature/ai-provider-config'
-import { PSYCHOLOGY_CUSTOM_FIELDS, type CustomFieldDefinition } from '../lib/literature/prompt-builder'
+import type { CustomFieldDefinition } from '../lib/literature/types'
+import { PSYCHOLOGY_CUSTOM_FIELDS } from '../lib/literature/prompt-builder'
 import { literaturePapersApi } from '../lib/literature-api'
 
 export interface AIExtractionState {
