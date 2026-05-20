@@ -318,3 +318,100 @@ export interface UndoEntry {
   previousStyle: any;
   action: 'create' | 'delete' | 'modify';
 }
+
+// ===== Stage Two: Zotero Integration =====
+
+export interface ExternalAccount {
+  id: string;
+  workspace_id: string;
+  provider: string;
+  auth_method: 'oauth' | 'api_key' | 'local_file' | 'manual';
+  auth_status: 'connected' | 'expired' | 'revoked' | 'error';
+  granted_scopes_json: Record<string, any>;
+  provider_user_id?: string;
+  provider_display_name?: string;
+  created_at: string;
+  updated_at: string;
+  disconnected_at?: string;
+}
+
+export interface ExternalObject {
+  id: string;
+  external_account_id: string;
+  provider: string;
+  provider_object_type: string;
+  provider_object_id: string;
+  provider_parent_id?: string;
+  local_object_type?: string;
+  local_object_id?: string;
+  sync_direction: 'read_only' | 'import_only' | 'export_only' | 'two_way_manual' | 'two_way_auto';
+  remote_version?: string;
+  local_version?: number;
+  metadata_json: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+}
+
+export interface ConnectorSyncEvent {
+  id: string;
+  external_account_id: string;
+  provider: string;
+  operation_type: 'import' | 'update' | 'skip' | 'conflict' | 'error' | 'disconnect';
+  local_object_type?: string;
+  local_object_id?: string;
+  provider_object_type?: string;
+  provider_object_id?: string;
+  status: 'succeeded' | 'failed' | 'skipped' | 'conflict';
+  message?: string;
+  details_json: Record<string, any>;
+  created_at: string;
+}
+
+export interface CitationItem {
+  id: string;
+  workspace_id: string;
+  provider: 'zotero' | 'manual';
+  external_object_id?: string;
+  citekey?: string;
+  title: string;
+  creators_json: Array<{
+    firstName?: string;
+    lastName?: string;
+    name?: string;
+    creatorType: string;
+  }>;
+  issued_year?: number;
+  item_type?: string;
+  publisher?: string;
+  doi?: string;
+  url?: string;
+  abstract?: string;
+  tags_json: string[];
+  csl_json: Record<string, any>;
+  bibtex?: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+}
+
+export interface ReadingList {
+  id: string;
+  workspace_id: string;
+  module_id?: string;
+  name: string;
+  description?: string;
+  external_object_id?: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+}
+
+export interface ReadingListItem {
+  id: string;
+  reading_list_id: string;
+  citation_item_id: string;
+  sort_order: number;
+  notes?: string;
+  created_at: string;
+}

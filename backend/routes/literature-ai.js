@@ -23,21 +23,29 @@ router.post('/extract', async (req, res) => {
 
     const model = geminiModel || 'gemini-2.0-flash';
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: systemPrompt ? { parts: [{ text: systemPrompt }] } : undefined,
-          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-          generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: 4096,
-          },
-        }),
-      }
-    );
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60000);
+    let response;
+    try {
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: systemPrompt ? { parts: [{ text: systemPrompt }] } : undefined,
+            contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+            generationConfig: {
+              temperature: 0.3,
+              maxOutputTokens: 4096,
+            },
+          }),
+          signal: controller.signal,
+        }
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       const errText = await response.text();
@@ -87,15 +95,23 @@ router.post('/proxy', async (req, res) => {
     }
     const resolvedUrl = parsedUrl.toString();
 
-    const fetchOptions = {
-      method: method || 'GET',
-      headers: { 'Content-Type': 'application/json', ...(headers || {}) },
-    };
-    if (body && method !== 'GET') {
-      fetchOptions.body = typeof body === 'string' ? body : JSON.stringify(body);
-    }
+    const controller = new AbortController();
+    const proxyTimeout = setTimeout(() => controller.abort(), 300000);
+    let response;
+    try {
+      const fetchOptions = {
+        method: method || 'GET',
+        headers: { 'Content-Type': 'application/json', ...(headers || {}) },
+        signal: controller.signal,
+      };
+      if (body && method !== 'GET') {
+        fetchOptions.body = typeof body === 'string' ? body : JSON.stringify(body);
+      }
 
-    const response = await fetch(resolvedUrl, fetchOptions);
+      response = await fetch(resolvedUrl, fetchOptions);
+    } finally {
+      clearTimeout(proxyTimeout);
+    }
 
     let data;
     const contentType = response.headers.get('content-type') || '';

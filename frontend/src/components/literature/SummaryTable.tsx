@@ -341,6 +341,13 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
                       >
                         {paper.title || paper.file_name.replace('.pdf', '')}
                       </span>
+                      {paper.error_message && !paper.extracted_data && (
+                        <span className="lit-extraction-error" title={paper.error_message}>
+                          <span className="text-muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem', color: '#e74c3c' }}>
+                            Extraction failed
+                          </span>
+                        </span>
+                      )}
                     </td>
                     <td style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)' }}>
                       {formatAuthorsAPA(paper.authors)}

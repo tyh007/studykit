@@ -1,9 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { literaturePapersApi, literatureAiApi } from '../../lib/literature-api';
+import React, { useState } from 'react';
+import { literaturePapersApi } from '../../lib/literature-api';
 import type { LiteraturePaper, ExtractedData } from '../../types';
-import { PromptBuilder } from '../../lib/literature/prompt-builder';
-import { truncatePaperText, parseExtractionResponse } from '../../lib/literature/local-ollama-ai';
-import { readAIProviderConfig } from '../../lib/literature/ai-provider-config';
+import { createAIExtractionService } from '../../lib/literature/ai-extraction';
 
 interface PaperDetailViewProps {
   paper: LiteraturePaper | null;
@@ -36,21 +34,13 @@ export default function PaperDetailView({ paper, onClose, projectId, onUpdated }
     if (!paper.full_text) return;
     setExtracting(true);
     try {
-      const config = readAIProviderConfig();
-      const prompt = PromptBuilder.buildExtractionPrompt(
-        truncatePaperText(paper.full_text),
+      const service = createAIExtractionService();
+      const { extractedData } = await service.extractWithFallback(
+        paper.full_text,
         'brief',
       );
-      const result = await literatureAiApi.extract({
-        systemPrompt: prompt.systemPrompt,
-        userPrompt: prompt.userPrompt,
-        userApiKey: config.geminiApiKey,
-      });
-      if (result.success && result.extractedData) {
-        const parsed = parseExtractionResponse(result.extractedData as Record<string, unknown>);
-        await literaturePapersApi.update(paper.id, { extracted_data: parsed });
-        onUpdated();
-      }
+      await literaturePapersApi.update(paper.id, { extracted_data: extractedData });
+      onUpdated();
     } catch (err) {
       console.error('Re-extraction failed:', err);
     } finally {

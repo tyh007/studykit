@@ -16,6 +16,7 @@ import { getAuthToken } from '../lib/api';
 import { Equation } from './EquationNode';
 import type { NoteBlock, BlockContent, BlockType } from '../types';
 import { AddAnnotationButton } from './CornellPanel';
+import CitationPicker from './literature/CitationPicker';
 
 const lowlight = createLowlight(common);
 
@@ -54,6 +55,7 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
 
   // Link dialog state
   const [showLinkInput, setShowLinkInput] = useState(false);
+  const [showCitationPicker, setShowCitationPicker] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [linkText, setLinkText] = useState('');
   const [resultMessage, setResultMessage] = useState<string | null>(null);
@@ -91,6 +93,7 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
   });
 
   const debouncedSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const usedCitationIdsRef = useRef<string[]>([]);
 
   const debouncedSave = useCallback((editor: any) => {
     if (debouncedSaveRef.current) clearTimeout(debouncedSaveRef.current);
@@ -269,6 +272,16 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
         json, lectureId, selectedModuleId, deviceId, now
       );
 
+      // Attach citation references from current session
+      if (usedCitationIdsRef.current.length > 0) {
+        for (const block of newBlocks) {
+          block.source_links_json = {
+            ...block.source_links_json,
+            citations: [...(block.source_links_json.citations || []), ...usedCitationIdsRef.current],
+          };
+        }
+      }
+
       for (const block of newBlocks) {
         await db.noteBlocks.add(block);
       }
@@ -374,6 +387,8 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
           aria-pressed={editor?.isActive('link') ?? false}
         >{editor?.isActive('link') ? '🔗 Unlink' : '🔗 Link'}</button>
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
+        <button className="btn btn-ghost btn-sm" onClick={() => setShowCitationPicker(true)} title="Insert citation" aria-label="Insert citation">📚 Cite</button>
+        <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
         <button className="btn btn-ghost btn-sm" onClick={() => setShowShortcuts(true)} title="Keyboard shortcuts" aria-label="Show keyboard shortcuts">⌨️</button>
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
         {activeParagraphIndex !== null && (
@@ -393,6 +408,35 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
         )}
       </div>
       <EditorContent editor={editor} />
+
+      {/* Citation picker */}
+      {showCitationPicker && (
+        <CitationPicker
+          onSelect={(citation) => {
+            const authors = citation.creators_json || [];
+            const authorStr = authors
+              .map((c: any) => c.lastName || c.name || '')
+              .filter(Boolean)
+              .slice(0, 2)
+              .join(', ');
+            const year = citation.issued_year || '';
+            const text = authorStr
+              ? `(${authorStr}${year ? `, ${year}` : ''})`
+              : `(${citation.title?.substring(0, 40)}${year ? `, ${year}` : ''})`;
+
+            // Insert citation reference text at cursor
+            editor?.chain().focus().insertContent(text).run();
+
+            // Track citation ID for source_links_json
+            if (!usedCitationIdsRef.current.includes(citation.id)) {
+              usedCitationIdsRef.current.push(citation.id);
+            }
+
+            setShowCitationPicker(false);
+          }}
+          onClose={() => setShowCitationPicker(false)}
+        />
+      )}
 
       {/* Equation input dialog */}
       {showEquationInput && (

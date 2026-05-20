@@ -258,6 +258,131 @@ CREATE TABLE IF NOT EXISTS literature_custom_fields (
   deleted_at    TIMESTAMPTZ
 );
 
+-- ===== STAGE TWO: EXTERNAL ACCOUNTS =====
+CREATE TABLE IF NOT EXISTS external_accounts (
+  id                  UUID PRIMARY KEY,
+  workspace_id        UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  provider            TEXT NOT NULL,
+  auth_method         TEXT NOT NULL DEFAULT 'api_key'
+                      CHECK (auth_method IN ('oauth','api_key','local_file','manual')),
+  auth_status         TEXT NOT NULL DEFAULT 'connected'
+                      CHECK (auth_status IN ('connected','expired','revoked','error')),
+  granted_scopes_json JSONB NOT NULL DEFAULT '{}',
+  provider_user_id    TEXT,
+  provider_display_name TEXT,
+  credentials_json    JSONB NOT NULL DEFAULT '{}',
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  disconnected_at     TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ext_accounts_workspace_provider
+  ON external_accounts(workspace_id, provider) WHERE disconnected_at IS NULL;
+
+-- ===== STAGE TWO: EXTERNAL OBJECTS =====
+CREATE TABLE IF NOT EXISTS external_objects (
+  id                    UUID PRIMARY KEY,
+  external_account_id   UUID NOT NULL REFERENCES external_accounts(id) ON DELETE CASCADE,
+  provider              TEXT NOT NULL,
+  provider_object_type  TEXT NOT NULL,
+  provider_object_id    TEXT NOT NULL,
+  provider_parent_id    TEXT,
+  local_object_type     TEXT,
+  local_object_id       UUID,
+  sync_direction        TEXT NOT NULL DEFAULT 'read_only'
+                        CHECK (sync_direction IN ('read_only','import_only','export_only','two_way_manual','two_way_auto')),
+  remote_version        TEXT,
+  local_version         INTEGER,
+  metadata_json         JSONB NOT NULL DEFAULT '{}',
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at            TIMESTAMPTZ,
+  UNIQUE(external_account_id, provider_object_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ext_objects_account
+  ON external_objects(external_account_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_ext_objects_local
+  ON external_objects(local_object_type, local_object_id) WHERE deleted_at IS NULL;
+
+-- ===== STAGE TWO: CONNECTOR SYNC EVENTS =====
+CREATE TABLE IF NOT EXISTS connector_sync_events (
+  id                  UUID PRIMARY KEY,
+  external_account_id UUID NOT NULL REFERENCES external_accounts(id) ON DELETE CASCADE,
+  provider            TEXT NOT NULL,
+  operation_type      TEXT NOT NULL
+                      CHECK (operation_type IN ('import','update','skip','conflict','error','disconnect')),
+  local_object_type   TEXT,
+  local_object_id     UUID,
+  provider_object_type TEXT,
+  provider_object_id  TEXT,
+  status              TEXT NOT NULL
+                      CHECK (status IN ('succeeded','failed','skipped','conflict')),
+  message             TEXT,
+  details_json        JSONB NOT NULL DEFAULT '{}',
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_sync_events_account
+  ON connector_sync_events(external_account_id);
+CREATE INDEX IF NOT EXISTS idx_sync_events_created
+  ON connector_sync_events(created_at);
+
+-- ===== STAGE TWO: CITATION ITEMS =====
+CREATE TABLE IF NOT EXISTS citation_items (
+  id                UUID PRIMARY KEY,
+  workspace_id      UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  provider          TEXT NOT NULL DEFAULT 'manual'
+                    CHECK (provider IN ('zotero','manual')),
+  external_object_id UUID REFERENCES external_objects(id),
+  citekey           TEXT,
+  title             TEXT NOT NULL,
+  creators_json     JSONB NOT NULL DEFAULT '[]',
+  issued_year       INTEGER,
+  item_type         TEXT,
+  publisher         TEXT,
+  doi               TEXT,
+  url               TEXT,
+  abstract          TEXT,
+  tags_json         JSONB NOT NULL DEFAULT '[]',
+  csl_json          JSONB NOT NULL DEFAULT '{}',
+  bibtex            TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at        TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_citation_items_workspace
+  ON citation_items(workspace_id) WHERE deleted_at IS NULL;
+
+-- ===== STAGE TWO: READING LISTS =====
+CREATE TABLE IF NOT EXISTS reading_lists (
+  id            UUID PRIMARY KEY,
+  workspace_id  UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  module_id     UUID REFERENCES modules(id),
+  name          TEXT NOT NULL,
+  description   TEXT,
+  external_object_id UUID REFERENCES external_objects(id),
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at    TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_reading_lists_workspace
+  ON reading_lists(workspace_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_reading_lists_module
+  ON reading_lists(module_id) WHERE deleted_at IS NULL;
+
+-- ===== STAGE TWO: READING LIST ITEMS (junction) =====
+CREATE TABLE IF NOT EXISTS reading_list_items (
+  id              UUID PRIMARY KEY,
+  reading_list_id UUID NOT NULL REFERENCES reading_lists(id) ON DELETE CASCADE,
+  citation_item_id UUID NOT NULL REFERENCES citation_items(id) ON DELETE CASCADE,
+  sort_order      DECIMAL NOT NULL DEFAULT 0,
+  notes           TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(reading_list_id, citation_item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_reading_list_items_list
+  ON reading_list_items(reading_list_id);
+CREATE INDEX IF NOT EXISTS idx_reading_list_items_citation
+  ON reading_list_items(citation_item_id);
+
 -- ===== INDEXES =====
 CREATE INDEX idx_modules_workspace ON modules(workspace_id) WHERE deleted_at IS NULL;
 CREATE INDEX idx_lectures_module ON lectures(module_id) WHERE deleted_at IS NULL;

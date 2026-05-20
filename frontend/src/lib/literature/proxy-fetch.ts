@@ -10,6 +10,8 @@ export async function proxyFetch(url: string, options: RequestInit = {}): Promis
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
+  // Note: no timeout here — the backend proxy enforces its own timeout (180s).
+  // Frontend timeout would abort before a slow local LLM can respond.
   const response = await fetch('/api/literature/ai/proxy', {
     method: 'POST',
     headers,

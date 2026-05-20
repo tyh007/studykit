@@ -391,6 +391,22 @@ function generateMarkdown(
     }
   }
 
+  // Collect citation references from blocks
+  const citationIds = new Set<string>();
+  for (const block of blocks) {
+    const links = block.source_links_json || {};
+    if (links.citations && Array.isArray(links.citations)) {
+      links.citations.forEach((id: string) => citationIds.add(id));
+    }
+  }
+
+  if (citationIds.size > 0) {
+    lines.push('## References');
+    lines.push('');
+    lines.push(`*${citationIds.size} citation(s) referenced in this lecture. Full bibliography available in server-side export.*`);
+    lines.push('');
+  }
+
   // Footer
   lines.push('---');
   lines.push(`*Exported from StudyKit on ${new Date().toLocaleDateString()}*`);

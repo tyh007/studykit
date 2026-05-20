@@ -16,6 +16,9 @@ const literatureProjectsRoutes = require('./routes/literature-projects');
 const literaturePapersRoutes = require('./routes/literature-papers');
 const literatureCustomFieldsRoutes = require('./routes/literature-custom-fields');
 const literatureAIRoutes = require('./routes/literature-ai');
+const zoteroRoutes = require('./routes/zotero');
+const citationsRoutes = require('./routes/citations');
+const readingListsRoutes = require('./routes/reading-lists');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -114,6 +117,9 @@ app.use('/api/literature/projects', authenticateToken, literatureProjectsRoutes)
 app.use('/api/literature/papers', authenticateToken, literaturePapersRoutes);
 app.use('/api/literature/custom-fields', authenticateToken, literatureCustomFieldsRoutes);
 app.use('/api/literature/ai', authenticateToken, literatureAIRoutes);
+app.use('/api/zotero', authenticateToken, zoteroRoutes);
+app.use('/api/citations', authenticateToken, citationsRoutes);
+app.use('/api/reading-lists', authenticateToken, readingListsRoutes);
 
 // Error handling
 app.use((err, req, res, next) => {

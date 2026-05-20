@@ -4,6 +4,7 @@ import { extractPaperWithLocalOllama, getLocalOllamaAvailability, truncatePaperT
 import { extractPaperWithCustomAI, getCustomAIAvailability } from './custom-ai-extraction'
 import { readAIProviderConfig, type AIProvider } from './ai-provider-config'
 import { PromptBuilder } from './prompt-builder'
+import { fetchWithTimeout } from './fetch-with-timeout'
 
 async function tryOllama(paperText: string, detailLevel: 'brief' | 'detailed', customFields?: CustomFieldDefinition[]): Promise<{ extractedData: ExtractedData; method: string } | null> {
   try {
@@ -42,7 +43,7 @@ async function tryGemini(paperText: string, detailLevel: 'brief' | 'detailed', c
     const token = getAuthToken()
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (token) headers['Authorization'] = `Bearer ${token}`
-    const response = await fetch('/api/literature/ai/extract', {
+    const response = await fetchWithTimeout('/api/literature/ai/extract', {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -53,7 +54,7 @@ async function tryGemini(paperText: string, detailLevel: 'brief' | 'detailed', c
         geminiModel: config.geminiModel || 'gemini-2.0-flash',
         userApiKey: config.geminiApiKey,
       })
-    })
+    }, 30000)
     if (response.ok) {
       const data = await response.json()
       if (data.success && data.extractedData) {
@@ -68,13 +69,15 @@ async function tryGemini(paperText: string, detailLevel: 'brief' | 'detailed', c
 }
 
 function getFallbackOrder(configuredProvider: AIProvider): Array<typeof tryOllama> {
-  // Local providers: configured one first, then the other
+  // When Gemini is the configured provider, skip local providers entirely
+  if (configuredProvider === 'gemini') return [tryGemini]
+
+  // Local providers: configured one first, then the other, Gemini as last resort
   const locals: Array<typeof tryOllama> =
     configuredProvider === 'custom'
       ? [tryCustomAPI, tryOllama]
       : [tryOllama, tryCustomAPI]
 
-  // Gemini (server-side) always last
   return [...locals, tryGemini]
 }
 

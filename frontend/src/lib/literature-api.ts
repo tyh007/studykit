@@ -91,3 +91,84 @@ export const literatureAiApi = {
       body: JSON.stringify(data),
     }),
 };
+
+// ===== Stage Two: Zotero =====
+
+export const zoteroApi = {
+  connect: (data: { apiKey: string; userId: string }) =>
+    litRequest<{ account: any }>('/zotero/connect', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  disconnect: () =>
+    litRequest<{ success: boolean }>('/zotero/disconnect', { method: 'POST' }),
+  status: () =>
+    litRequest<{ status: string; account?: any }>('/zotero/status'),
+  listCollections: () =>
+    litRequest<{ collections: any[] }>('/zotero/collections'),
+  importCollections: (data: { collectionIds: string[] }) =>
+    litRequest<{ readingLists: any[] }>('/zotero/import-collections', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  importCollectionItems: (data: { collectionId?: string; readingListId?: string }) =>
+    litRequest<{ citationItems: any[] }>('/zotero/import-items', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  syncEvents: () =>
+    litRequest<any[]>('/zotero/sync-events'),
+};
+
+// ===== Stage Two: Citations =====
+
+export const citationsApi = {
+  list: (params?: { search?: string }) =>
+    litRequest<any[]>(`/citations${params?.search ? `?search=${encodeURIComponent(params.search)}` : ''}`),
+  get: (id: string) =>
+    litRequest<any>(`/citations/${id}`),
+  create: (data: {
+    title: string;
+    creators_json?: any[];
+    issued_year?: number;
+    item_type?: string;
+    publisher?: string;
+    doi?: string;
+    url?: string;
+    abstract?: string;
+  }) =>
+    litRequest<any>('/citations', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) =>
+    litRequest<{ success: boolean }>(`/citations/${id}`, { method: 'DELETE' }),
+};
+
+// ===== Stage Two: Reading Lists =====
+
+export const readingListsApi = {
+  list: (moduleId?: string) =>
+    litRequest<any[]>(`/reading-lists${moduleId ? `?module_id=${moduleId}` : ''}`),
+  get: (id: string) =>
+    litRequest<any>(`/reading-lists/${id}`),
+  create: (data: { name: string; description?: string; module_id?: string }) =>
+    litRequest<any>('/reading-lists', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: { name?: string; description?: string }) =>
+    litRequest<any>(`/reading-lists/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) =>
+    litRequest<{ success: boolean }>(`/reading-lists/${id}`, { method: 'DELETE' }),
+  addItem: (readingListId: string, citationItemId: string) =>
+    litRequest<any>(`/reading-lists/${readingListId}/items`, {
+      method: 'POST',
+      body: JSON.stringify({ citation_item_id: citationItemId }),
+    }),
+  removeItem: (readingListId: string, itemId: string) =>
+    litRequest<{ success: boolean }>(`/reading-lists/${readingListId}/items/${itemId}`, { method: 'DELETE' }),
+};

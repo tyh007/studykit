@@ -9,6 +9,11 @@ import type {
   LiteratureProject,
   LiteraturePaper,
   LiteratureCustomField,
+  ExternalAccount,
+  CitationItem,
+  ReadingList,
+  ReadingListItem,
+  ConnectorSyncEvent,
 } from '../types';
 import { db } from '../lib/db';
 
@@ -102,6 +107,28 @@ interface StudyKitState {
 
   // Reset
   resetStore: () => void;
+
+  // Stage Two: Zotero
+  externalAccount: ExternalAccount | null;
+  setExternalAccount: (account: ExternalAccount | null) => void;
+  zoteroConnectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error';
+  setZoteroConnectionStatus: (status: 'disconnected' | 'connecting' | 'connected' | 'error') => void;
+
+  // Citations
+  citationItems: CitationItem[];
+  setCitationItems: (items: CitationItem[]) => void;
+  selectedCitationId: string | null;
+  selectCitation: (id: string | null) => void;
+
+  // Reading Lists
+  readingLists: ReadingList[];
+  setReadingLists: (lists: ReadingList[]) => void;
+  readingListItems: Record<string, ReadingListItem[]>; // keyed by reading_list_id
+  setReadingListItems: (listId: string, items: ReadingListItem[]) => void;
+
+  // Sync events
+  zoteroSyncEvents: ConnectorSyncEvent[];
+  setZoteroSyncEvents: (events: ConnectorSyncEvent[]) => void;
 }
 
 function generateDeviceId(): string {
@@ -228,6 +255,31 @@ export const useStore = create<StudyKitState>((set, get) => ({
   deviceId: generateDeviceId(),
   getDeviceId: () => get().deviceId,
 
+  // Stage Two: Zotero
+  externalAccount: null,
+  setExternalAccount: (account) => set({ externalAccount: account }),
+  zoteroConnectionStatus: 'disconnected',
+  setZoteroConnectionStatus: (status) => set({ zoteroConnectionStatus: status }),
+
+  // Citations
+  citationItems: [],
+  setCitationItems: (items) => set({ citationItems: items }),
+  selectedCitationId: null,
+  selectCitation: (id) => set({ selectedCitationId: id }),
+
+  // Reading Lists
+  readingLists: [],
+  setReadingLists: (lists) => set({ readingLists: lists }),
+  readingListItems: {},
+  setReadingListItems: (listId, items) =>
+    set((state) => ({
+      readingListItems: { ...state.readingListItems, [listId]: items },
+    })),
+
+  // Sync events
+  zoteroSyncEvents: [],
+  setZoteroSyncEvents: (events) => set({ zoteroSyncEvents: events }),
+
   // Reset
   resetStore: () => set({
     workspace_id: null,
@@ -255,5 +307,12 @@ export const useStore = create<StudyKitState>((set, get) => ({
     selectedLitPaperId: null,
     litCustomFields: [],
     activeLectureTab: 'notes',
+    externalAccount: null,
+    zoteroConnectionStatus: 'disconnected',
+    citationItems: [],
+    selectedCitationId: null,
+    readingLists: [],
+    readingListItems: {},
+    zoteroSyncEvents: [],
   }),
 }));

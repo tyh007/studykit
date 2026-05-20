@@ -84,28 +84,34 @@ function ensureFormattedString(value: string): string {
 }
 
 export function parseExtractionResponse(parsed: Record<string, unknown>): ExtractedData {
+  // Normalize all keys to lowercase — LLMs may return "Background" instead of "background"
+  const normalized: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(parsed)) {
+    normalized[key.toLowerCase()] = value
+  }
+
   const reserved = new Set([
     'background', 'theory', 'methodology', 'measures',
     'results', 'implications', 'limitations', 'paper_type'
   ])
 
-  const paperType = typeof parsed.paper_type === 'string'
-    ? parsed.paper_type
+  const paperType = typeof normalized.paper_type === 'string'
+    ? normalized.paper_type
     : undefined
 
   const customEntries = Object.entries(parsed)
-    .filter(([key, value]) => !reserved.has(key) && typeof value === 'string')
+    .filter(([key, value]) => !reserved.has(key.toLowerCase()) && typeof value === 'string')
     .map(([key, value]) => [key, ensureFormattedString(String(value).trim())])
     .filter(([, value]) => value !== 'Not mentioned')
 
   return {
-    background: ensureFormattedString(readString(parsed.background)),
-    theory: ensureFormattedString(readString(parsed.theory)),
-    methodology: ensureFormattedString(readString(parsed.methodology)),
-    measures: ensureFormattedString(readString(parsed.measures)),
-    results: ensureFormattedString(readString(parsed.results)),
-    implications: ensureFormattedString(readString(parsed.implications)),
-    limitations: ensureFormattedString(readString(parsed.limitations)),
+    background: ensureFormattedString(readString(normalized.background)),
+    theory: ensureFormattedString(readString(normalized.theory)),
+    methodology: ensureFormattedString(readString(normalized.methodology)),
+    measures: ensureFormattedString(readString(normalized.measures)),
+    results: ensureFormattedString(readString(normalized.results)),
+    implications: ensureFormattedString(readString(normalized.implications)),
+    limitations: ensureFormattedString(readString(normalized.limitations)),
     paperType,
     customFields: customEntries.length > 0 ? Object.fromEntries(customEntries) : undefined
   }
@@ -660,6 +666,16 @@ export async function extractPaperWithLocalOllama(
     const extractedData = parseExtractionResponse(result.parsed)
 
     if (!validateExtractedData(extractedData)) {
+      console.warn('Ollama validation failed. Raw fields:', {
+        background: extractedData.background?.slice(0, 80),
+        theory: extractedData.theory?.slice(0, 80),
+        methodology: extractedData.methodology?.slice(0, 80),
+        measures: extractedData.measures?.slice(0, 80),
+        results: extractedData.results?.slice(0, 80),
+        implications: extractedData.implications?.slice(0, 80),
+        limitations: extractedData.limitations?.slice(0, 80),
+        customFields: extractedData.customFields,
+      })
       throw new Error(`Ollama (${result.model}) produced low-quality extraction — validation failed`)
     }
 

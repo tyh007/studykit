@@ -59,7 +59,16 @@ export async function extractPaperWithCustomAI(
     const extractedData = parseExtractionResponse(result.parsed)
 
     if (!validateExtractedData(extractedData)) {
-      throw new Error(`Custom AI (${result.model}) produced low-quality extraction — validation failed`)
+      console.warn('Custom AI validation failed. Raw fields:', {
+        background: extractedData.background?.slice(0, 80),
+        theory: extractedData.theory?.slice(0, 80),
+        methodology: extractedData.methodology?.slice(0, 80),
+        measures: extractedData.measures?.slice(0, 80),
+        results: extractedData.results?.slice(0, 80),
+        implications: extractedData.implications?.slice(0, 80),
+        limitations: extractedData.limitations?.slice(0, 80),
+        customFields: extractedData.customFields,
+      })
     }
 
     return { extractedData, model: result.model }

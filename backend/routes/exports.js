@@ -216,15 +216,35 @@ async function processExportJob(jobId, workspaceId, lectureId, moduleId, exportT
     }
 
     if (exportType === 'markdown') {
+      // Collect citation IDs from note blocks
+      const citationIds = new Set();
+      for (const block of contentBlocks) {
+        const links = block.source_links_json || {};
+        if (links.citations && Array.isArray(links.citations)) {
+          links.citations.forEach(id => citationIds.add(id));
+        }
+      }
+
+      // Fetch citation items for bibliography
+      let citations = [];
+      if (citationIds.size > 0) {
+        const citResult = await db.query(
+          `SELECT id, title, creators_json, issued_year, item_type, publisher, doi, url, csl_json, citekey
+           FROM citation_items WHERE id = ANY($1) AND deleted_at IS NULL`,
+          [Array.from(citationIds)]
+        );
+        citations = citResult.rows;
+      }
+
       // Generate markdown on server
-      const md = generateServerMarkdown(lecture, contentBlocks, annotationBlocks, moduleTitle, moduleCode);
+      const md = generateServerMarkdown(lecture, contentBlocks, annotationBlocks, moduleTitle, moduleCode, citations);
       const filename = `${lecture.title.replace(/\s+/g, '_')}.md`;
       const storageKey = `${jobId}-${filename}`;
       fs.writeFileSync(path.join(exportDir, storageKey), md, 'utf8');
 
       await db.query(
         'UPDATE export_jobs SET status = $1, output_storage_key = $2, completed_at = NOW(), report_json = $3 WHERE id = $4',
-        ['succeeded', storageKey, JSON.stringify({ warnings, block_count: allBlocks.length }), jobId]
+        ['succeeded', storageKey, JSON.stringify({ warnings, block_count: allBlocks.length, citation_count: citations.length }), jobId]
       );
     } else {
       // PDF: record the job as "needs_browser_print" — user still uses browser print
@@ -249,7 +269,7 @@ async function processExportJob(jobId, workspaceId, lectureId, moduleId, exportT
 
 // ===== Server-side Markdown Generator =====
 
-function generateServerMarkdown(lecture, blocks, annotations, moduleTitle, moduleCode) {
+function generateServerMarkdown(lecture, blocks, annotations, moduleTitle, moduleCode, citations) {
   const lines = [];
 
   // YAML frontmatter
@@ -260,7 +280,10 @@ function generateServerMarkdown(lecture, blocks, annotations, moduleTitle, modul
   if (lecture.lecture_date) lines.push(`date: "${lecture.lecture_date}"`);
   if (lecture.week_label) lines.push(`week: "${lecture.week_label}"`);
   lines.push(`exported: "${new Date().toISOString()}"`);
-  lines.push(`generated_by: "StudyKit Stage One"`);
+  lines.push(`generated_by: "StudyKit Stage Two"`);
+  if (citations && citations.length > 0) {
+    lines.push(`references_count: ${citations.length}`);
+  }
   lines.push('---');
   lines.push('');
 
@@ -352,6 +375,36 @@ function generateServerMarkdown(lecture, blocks, annotations, moduleTitle, modul
         lines.push(`> 📝 *Annotation:* ${anno}`);
       }
     }
+  }
+
+  // Bibliography section
+  if (citations && citations.length > 0) {
+    lines.push('');
+    lines.push('## References');
+    lines.push('');
+
+    citations.forEach((cit, idx) => {
+      const creators = typeof cit.creators_json === 'string'
+        ? JSON.parse(cit.creators_json)
+        : (cit.creators_json || []);
+      const authorList = creators
+        .map(c => {
+          if (c.lastName && c.firstName) return `${c.lastName}, ${c.firstName}`;
+          if (c.name) return c.name;
+          return '';
+        })
+        .filter(Boolean)
+        .join(', ');
+
+      let ref = `[${idx + 1}] `;
+      if (authorList) ref += `${authorList}. `;
+      ref += `*${cit.title}*`;
+      if (cit.publisher) ref += `. ${cit.publisher}`;
+      if (cit.issued_year) ref += ` (${cit.issued_year})`;
+      if (cit.doi) ref += `. https://doi.org/${cit.doi}`;
+      lines.push(ref);
+      lines.push('');
+    });
   }
 
   // Footer

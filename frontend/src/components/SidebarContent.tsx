@@ -3,6 +3,8 @@ import { useStore } from '../store/useStore';
 import { modulesApi, lecturesApi } from '../lib/api';
 import { db } from '../lib/db';
 import ProjectSidebar from './literature/ProjectSidebar';
+import ZoteroConnectionPanel from './literature/ZoteroConnectionPanel';
+import ZoteroImportPanel from './literature/ZoteroImportPanel';
 import type { Module, Lecture } from '../types';
 
 interface SidebarContentProps {
@@ -374,7 +376,11 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
       </div>
 
       {sidebarMode === 'literature'
-        ? <ProjectSidebar />
+        ? <div className="sidebar-literature">
+            <ZoteroConnectionPanel />
+            <ZoteroImportPanel />
+            <ProjectSidebar />
+          </div>
         : <div className="sidebar-modules">
       <div className="sidebar-header">
         <h2>{showTrash ? 'Trash' : 'Modules'}</h2>
