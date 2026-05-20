@@ -6,6 +6,7 @@ export default function ZoteroImportPanel() {
   const {
     zoteroConnectionStatus,
     readingLists, setReadingLists,
+    setActiveLiteratureTab,
   } = useStore();
 
   const [expanded, setExpanded] = useState(false);
@@ -194,10 +195,24 @@ export default function ZoteroImportPanel() {
               }}
             >
               <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {list.name}
-                <span style={{ color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>
-                  ({list.item_count || 0})
-                </span>
+                <button
+                  onClick={() => setActiveLiteratureTab('readingLists')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--color-text)',
+                    cursor: 'pointer',
+                    padding: 0,
+                    fontSize: '0.75rem',
+                    textAlign: 'left',
+                  }}
+                  title={`View "${list.name}" reading list`}
+                >
+                  {list.name}
+                  <span style={{ color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>
+                    ({list.item_count || 0})
+                  </span>
+                </button>
               </span>
               <button
                 className="btn btn-ghost btn-sm"
@@ -210,6 +225,17 @@ export default function ZoteroImportPanel() {
               </button>
             </div>
           ))}
+
+          {/* Quick nav to citations tab */}
+          <div style={{ marginTop: '0.25rem' }}>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => setActiveLiteratureTab('citations')}
+              style={{ fontSize: '0.65rem', padding: '0.125rem 0.25rem', width: '100%', textAlign: 'left' }}
+            >
+              View All Citations
+            </button>
+          </div>
         </div>
       )}
     </div>

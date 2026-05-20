@@ -246,9 +246,9 @@ router.get('/collections', async (req, res) => {
  */
 router.post('/import-collections', async (req, res) => {
   try {
-    const { effectiveCollectionIds } = req.body;
-    if (!effectiveCollectionIds || !Array.isArray(effectiveCollectionIds)) {
-      return res.status(400).json({ error: 'effectiveCollectionIds array is required' });
+    const { collectionIds } = req.body;
+    if (!collectionIds || !Array.isArray(collectionIds)) {
+      return res.status(400).json({ error: 'collectionIds array is required' });
     }
 
     // Get active account
@@ -271,7 +271,7 @@ router.post('/import-collections', async (req, res) => {
 
     // Fetch all collections from Zotero
     const { data: allCollections } = await zoteroFetch('/users/0/collections?limit=100', apiKey);
-    const selected = allCollections.filter(c => effectiveCollectionIds.includes(c.key));
+    const selected = allCollections.filter(c => collectionIds.includes(c.key));
 
     const imported = [];
 

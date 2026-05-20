@@ -96,6 +96,8 @@ interface StudyKitState {
   setCurrentLayout: (layout: 'slide_left_notes_right' | 'slide_top_notes_below') => void;
   zoom: number;
   setZoom: (zoom: number) => void;
+  activeLiteratureTab: 'papers' | 'citations' | 'readingLists';
+  setActiveLiteratureTab: (tab: 'papers' | 'citations' | 'readingLists') => void;
 
   // Sync status
   syncStatus: 'synced' | 'pending' | 'error' | 'offline';
@@ -246,6 +248,8 @@ export const useStore = create<StudyKitState>((set, get) => ({
   setCurrentLayout: (layout) => set({ currentLayout: layout }),
   zoom: 100,
   setZoom: (zoom) => set({ zoom: Math.max(25, Math.min(200, zoom)) }),
+  activeLiteratureTab: 'papers',
+  setActiveLiteratureTab: (tab) => set({ activeLiteratureTab: tab }),
 
   // Sync
   syncStatus: 'offline',
@@ -303,6 +307,7 @@ export const useStore = create<StudyKitState>((set, get) => ({
     sidebarMode: 'modules',
     litProjects: [],
     selectedLitProjectId: null,
+    activeLiteratureTab: 'papers',
     litPapers: [],
     selectedLitPaperId: null,
     litCustomFields: [],

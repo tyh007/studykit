@@ -10,6 +10,8 @@ import AnnotationPanel from './components/CornellPanel';
 import ExportDialog from './components/ExportDialog';
 import SidebarContent from './components/SidebarContent';
 import SummaryTable from './components/literature/SummaryTable';
+import CitationListView from './components/literature/CitationListView';
+import ReadingListsView from './components/literature/ReadingListsView';
 import type { Module, Lecture, SourceDocument, SourcePage, NoteBlock } from './types';
 
 // ===== Auth Page =====
@@ -163,6 +165,7 @@ function StudyKitApp() {
     currentDocument, setCurrentDocument, currentPages, setCurrentPages,
     selectedPageIndex, selectPage,
     sidebarMode, litProjects, selectedLitProjectId,
+    activeLiteratureTab, setActiveLiteratureTab,
   } = useStore();
 
   const { user, workspace_id: authWorkspaceId, logout } = useAuth();
@@ -345,7 +348,40 @@ function StudyKitApp() {
         <main id="main-content" className={`main-content ${!selectedLecture ? (sidebarMode === 'literature' && selectedLitProjectId ? 'literature-active' : 'empty') : ''}`}>
           {!selectedLecture ? (
             sidebarMode === 'literature' && selectedLitProjectId ? (
-              <SummaryTable projectId={selectedLitProjectId} />
+              <div>
+                {/* Literature tab bar */}
+                <div style={{
+                  display: 'flex',
+                  borderBottom: '2px solid var(--color-border)',
+                  padding: '0 1rem',
+                  background: 'var(--color-bg)',
+                  gap: 0,
+                }}>
+                  {(['papers', 'citations', 'readingLists'] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveLiteratureTab(tab)}
+                      style={{
+                        padding: '0.6rem 1rem',
+                        border: 'none',
+                        borderBottom: activeLiteratureTab === tab ? '2px solid var(--color-primary)' : '2px solid transparent',
+                        marginBottom: -2,
+                        background: 'transparent',
+                        color: activeLiteratureTab === tab ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                        fontWeight: activeLiteratureTab === tab ? 600 : 400,
+                        fontSize: '0.85rem',
+                        cursor: 'pointer',
+                        transition: 'color 0.15s, border-color 0.15s',
+                      }}
+                    >
+                      {tab === 'papers' ? '📄 Papers' : tab === 'citations' ? '📚 Citations' : '📋 Reading Lists'}
+                    </button>
+                  ))}
+                </div>
+                {activeLiteratureTab === 'papers' && <SummaryTable projectId={selectedLitProjectId} />}
+                {activeLiteratureTab === 'citations' && <CitationListView />}
+                {activeLiteratureTab === 'readingLists' && <ReadingListsView />}
+              </div>
             ) : (
               <div className="empty-state">
                 <h2>Welcome to StudyKit</h2>
