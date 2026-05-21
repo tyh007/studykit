@@ -477,14 +477,6 @@ router.post('/import-items', async (req, res) => {
         [itemKey]
       );
 
-      if (existing.rows.length > 0) {
-        if (effectiveReadingListId) {
-          await addToReadingListIfMissing(effectiveReadingListId, existing.rows[0].id);
-        }
-        imported.push(existing.rows[0].id);
-        continue;
-      }
-
       // Build creators array
       const creators = (itemData.creators || []).map(c => ({
         firstName: c.firstName || null,
@@ -503,49 +495,57 @@ router.post('/import-items', async (req, res) => {
       // Build CSL JSON
       const cslJson = buildCSLJSON(itemData);
 
-      // Create external object mapping
-      const extObjId = uuidv4();
-      await db.query(
-        `INSERT INTO external_objects (id, external_account_id, provider, provider_object_type,
-          provider_object_id, sync_direction, metadata_json)
-         VALUES ($1, $2, 'zotero', 'item', $3, 'read_only', $4)`,
-        [
-          extObjId,
-          account.id,
-          itemKey,
-          JSON.stringify({ itemType: itemData.itemType }),
-        ]
-      );
+      let citationId;
+      if (existing.rows.length > 0) {
+        citationId = existing.rows[0].id;
+        if (effectiveReadingListId) {
+          await addToReadingListIfMissing(effectiveReadingListId, citationId);
+        }
+      } else {
+        // Create external object mapping
+        const extObjId = uuidv4();
+        await db.query(
+          `INSERT INTO external_objects (id, external_account_id, provider, provider_object_type,
+            provider_object_id, sync_direction, metadata_json)
+           VALUES ($1, $2, 'zotero', 'item', $3, 'read_only', $4)`,
+          [
+            extObjId,
+            account.id,
+            itemKey,
+            JSON.stringify({ itemType: itemData.itemType }),
+          ]
+        );
 
-      // Create citation item
-      const citationId = uuidv4();
-      await db.query(
-        `INSERT INTO citation_items
-         (id, workspace_id, provider, external_object_id, citekey, title,
-          creators_json, issued_year, item_type, publisher, doi, url, abstract,
-          tags_json, csl_json)
-         VALUES ($1, $2, 'zotero', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-        [
-          citationId,
-          await getWorkspaceId(req.user.id),
-          extObjId,
-          itemKey,
-          itemData.title || 'Untitled',
-          JSON.stringify(creators),
-          issuedYear,
-          itemData.itemType || 'document',
-          itemData.publisher || null,
-          itemData.DOI || null,
-          itemData.url || null,
-          itemData.abstractNote || null,
-          JSON.stringify(itemData.tags?.map(t => t.tag) || []),
-          JSON.stringify(cslJson),
-        ]
-      );
+        // Create citation item
+        citationId = uuidv4();
+        await db.query(
+          `INSERT INTO citation_items
+           (id, workspace_id, provider, external_object_id, citekey, title,
+            creators_json, issued_year, item_type, publisher, doi, url, abstract,
+            tags_json, csl_json)
+           VALUES ($1, $2, 'zotero', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+          [
+            citationId,
+            await getWorkspaceId(req.user.id),
+            extObjId,
+            itemKey,
+            itemData.title || 'Untitled',
+            JSON.stringify(creators),
+            issuedYear,
+            itemData.itemType || 'document',
+            itemData.publisher || null,
+            itemData.DOI || null,
+            itemData.url || null,
+            itemData.abstractNote || null,
+            JSON.stringify(itemData.tags?.map(t => t.tag) || []),
+            JSON.stringify(cslJson),
+          ]
+        );
 
-      // Add to reading list
-      if (effectiveReadingListId) {
-        await addToReadingListIfMissing(effectiveReadingListId, citationId);
+        // Add to reading list
+        if (effectiveReadingListId) {
+          await addToReadingListIfMissing(effectiveReadingListId, citationId);
+        }
       }
 
       imported.push(citationId);
