@@ -214,7 +214,7 @@ router.get('/collections', async (req, res) => {
   try {
     // Get active account
     const accountResult = await db.query(
-      `SELECT id, credentials_json FROM external_accounts
+      `SELECT id, provider_user_id, credentials_json FROM external_accounts
        WHERE workspace_id = $1 AND provider = 'zotero' AND disconnected_at IS NULL
        ORDER BY created_at DESC LIMIT 1`,
       [await getWorkspaceId(req.user.id)]
@@ -229,9 +229,14 @@ router.get('/collections', async (req, res) => {
       ? JSON.parse(account.credentials_json)
       : account.credentials_json;
     const apiKey = credentials.apiKey;
+    const zoteroUserId = account.provider_user_id;
+
+    if (!zoteroUserId) {
+      return res.status(400).json({ error: 'Zotero user ID not found. Please reconnect.' });
+    }
 
     // Fetch collections from Zotero
-    const { data: collections } = await zoteroFetch('/users/0/collections?limit=100', apiKey);
+    const { data: collections } = await zoteroFetch(`/users/${zoteroUserId}/collections?limit=100`, apiKey);
 
     res.json({ collections });
   } catch (err) {
@@ -253,7 +258,7 @@ router.post('/import-collections', async (req, res) => {
 
     // Get active account
     const accountResult = await db.query(
-      `SELECT id, credentials_json FROM external_accounts
+      `SELECT id, provider_user_id, credentials_json FROM external_accounts
        WHERE workspace_id = $1 AND provider = 'zotero' AND disconnected_at IS NULL
        ORDER BY created_at DESC LIMIT 1`,
       [await getWorkspaceId(req.user.id)]
@@ -268,9 +273,14 @@ router.post('/import-collections', async (req, res) => {
       ? JSON.parse(account.credentials_json)
       : account.credentials_json;
     const apiKey = credentials.apiKey;
+    const zoteroUserId = account.provider_user_id;
+
+    if (!zoteroUserId) {
+      return res.status(400).json({ error: 'Zotero user ID not found. Please reconnect.' });
+    }
 
     // Fetch all collections from Zotero
-    const { data: allCollections } = await zoteroFetch('/users/0/collections?limit=100', apiKey);
+    const { data: allCollections } = await zoteroFetch(`/users/${zoteroUserId}/collections?limit=100`, apiKey);
     const selected = allCollections.filter(c => collectionIds.includes(c.key));
 
     const imported = [];
@@ -285,7 +295,7 @@ router.post('/import-collections', async (req, res) => {
       );
 
       if (existing.rows.length > 0) {
-        imported.push(existing.rows[0]);
+        imported.push(existing.rows[0].id);
         continue;
       }
 
@@ -391,7 +401,7 @@ router.post('/import-items', async (req, res) => {
 
     // Get active account
     const accountResult = await db.query(
-      `SELECT id, credentials_json FROM external_accounts
+      `SELECT id, provider_user_id, credentials_json FROM external_accounts
        WHERE workspace_id = $1 AND provider = 'zotero' AND disconnected_at IS NULL
        ORDER BY created_at DESC LIMIT 1`,
       [await getWorkspaceId(req.user.id)]
@@ -406,6 +416,11 @@ router.post('/import-items', async (req, res) => {
       ? JSON.parse(account.credentials_json)
       : account.credentials_json;
     const apiKey = credentials.apiKey;
+    const zoteroUserId = account.provider_user_id;
+
+    if (!zoteroUserId) {
+      return res.status(400).json({ error: 'Zotero user ID not found. Please reconnect.' });
+    }
 
     // Find reading list linked to this collection
     const readingListResult = await db.query(
@@ -420,7 +435,7 @@ router.post('/import-items', async (req, res) => {
 
     // Fetch items from Zotero (top-level items in the collection)
     const { data: items } = await zoteroFetch(
-      `/users/0/collections/${effectiveCollectionId}/items/top?limit=100`,
+      `/users/${zoteroUserId}/collections/${effectiveCollectionId}/items/top?limit=100`,
       apiKey
     );
 
@@ -446,7 +461,7 @@ router.post('/import-items', async (req, res) => {
         if (readingListId) {
           await addToReadingListIfMissing(readingListId, existing.rows[0].id);
         }
-        imported.push(existing.rows[0]);
+        imported.push(existing.rows[0].id);
         continue;
       }
 
