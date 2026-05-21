@@ -1,8 +1,6 @@
 import { useState } from 'react'
 import { PDFProcessor } from '../lib/literature/pdf-processor'
-import { createAIExtractionService } from '../lib/literature/ai-extraction'
 import { literaturePapersApi } from '../lib/literature-api'
-import type { ExtractedData } from '../types'
 
 export interface UploadProgress {
   fileName: string
@@ -28,7 +26,7 @@ export function useLiteratureFileUpload() {
     const extractedContent = await PDFProcessor.extractPDFContent(file)
     const bibInfo = PDFProcessor.extractBibliographicInfo(extractedContent.fullText, extractedContent.metadata)
 
-    // Create paper record
+    // Create paper record (AI extraction is done on-demand via AI Summary button)
     const paper = await literaturePapersApi.create({
       project_id: projectId,
       file_name: file.name,
@@ -41,34 +39,8 @@ export function useLiteratureFileUpload() {
       doi: bibInfo.doi,
       abstract: extractedContent.abstract,
       full_text: extractedContent.fullText,
-      processing_status: 'processing'
+      processing_status: 'pending'
     })
-
-    // Perform AI extraction
-    if (extractedContent.fullText) {
-      try {
-        const service = createAIExtractionService()
-        const { extractedData, method } = await service.extractWithFallback(
-          extractedContent.fullText,
-          'brief',
-          undefined
-        )
-
-        await literaturePapersApi.update(paper.id, {
-          extracted_data: extractedData,
-          processing_status: 'completed'
-        })
-
-        return { ...paper, extracted_data: extractedData }
-      } catch (err) {
-        console.error('AI extraction failed:', err)
-        await literaturePapersApi.update(paper.id, {
-          processing_status: 'completed',
-          error_message: err instanceof Error ? err.message : 'Extraction failed'
-        })
-        return paper
-      }
-    }
 
     return paper
   }

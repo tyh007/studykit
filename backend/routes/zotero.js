@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { v4: uuidv4 } = require('uuid');
+const fs = require('fs');
+const path = require('path');
 
 // Zotero API base URL
 const ZOTERO_API = 'https://api.zotero.org';
@@ -433,6 +435,24 @@ router.post('/import-items', async (req, res) => {
 
     const resolvedReadingListId = readingListResult.rows[0]?.id;
 
+    // Fetch reading list name for project naming
+    const effectiveReadingListId = readingListId || resolvedReadingListId;
+    let readingListName = null;
+    if (effectiveReadingListId) {
+      const rlNameResult = await db.query(
+        'SELECT name FROM reading_lists WHERE id = $1 AND deleted_at IS NULL',
+        [effectiveReadingListId]
+      );
+      readingListName = rlNameResult.rows[0]?.name || null;
+    }
+
+    // Determine target project for papers
+    const wsId = await getWorkspaceId(req.user.id);
+    let projectId = req.body.projectId || null;
+    if (!projectId && readingListName) {
+      projectId = await getOrCreateZoteroProject(wsId, readingListName);
+    }
+
     // Fetch items from Zotero (top-level items in the collection)
     const { data: items } = await zoteroFetch(
       `/users/${zoteroUserId}/collections/${effectiveCollectionId}/items/top?limit=100`,
@@ -458,8 +478,8 @@ router.post('/import-items', async (req, res) => {
       );
 
       if (existing.rows.length > 0) {
-        if (readingListId) {
-          await addToReadingListIfMissing(readingListId, existing.rows[0].id);
+        if (effectiveReadingListId) {
+          await addToReadingListIfMissing(effectiveReadingListId, existing.rows[0].id);
         }
         imported.push(existing.rows[0].id);
         continue;
@@ -524,11 +544,110 @@ router.post('/import-items', async (req, res) => {
       );
 
       // Add to reading list
-      if (readingListId) {
-        await addToReadingListIfMissing(readingListId, citationId);
+      if (effectiveReadingListId) {
+        await addToReadingListIfMissing(effectiveReadingListId, citationId);
       }
 
       imported.push(citationId);
+
+      // ===== PDF download and paper creation =====
+      let paperId = null;
+      try {
+        // Check if paper already exists for this citation
+        const existingPaper = await db.query(
+          'SELECT id FROM literature_papers WHERE citation_item_id = $1 AND deleted_at IS NULL LIMIT 1',
+          [citationId]
+        );
+
+        if (existingPaper.rows.length === 0) {
+          // Fetch child items to find PDF attachments
+          const childrenResult = await zoteroFetch(
+            `/users/${zoteroUserId}/items/${itemKey}/children`,
+            apiKey
+          );
+          const children = childrenResult.data || [];
+
+          // Find PDF attachment
+          const pdfAttachment = children.find(c =>
+            c.data?.contentType === 'application/pdf'
+            || (c.data?.itemType === 'attachment' && c.data?.contentType === 'application/pdf')
+            || (c.data?.filename || '').toLowerCase().endsWith('.pdf')
+          );
+
+          if (pdfAttachment?.links?.enclosure?.href) {
+            // Download PDF from Zotero
+            const pdfResponse = await fetch(pdfAttachment.links.enclosure.href, {
+              headers: {
+                'Zotero-API-Key': apiKey,
+                'Zotero-API-Version': '3',
+              },
+            });
+
+            if (pdfResponse.ok) {
+              const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
+              const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '..', '..', 'uploads');
+              const storageKey = `lit-${uuidv4()}.pdf`;
+              const pdfPath = path.join(uploadDir, storageKey);
+
+              // Ensure directory exists
+              fs.mkdirSync(path.dirname(pdfPath), { recursive: true });
+              fs.writeFileSync(pdfPath, pdfBuffer);
+
+              // Extract text using pdf-parse
+              let fullText = null;
+              try {
+                const pdfParse = require('pdf-parse');
+                const pdfData = await pdfParse(pdfBuffer);
+                fullText = pdfData.text;
+              } catch (parseErr) {
+                console.warn(`Failed to extract text from PDF for item ${itemKey}:`, parseErr.message);
+              }
+
+              // Create literature_paper record
+              const newPaperId = uuidv4();
+              const fileName = pdfAttachment.data?.filename || `${itemData.title || 'untitled'}.pdf`;
+              const authorsStr = creators.map(c => `${c.lastName || ''}, ${c.firstName || ''}`).filter(Boolean).join('; ');
+
+              if (projectId) {
+                await db.query(
+                  `INSERT INTO literature_papers
+                   (id, project_id, workspace_id, file_name, file_size, file_type,
+                    storage_key, citation_item_id, title, authors, year, journal,
+                    doi, abstract, full_text, processing_status)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+                  [
+                    newPaperId, projectId, wsId, fileName, pdfBuffer.length, 'application/pdf',
+                    storageKey, citationId, itemData.title || null, authorsStr || null, issuedYear,
+                    itemData.publicationTitle || null, itemData.DOI || null,
+                    itemData.abstractNote || null, fullText,
+                    fullText ? 'pending' : 'pending',
+                  ]
+                );
+
+                // Link paper to reading list and citation
+                if (effectiveReadingListId) {
+                  await db.query(
+                    `INSERT INTO literature_pdf_references (id, paper_id, reading_list_id, citation_item_id)
+                     VALUES ($1, $2, $3, $4)`,
+                    [uuidv4(), newPaperId, effectiveReadingListId, citationId]
+                  );
+                }
+              }
+
+              paperId = newPaperId;
+            } else {
+              console.warn(`Zotero PDF download failed for ${itemKey}: HTTP ${pdfResponse.status}`);
+            }
+          } else {
+            console.log(`No PDF attachment found for item ${itemKey}`);
+          }
+        } else {
+          paperId = existingPaper.rows[0].id;
+        }
+      } catch (pdfErr) {
+        console.error(`PDF download/creation error for ${itemKey}:`, pdfErr.message);
+        // Don't fail the entire import — citation was still created
+      }
 
       // Log import
       await db.query(
@@ -536,8 +655,11 @@ router.post('/import-items', async (req, res) => {
          (id, external_account_id, provider, operation_type, local_object_type, local_object_id,
           provider_object_type, provider_object_id, status, message)
          VALUES ($1, $2, 'zotero', 'import', 'citation_item', $3, 'item', $4, 'succeeded', $5)`,
-        [uuidv4(), account.id, citationId, itemKey, `Imported "${itemData.title}"`]
+        [uuidv4(), account.id, citationId, itemKey, `Imported "${itemData.title}"${paperId ? ' + PDF' : ''}`]
       );
+
+      // Rate limiting: small delay between Zotero API calls
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
 
     // Fetch created citation items
@@ -620,6 +742,24 @@ async function addToReadingListIfMissing(readingListId, citationItemId) {
       [uuidv4(), readingListId, citationItemId]
     );
   }
+}
+
+/**
+ * Helper: get or create a literature project for Zotero imports
+ */
+async function getOrCreateZoteroProject(workspaceId, name) {
+  const existing = await db.query(
+    `SELECT id FROM literature_projects WHERE workspace_id = $1 AND name = $2 AND deleted_at IS NULL LIMIT 1`,
+    [workspaceId, name]
+  );
+  if (existing.rows.length > 0) return existing.rows[0].id;
+
+  const id = uuidv4();
+  await db.query(
+    `INSERT INTO literature_projects (id, workspace_id, name) VALUES ($1, $2, $3)`,
+    [id, workspaceId, name]
+  );
+  return id;
 }
 
 /**

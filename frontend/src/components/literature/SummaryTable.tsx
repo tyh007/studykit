@@ -1,9 +1,10 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
-import { literaturePapersApi } from '../../lib/literature-api';
+import { literaturePapersApi, readingListsApi } from '../../lib/literature-api';
 import { useLiteratureFileUpload } from '../../hooks/useLiteratureFileUpload';
 import PaperDetailView from './PaperDetailView';
 import AIStatusIndicator from './AIStatusIndicator';
+import { createAIExtractionService } from '../../lib/literature/ai-extraction';
 import type { LiteraturePaper, ExtractedData } from '../../types';
 
 const FIELD_LABELS: Partial<Record<keyof ExtractedData, string>> = {
@@ -56,7 +57,7 @@ function formatAuthorsAPA(authors?: string): string {
 }
 
 export default function SummaryTable({ projectId }: { projectId: string }) {
-  const { litPapers, setLitPapers, litCustomFields } = useStore();
+  const { litPapers, setLitPapers, litCustomFields, readingLists } = useStore();
   const { uploadFiles, isUploading } = useLiteratureFileUpload();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [detailPaperId, setDetailPaperId] = useState<string | null>(null);
@@ -72,6 +73,10 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
     const saved = localStorage.getItem(ROW_HEIGHT_STORAGE_KEY);
     return saved ? JSON.parse(saved) : {};
   });
+  const [extractingBatch, setExtractingBatch] = useState(false);
+  const [extractingSingle, setExtractingSingle] = useState<Set<string>>(new Set());
+  const [filterReadingListId, setFilterReadingListId] = useState<string | null>(null);
+  const [filterCitationIds, setFilterCitationIds] = useState<Set<string>>(new Set());
   const tableRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
   const rowDragRef = useRef<{ paperId: string; startY: number; startH: number } | null>(null);
@@ -83,6 +88,18 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
   useEffect(() => {
     localStorage.setItem(ROW_HEIGHT_STORAGE_KEY, JSON.stringify(rowHeights));
   }, [rowHeights]);
+
+  // When reading list filter changes, load its citation IDs
+  useEffect(() => {
+    if (!filterReadingListId) {
+      setFilterCitationIds(new Set());
+      return;
+    }
+    readingListsApi.get(filterReadingListId).then(list => {
+      const ids = new Set<string>((list.items || []).map((i: any) => i.citation_item_id || i.id));
+      setFilterCitationIds(ids);
+    }).catch(console.error);
+  }, [filterReadingListId]);
 
   const loadPapers = useCallback(() => {
     literaturePapersApi.list(projectId, view).then(setLitPapers).catch(console.error);
@@ -137,7 +154,56 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
     loadPapers();
   };
 
+  const handleBatchExtract = async () => {
+    const targetPapers = selectedIds.size > 0
+      ? filteredPapers.filter(p => selectedIds.has(p.id) && p.full_text)
+      : filteredPapers.filter(p => p.full_text && !p.extracted_data);
+
+    if (targetPapers.length === 0) return;
+
+    setExtractingBatch(true);
+    const service = createAIExtractionService();
+
+    for (const paper of targetPapers) {
+      try {
+        const { extractedData } = await service.extractWithFallback(
+          paper.full_text!,
+          'brief',
+        );
+        await literaturePapersApi.update(paper.id, { extracted_data: extractedData, processing_status: 'completed' });
+      } catch (err) {
+        console.error(`AI extraction failed for ${paper.title}:`, err);
+        await literaturePapersApi.update(paper.id, { error_message: err instanceof Error ? err.message : 'Extraction failed' });
+      }
+    }
+
+    setExtractingBatch(false);
+    loadPapers();
+  };
+
+  const handleSingleExtract = async (paperId: string) => {
+    setExtractingSingle(prev => new Set(prev).add(paperId));
+    const paper = litPapers.find(p => p.id === paperId);
+    if (!paper?.full_text) return;
+
+    try {
+      const service = createAIExtractionService();
+      const { extractedData } = await service.extractWithFallback(
+        paper.full_text,
+        'brief',
+      );
+      await literaturePapersApi.update(paper.id, { extracted_data: extractedData, processing_status: 'completed' });
+      loadPapers();
+    } catch (err) {
+      console.error(`AI extraction failed for ${paperId}:`, err);
+      await literaturePapersApi.update(paper.id, { error_message: err instanceof Error ? err.message : 'Extraction failed' }).catch(() => {});
+    } finally {
+      setExtractingSingle(prev => { const n = new Set(prev); n.delete(paperId); return n; });
+    }
+  };
+
   const filteredPapers = litPapers.filter(p => {
+    if (filterCitationIds.size > 0 && (!p.citation_item_id || !filterCitationIds.has(p.citation_item_id))) return false;
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (p.title || '').toLowerCase().includes(q)
@@ -258,6 +324,28 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
         {view === 'library' && selectedIds.size > 0 && (
           <button className="btn btn-sm btn-danger" onClick={handleBatchTrash}>Move to Trash</button>
         )}
+        {view === 'library' && (
+          <button
+            className="btn btn-sm"
+            onClick={handleBatchExtract}
+            disabled={extractingBatch}
+            title="Run AI extraction on selected papers, or all unextracted papers if none selected"
+          >
+            {extractingBatch ? 'Extracting...' : 'AI Summary'}
+          </button>
+        )}
+        {view === 'library' && readingLists.length > 0 && (
+          <select
+            value={filterReadingListId || ''}
+            onChange={e => setFilterReadingListId(e.target.value || null)}
+            style={{ maxWidth: 180, fontSize: '0.78rem', padding: '0.2rem 0.375rem' }}
+          >
+            <option value="">All Papers</option>
+            {readingLists.map((rl: any) => (
+              <option key={rl.id} value={rl.id}>{rl.name}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Table */}
@@ -341,12 +429,32 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
                       >
                         {paper.title || paper.file_name.replace('.pdf', '')}
                       </span>
+                      {paper.citation_item_id && (
+                        <span style={{
+                          fontSize: '0.6rem', marginLeft: '0.375rem', padding: '0.1rem 0.3rem',
+                          borderRadius: '3px', background: '#e8f4fd', color: '#0369a1',
+                          fontWeight: 500, verticalAlign: 'middle',
+                        }}>
+                          Zotero
+                        </span>
+                      )}
                       {paper.error_message && !paper.extracted_data && (
                         <span className="lit-extraction-error" title={paper.error_message}>
                           <span className="text-muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem', color: '#e74c3c' }}>
                             Extraction failed
                           </span>
                         </span>
+                      )}
+                      {!paper.extracted_data && paper.full_text && (
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          style={{ fontSize: '0.65rem', marginLeft: '0.25rem', padding: '0 0.25rem' }}
+                          onClick={(e) => { e.stopPropagation(); handleSingleExtract(paper.id); }}
+                          disabled={extractingSingle.has(paper.id)}
+                          title="Extract AI summary"
+                        >
+                          {extractingSingle.has(paper.id) ? '...' : 'Extract'}
+                        </button>
                       )}
                     </td>
                     <td style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)' }}>

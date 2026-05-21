@@ -279,6 +279,8 @@ export interface LiteraturePaper {
   abstract?: string;
   full_text?: string;
   extracted_data?: ExtractedData;
+  storage_key?: string;
+  citation_item_id?: string;
   processing_status: 'pending' | 'processing' | 'completed' | 'error';
   error_message?: string;
   in_trash: boolean;

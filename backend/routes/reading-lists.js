@@ -68,7 +68,7 @@ router.get('/:id', async (req, res) => {
     }
 
     const itemsResult = await db.query(
-      `SELECT rli.id as item_id, rli.sort_order, rli.notes,
+      `SELECT rli.id as item_id, rli.citation_item_id, rli.sort_order, rli.notes,
               ci.id, ci.title, ci.creators_json, ci.issued_year, ci.item_type,
               ci.doi, ci.url, ci.publisher, ci.csl_json, ci.citekey
        FROM reading_list_items rli

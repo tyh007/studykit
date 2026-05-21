@@ -70,6 +70,22 @@ export const literaturePapersApi = {
     litRequest<any>(`/literature/papers/${id}`, { method: 'PATCH', body: JSON.stringify({ action: 'moveToTrash' }) }),
   restoreFromTrash: (id: string) =>
     litRequest<any>(`/literature/papers/${id}`, { method: 'PATCH', body: JSON.stringify({ action: 'restoreFromTrash' }) }),
+  listAnnotations: (paperId: string, page?: number) =>
+    litRequest<any[]>(`/literature/papers/${paperId}/annotations${page !== undefined ? `?page=${page}` : ''}`),
+  createAnnotation: (paperId: string, data: any) =>
+    litRequest<any>(`/literature/papers/${paperId}/annotations`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateAnnotation: (annotationId: string, data: any) =>
+    litRequest<any>(`/literature/papers/annotations/${annotationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  deleteAnnotation: (annotationId: string) =>
+    litRequest<{ success: boolean }>(`/literature/papers/annotations/${annotationId}`, {
+      method: 'DELETE',
+    }),
 };
 
 export const literatureCustomFieldsApi = {

@@ -10,7 +10,7 @@ import AnnotationPanel from './components/CornellPanel';
 import ExportDialog from './components/ExportDialog';
 import SidebarContent from './components/SidebarContent';
 import SummaryTable from './components/literature/SummaryTable';
-import CitationListView from './components/literature/CitationListView';
+
 import ReadingListsView from './components/literature/ReadingListsView';
 import type { Module, Lecture, SourceDocument, SourcePage, NoteBlock } from './types';
 
@@ -357,7 +357,7 @@ function StudyKitApp() {
                   background: 'var(--color-bg)',
                   gap: 0,
                 }}>
-                  {(['papers', 'citations', 'readingLists'] as const).map((tab) => (
+                  {(['papers', 'readingLists'] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setActiveLiteratureTab(tab)}
@@ -374,12 +374,11 @@ function StudyKitApp() {
                         transition: 'color 0.15s, border-color 0.15s',
                       }}
                     >
-                      {tab === 'papers' ? '📄 Papers' : tab === 'citations' ? '📚 Citations' : '📋 Reading Lists'}
+                      {tab === 'papers' ? '📄 Papers' : '📋 Reading Lists'}
                     </button>
                   ))}
                 </div>
                 {activeLiteratureTab === 'papers' && <SummaryTable projectId={selectedLitProjectId} />}
-                {activeLiteratureTab === 'citations' && <CitationListView />}
                 {activeLiteratureTab === 'readingLists' && <ReadingListsView />}
               </div>
             ) : (

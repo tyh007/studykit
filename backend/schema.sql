@@ -127,6 +127,37 @@ CREATE TABLE IF NOT EXISTS annotations (
   deleted_at          TIMESTAMPTZ
 );
 
+-- ===== PAPER ANNOTATIONS (server-persisted, user-scoped) =====
+CREATE TABLE IF NOT EXISTS paper_annotations (
+  id                  UUID PRIMARY KEY,
+  paper_id            UUID NOT NULL REFERENCES literature_papers(id) ON DELETE CASCADE,
+  page_number         INTEGER NOT NULL,
+  annotation_type     TEXT NOT NULL
+    CHECK (annotation_type IN ('highlight','ink','underline')),
+  geometry_json       JSONB NOT NULL DEFAULT '{}',
+  style_json          JSONB NOT NULL DEFAULT '{}',
+  text_content        TEXT,
+  created_by_user_id  UUID NOT NULL REFERENCES users(id),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at          TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_paper_annotations_paper
+  ON paper_annotations(paper_id) WHERE deleted_at IS NULL;
+
+-- ===== LITERATURE PDF REFERENCES (links papers to reading lists) =====
+CREATE TABLE IF NOT EXISTS literature_pdf_references (
+  id                UUID PRIMARY KEY,
+  paper_id          UUID NOT NULL REFERENCES literature_papers(id) ON DELETE CASCADE,
+  reading_list_id   UUID REFERENCES reading_lists(id) ON DELETE SET NULL,
+  citation_item_id  UUID REFERENCES citation_items(id) ON DELETE SET NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_lit_pdf_refs_paper
+  ON literature_pdf_references(paper_id);
+CREATE INDEX IF NOT EXISTS idx_lit_pdf_refs_reading_list
+  ON literature_pdf_references(reading_list_id);
+
 -- ===== ATTACHMENTS =====
 CREATE TABLE IF NOT EXISTS attachments (
   id                UUID PRIMARY KEY,
@@ -239,11 +270,13 @@ CREATE TABLE IF NOT EXISTS literature_papers (
   processing_status TEXT NOT NULL DEFAULT 'completed'
                     CHECK (processing_status IN ('pending','processing','completed','error')),
   error_message     TEXT,
-  in_trash          BOOLEAN NOT NULL DEFAULT FALSE,
-  trashed_at        TIMESTAMPTZ,
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  deleted_at        TIMESTAMPTZ
+  storage_key         TEXT,
+  citation_item_id    UUID REFERENCES citation_items(id),
+  in_trash            BOOLEAN NOT NULL DEFAULT FALSE,
+  trashed_at          TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at          TIMESTAMPTZ
 );
 
 -- ===== LITERATURE CUSTOM FIELDS =====

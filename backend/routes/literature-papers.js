@@ -1,6 +1,8 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
+const path = require('path');
+const fs = require('fs');
 
 const router = express.Router();
 
@@ -22,7 +24,7 @@ router.get('/', async (req, res) => {
       `SELECT id, project_id, workspace_id, file_name, file_size, file_type,
               uploaded_at, processed_at, title, authors, year, journal, doi,
               abstract, extracted_data, processing_status, error_message,
-              in_trash, trashed_at, created_at, updated_at
+              in_trash, trashed_at, storage_key, citation_item_id, created_at, updated_at
        FROM literature_papers
        WHERE workspace_id = $1 AND project_id = $2 AND deleted_at IS NULL AND in_trash = $3
        ORDER BY created_at DESC`,
@@ -147,6 +149,42 @@ router.delete('/:id', async (req, res) => {
   } catch (err) {
     console.error('Delete literature paper error:', err);
     res.status(500).json({ error: 'Failed to delete paper' });
+  }
+});
+
+// GET /api/literature/papers/:id/download — stream PDF file
+router.get('/:id/download', async (req, res) => {
+  try {
+    const result = await db.query(
+      'SELECT storage_key, file_name, file_type FROM literature_papers WHERE id = $1 AND deleted_at IS NULL',
+      [req.params.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Paper not found' });
+    }
+
+    const paper = result.rows[0];
+
+    if (!paper.storage_key) {
+      return res.status(404).json({ error: 'No PDF file associated with this paper' });
+    }
+
+    const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '..', '..', 'uploads');
+    const filePath = path.join(uploadDir, paper.storage_key);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'PDF file not found on disk' });
+    }
+
+    res.setHeader('Content-Type', paper.file_type || 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${paper.file_name}"`);
+
+    const readStream = fs.createReadStream(filePath);
+    readStream.pipe(res);
+  } catch (err) {
+    console.error('Paper download error:', err);
+    res.status(500).json({ error: 'Failed to download paper' });
   }
 });
 

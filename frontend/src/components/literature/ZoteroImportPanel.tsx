@@ -226,14 +226,14 @@ export default function ZoteroImportPanel() {
             </div>
           ))}
 
-          {/* Quick nav to citations tab */}
+          {/* Quick nav to papers tab */}
           <div style={{ marginTop: '0.25rem' }}>
             <button
               className="btn btn-ghost btn-sm"
-              onClick={() => setActiveLiteratureTab('citations')}
+              onClick={() => setActiveLiteratureTab('papers')}
               style={{ fontSize: '0.65rem', padding: '0.125rem 0.25rem', width: '100%', textAlign: 'left' }}
             >
-              View All Citations
+              View All Papers
             </button>
           </div>
         </div>

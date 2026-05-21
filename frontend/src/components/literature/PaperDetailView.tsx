@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { literaturePapersApi } from '../../lib/literature-api';
 import type { LiteraturePaper, ExtractedData } from '../../types';
 import { createAIExtractionService } from '../../lib/literature/ai-extraction';
+import LiteraturePDFViewer from './LiteraturePDFViewer';
+import PaperAnnotationLayer from './PaperAnnotationLayer';
 
 interface PaperDetailViewProps {
   paper: LiteraturePaper | null;
@@ -25,8 +27,11 @@ function copyToClipboard(text: string) {
 }
 
 export default function PaperDetailView({ paper, onClose, projectId, onUpdated }: PaperDetailViewProps) {
-  const [tab, setTab] = useState<'extracted' | 'metadata'>('extracted');
+  const [tab, setTab] = useState<'extracted' | 'metadata' | 'pdf'>('extracted');
   const [extracting, setExtracting] = useState(false);
+  const [pdfPageIndex, setPdfPageIndex] = useState(0);
+  const [pdfTotalPages, setPdfTotalPages] = useState(0);
+  const [pdfZoom, setPdfZoom] = useState(100);
 
   if (!paper) return null;
 
@@ -39,7 +44,7 @@ export default function PaperDetailView({ paper, onClose, projectId, onUpdated }
         paper.full_text,
         'brief',
       );
-      await literaturePapersApi.update(paper.id, { extracted_data: extractedData });
+      await literaturePapersApi.update(paper.id, { extracted_data: extractedData, processing_status: 'completed' });
       onUpdated();
     } catch (err) {
       console.error('Re-extraction failed:', err);
@@ -65,6 +70,11 @@ export default function PaperDetailView({ paper, onClose, projectId, onUpdated }
           <div className={`lit-tab ${tab === 'metadata' ? 'active' : ''}`} onClick={() => setTab('metadata')}>
             Metadata
           </div>
+          {paper.storage_key && (
+            <div className={`lit-tab ${tab === 'pdf' ? 'active' : ''}`} onClick={() => { setTab('pdf'); setPdfPageIndex(0); }}>
+              View PDF
+            </div>
+          )}
         </div>
 
         <div className="lit-detail-body">
@@ -126,6 +136,26 @@ export default function PaperDetailView({ paper, onClose, projectId, onUpdated }
                   </button>
                 </div>
               )}
+            </div>
+          )}
+
+          {tab === 'pdf' && paper.storage_key && (
+            <div style={{ height: '70vh', overflow: 'auto' }}>
+              <LiteraturePDFViewer
+                paperId={paper.id}
+                currentPageIndex={pdfPageIndex}
+                totalPages={pdfTotalPages}
+                onPageChange={setPdfPageIndex}
+                onTotalPagesChange={setPdfTotalPages}
+                zoom={pdfZoom}
+                onZoomChange={setPdfZoom}
+                annotationOverlay={
+                  <PaperAnnotationLayer
+                    paperId={paper.id}
+                    pageNumber={pdfPageIndex + 1}
+                  />
+                }
+              />
             </div>
           )}
         </div>
