@@ -17,6 +17,7 @@ export default function ZoteroImportPanel() {
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [importingItems, setImportingItems] = useState<Set<string>>(new Set());
+  const [importSuccess, setImportSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     if (zoteroConnectionStatus === 'connected') {
@@ -64,6 +65,7 @@ export default function ZoteroImportPanel() {
   const handleImportItems = async (collectionId: string) => {
     setImportingItems((prev) => new Set(prev).add(collectionId));
     setError(null);
+    setImportSuccess(null);
     try {
       const result = await zoteroApi.importCollectionItems({
         readingListId: collectionId,
@@ -87,6 +89,11 @@ export default function ZoteroImportPanel() {
           setLitPapers(papers);
         } catch { /* ignore if no papers yet */ }
       }
+      // Show success and navigate to papers tab
+      const count = (result as any)?.importedCount || 0;
+      setImportSuccess(`Imported ${count} item(s)`);
+      setActiveLiteratureTab('papers');
+      setTimeout(() => setImportSuccess(null), 4000);
     } catch (err: any) {
       setError(err.message || 'Failed to import items');
     } finally {
@@ -199,6 +206,18 @@ export default function ZoteroImportPanel() {
       {/* Reading lists section */}
       {readingLists.length > 0 && (
         <div style={{ marginTop: '0.375rem' }}>
+          {/* Show import errors even when collections panel is collapsed */}
+          {error && !expanded && (
+            <div style={{ fontSize: '0.7rem', color: 'var(--color-danger)', marginBottom: '0.25rem', padding: '0.125rem 0' }}>
+              {error}
+            </div>
+          )}
+          {/* Show success message */}
+          {importSuccess && (
+            <div style={{ fontSize: '0.7rem', color: 'var(--color-success, #16a34a)', marginBottom: '0.25rem', padding: '0.125rem 0' }}>
+              {importSuccess}
+            </div>
+          )}
           <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: '0.125rem' }}>
             Reading Lists ({readingLists.length})
           </div>
