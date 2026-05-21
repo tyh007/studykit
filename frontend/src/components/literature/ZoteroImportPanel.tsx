@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
-import { zoteroApi, readingListsApi } from '../../lib/literature-api';
+import { zoteroApi, readingListsApi, literatureProjectsApi, literaturePapersApi } from '../../lib/literature-api';
 
 export default function ZoteroImportPanel() {
   const {
     zoteroConnectionStatus,
     readingLists, setReadingLists,
     setActiveLiteratureTab,
+    selectedLitProjectId, setLitProjects, selectLitProject, setLitPapers,
   } = useStore();
 
   const [expanded, setExpanded] = useState(false);
@@ -64,10 +65,28 @@ export default function ZoteroImportPanel() {
     setImportingItems((prev) => new Set(prev).add(collectionId));
     setError(null);
     try {
-      await zoteroApi.importCollectionItems({ readingListId: collectionId });
+      const result = await zoteroApi.importCollectionItems({
+        readingListId: collectionId,
+        projectId: selectedLitProjectId || undefined,
+      });
       // Refresh reading lists to update item counts
       const lists = await readingListsApi.list();
       setReadingLists(lists);
+      // Refresh literature projects (new one may have been auto-created)
+      const projects = await literatureProjectsApi.list();
+      setLitProjects(projects);
+      // If a projectId was returned and no project was selected, select it
+      const usedProjectId = (result as any)?.projectId;
+      if (usedProjectId && !selectedLitProjectId) {
+        selectLitProject(usedProjectId);
+      }
+      // Refresh papers for the current project
+      if (selectedLitProjectId || usedProjectId) {
+        try {
+          const papers = await literaturePapersApi.list(selectedLitProjectId || usedProjectId);
+          setLitPapers(papers);
+        } catch { /* ignore if no papers yet */ }
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to import items');
     } finally {

@@ -127,8 +127,8 @@ export const zoteroApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  importCollectionItems: (data: { collectionId?: string; readingListId?: string }) =>
-    litRequest<{ citationItems: any[] }>('/zotero/import-items', {
+  importCollectionItems: (data: { collectionId?: string; readingListId?: string; projectId?: string }) =>
+    litRequest<{ citationItems: any[]; projectId?: string }>('/zotero/import-items', {
       method: 'POST',
       body: JSON.stringify(data),
     }),

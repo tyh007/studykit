@@ -672,7 +672,7 @@ router.post('/import-items', async (req, res) => {
       citations = result.rows;
     }
 
-    res.json({ citationItems: citations, importedCount: imported.length });
+    res.json({ citationItems: citations, importedCount: imported.length, projectId });
   } catch (err) {
     console.error('Zotero import items error:', err.message);
 
