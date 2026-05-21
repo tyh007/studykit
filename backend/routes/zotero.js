@@ -398,7 +398,7 @@ router.post('/import-items', async (req, res) => {
     }
 
     if (!effectiveCollectionId) {
-      return res.status(400).json({ error: 'effectiveCollectionId or readingListId is required' });
+      return res.status(400).json({ error: 'Could not find Zotero collection for this reading list. Make sure the reading list was imported from Zotero.' });
     }
 
     // Get active account
