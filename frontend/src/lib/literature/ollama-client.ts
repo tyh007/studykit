@@ -1,0 +1,151 @@
+import { readOllamaSettings, type OllamaSettings } from './ollama-settings'
+import { proxyFetch } from './proxy-fetch'
+
+export interface OllamaMessage {
+  role: 'system' | 'user' | 'assistant'
+  content: string
+}
+
+export interface OllamaRequest {
+  model: string
+  messages: OllamaMessage[]
+  stream?: boolean
+  format?: 'json' | Record<string, unknown>
+  options?: {
+    temperature?: number
+    top_p?: number
+    max_tokens?: number
+    repeat_penalty?: number
+  }
+}
+
+export interface OllamaResponse {
+  model: string
+  created_at: string
+  message: {
+    role: 'assistant'
+    content: string
+  }
+  done: boolean
+  total_duration?: number
+  load_duration?: number
+  prompt_eval_count?: number
+  prompt_eval_duration?: number
+  eval_count?: number
+  eval_duration?: number
+}
+
+export interface OllamaModel {
+  name: string
+  model: string
+  modified_at: string
+  size: number
+  digest: string
+  details: {
+    format: string
+    family: string
+    families: string[]
+    parameter_size: string
+    quantization_level: string
+  }
+}
+
+export class OllamaClient {
+  private baseUrl: string
+  private defaultModel: string
+
+  constructor(baseUrl: string = 'http://localhost:11434', defaultModel: string = 'qwen2.5:3b') {
+    this.baseUrl = baseUrl.replace(/\/$/, '')
+    this.defaultModel = defaultModel
+  }
+
+  async checkConnection(): Promise<boolean> {
+    try {
+      await proxyFetch(`${this.baseUrl}/api/tags`)
+      return true
+    } catch (error) {
+      console.error('Ollama connection check failed:', error)
+      return false
+    }
+  }
+
+  async getAvailableModels(): Promise<OllamaModel[]> {
+    try {
+      const data = await proxyFetch(`${this.baseUrl}/api/tags`)
+      return data.models || []
+    } catch (error) {
+      console.error('Failed to get available models:', error)
+      throw error
+    }
+  }
+
+  async isModelAvailable(model: string): Promise<boolean> {
+    try {
+      const models = await this.getAvailableModels()
+      return models.some(m => {
+        const modelName = m.name.toLowerCase()
+        const searchModel = model.toLowerCase()
+        if (modelName === searchModel) return true
+        if (searchModel.includes('qwen') && modelName.includes('qwen')) {
+          if (searchModel.includes('3.5') && modelName.includes('3.5')) return true
+          if (searchModel.includes('2.5') && modelName.includes('2.5')) return true
+          if (!searchModel.match(/\d+\.\d+/)) return true
+        }
+        return false
+      })
+    } catch (error) {
+      console.error('Failed to check model availability:', error)
+      return false
+    }
+  }
+
+  async pullModel(model: string): Promise<void> {
+    await proxyFetch(`${this.baseUrl}/api/pull`, {
+      method: 'POST',
+      body: JSON.stringify({ name: model })
+    })
+  }
+
+  async chat(request: OllamaRequest): Promise<OllamaResponse> {
+    const data = await proxyFetch(`${this.baseUrl}/api/chat`, {
+      method: 'POST',
+      body: JSON.stringify({
+        model: request.model || this.defaultModel,
+        messages: request.messages,
+        stream: request.stream || false,
+        ...(request.format ? { format: request.format } : {}),
+        options: {
+          temperature: 0.3,
+          top_p: 0.9,
+          max_tokens: 2000,
+          repeat_penalty: 1.15,
+          num_ctx: 8192,
+          ...request.options
+        }
+      })
+    })
+
+    return data as OllamaResponse
+  }
+
+  async generateText(
+    prompt: string,
+    model?: string,
+    options?: OllamaRequest['options']
+  ): Promise<string> {
+    const response = await this.chat({
+      model: model || this.defaultModel,
+      messages: [{ role: 'user', content: prompt }],
+      stream: false,
+      options
+    })
+    return response.message.content
+  }
+
+  getDefaultModel(): string {
+    return this.defaultModel
+  }
+}
+
+// Singleton instance
+export const ollamaClient = new OllamaClient()

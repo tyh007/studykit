@@ -1,0 +1,62 @@
+# Render Blueprint - 一键部署 StudyKit（免费计划）
+services:
+  # ===== Backend API (Express + Docker) =====
+  - type: web
+    name: studykit-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    region: frankfurt
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
+      - key: DB_HOST
+        fromDatabase:
+          name: studykit-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: studykit-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: studykit-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: studykit-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: studykit-db
+          property: password
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        fromService:
+          type: web
+          name: studykit-frontend
+          property: host
+
+  # ===== Frontend (React Static Site) =====
+  - type: web
+    name: studykit-frontend
+    runtime: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    pullRequestPreviewsEnabled: false
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: studykit-backend
+          property: host
+
+databases:
+  - name: studykit-db
+    databaseName: studykit
+    user: studykit
+    plan: free
+    region: frankfurt

@@ -1,0 +1,25 @@
+# NAS 部署专用 — 覆盖 volumes 使用绑定挂载到固定路径
+# 用法:
+#   NAS_DATA_DIR=/volume1/docker/studykit docker compose -f docker-compose.yml -f docker-compose.nas.yml up -d
+#
+# 如果不设置 NAS_DATA_DIR，默认路径为 /volume1/docker/studykit
+
+volumes:
+  db_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${NAS_DATA_DIR:-/volume1/docker/studykit}/postgres
+      o: bind
+  upload_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${NAS_DATA_DIR:-/volume1/docker/studykit}/uploads
+      o: bind
+  export_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${NAS_DATA_DIR:-/volume1/docker/studykit}/exports
+      o: bind

@@ -1,0 +1,16 @@
+# Cloudflare Tunnel 配置 — 用于跨国远程访问
+# 用法: docker compose -f docker-compose.yml -f docker-compose.nas.yml -f docker-compose.cf-tunnel.yml up -d
+
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: studykit-cloudflared
+    command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN}
+    restart: unless-stopped
+    network_mode: "host"
+    environment:
+      - TUNNEL_TOKEN=${CF_TUNNEL_TOKEN}
+    # 如果不想用 host 网络模式，也可以:
+    # depends_on:
+    #   - frontend
+    # command: tunnel --url http://frontend:80 run --token ${CF_TUNNEL_TOKEN}
