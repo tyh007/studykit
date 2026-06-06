@@ -12,7 +12,7 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { useStore } from '../store/useStore';
 import { db } from '../lib/db';
-import { getAuthToken } from '../lib/api';
+import { getAuthToken, uploadsApi } from '../lib/api';
 import { Equation } from './EquationNode';
 import type { NoteBlock, BlockContent, BlockType } from '../types';
 import { AddAnnotationButton } from './CornellPanel';
@@ -49,6 +49,11 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
   const [showImageInput, setShowImageInput] = useState(false);
   const [imageUrl, setImageUrl] = useState('');
   const [imageCaption, setImageCaption] = useState('');
+  const [imageUploadTab, setImageUploadTab] = useState<'url' | 'upload'>('url');
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+  const imageFileInputRef = useRef<HTMLInputElement>(null);
 
   // Keyboard shortcuts help
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -85,6 +90,35 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
     editorProps: {
       attributes: {
         class: 'prose prose-sm max-w-none focus:outline-none',
+      },
+      handlePaste: (view, event) => {
+        const items = event.clipboardData?.items;
+        if (!items) return false;
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item.type.startsWith('image/')) {
+            event.preventDefault();
+            const file = item.getAsFile();
+            if (file) {
+              handleFileUploadToEditor(file);
+            }
+            return true;
+          }
+        }
+        return false;
+      },
+      handleDrop: (view, event) => {
+        const files = event.dataTransfer?.files;
+        if (!files || files.length === 0) return false;
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          if (file.type.startsWith('image/')) {
+            event.preventDefault();
+            handleFileUploadToEditor(file);
+            return true;
+          }
+        }
+        return false;
       },
     },
     onUpdate: ({ editor }) => {
@@ -333,6 +367,25 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
     };
   }, []);
 
+  // Handles image file upload via API and inserts into editor
+  const handleFileUploadToEditor = async (file: File) => {
+    if (!editor) return;
+    if (!file.type.startsWith('image/')) {
+      setImageUploadError('Only image files are supported (JPEG, PNG, GIF, WebP)');
+      return;
+    }
+    setIsUploadingImage(true);
+    setImageUploadError(null);
+    try {
+      const result = await uploadsApi.uploadImage(file);
+      editor.chain().focus().setImage({ src: result.url }).run();
+    } catch (err: any) {
+      setImageUploadError(err.message || 'Upload failed');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
   if (!editor) return null;
 
   return (
@@ -499,77 +552,216 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
         </div>
       )}
 
-      {/* Image URL input dialog */}
+      {/* Image input dialog — URL or file upload */}
       {showImageInput && (
         <div className="modal-overlay" onClick={() => setShowImageInput(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
             <h2>Insert Image</h2>
-            <p className="text-sm text-muted" style={{ marginBottom: '0.75rem' }}>
-              Enter the image URL or paste a data URI.
-            </p>
-            <div className="form-group">
-              <label htmlFor="img-url">Image URL</label>
-              <input
-                id="img-url"
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                placeholder="https://example.com/diagram.png"
-                style={{ width: '100%', padding: '0.5rem 0.75rem', fontSize: '0.9rem' }}
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && imageUrl.trim()) {
-                    e.preventDefault();
-                    editor?.chain().focus().setImage({ src: imageUrl.trim() }).run();
-                    setShowImageInput(false);
-                    setImageUrl('');
-                  }
-                  if (e.key === 'Escape') {
-                    setShowImageInput(false);
-                    setImageUrl('');
-                  }
-                }}
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="img-caption">Caption (optional)</label>
-              <input
-                id="img-caption"
-                value={imageCaption}
-                onChange={(e) => setImageCaption(e.target.value)}
-                placeholder="Diagram description"
-                style={{ width: '100%', padding: '0.5rem 0.75rem', fontSize: '0.9rem' }}
-              />
-            </div>
-            {/* Preview */}
-            {imageUrl.trim() && (
-              <div style={{ marginBottom: '0.75rem', textAlign: 'center' }}>
-                <img
-                  src={imageUrl.trim()}
-                  alt="Preview"
-                  style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
-              </div>
-            )}
-            <div className="flex gap-2 justify-between">
-              <button className="btn" onClick={() => { setShowImageInput(false); setImageUrl(''); setImageCaption(''); }}>Cancel</button>
+
+            {/* Tab bar */}
+            <div style={{ display: 'flex', gap: 0, marginBottom: '1rem', borderBottom: '1px solid var(--color-border)' }}>
               <button
-                className="btn btn-primary"
-                disabled={!imageUrl.trim()}
-                onClick={() => {
-                  editor?.chain().focus().setImage({ src: imageUrl.trim() }).run();
-                  // Add caption as a separate paragraph below the image
-                  if (imageCaption.trim()) {
-                    editor?.chain().focus().insertContent({ type: 'paragraph', content: [{ type: 'text', text: imageCaption.trim() }] }).run();
-                  }
-                  setShowImageInput(false);
-                  setImageUrl('');
-                  setImageCaption('');
+                className={imageUploadTab === 'url' ? 'tab-active' : 'tab-inactive'}
+                onClick={() => setImageUploadTab('url')}
+                style={{
+                  flex: 1, padding: '0.5rem 1rem', border: 'none', cursor: 'pointer',
+                  background: imageUploadTab === 'url' ? 'var(--color-bg)' : 'var(--color-bg-secondary)',
+                  borderBottom: imageUploadTab === 'url' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                  fontWeight: imageUploadTab === 'url' ? 600 : 400,
+                  fontSize: '0.9rem', borderRadius: 0,
                 }}
               >
-                Insert Image
+                URL
+              </button>
+              <button
+                className={imageUploadTab === 'upload' ? 'tab-active' : 'tab-inactive'}
+                onClick={() => setImageUploadTab('upload')}
+                style={{
+                  flex: 1, padding: '0.5rem 1rem', border: 'none', cursor: 'pointer',
+                  background: imageUploadTab === 'upload' ? 'var(--color-bg)' : 'var(--color-bg-secondary)',
+                  borderBottom: imageUploadTab === 'upload' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                  fontWeight: imageUploadTab === 'upload' ? 600 : 400,
+                  fontSize: '0.9rem', borderRadius: 0,
+                }}
+              >
+                Upload Local File
               </button>
             </div>
+
+            {/* URL tab */}
+            {imageUploadTab === 'url' && (
+              <>
+                <div className="form-group">
+                  <label htmlFor="img-url">Image URL</label>
+                  <input
+                    id="img-url"
+                    value={imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value)}
+                    placeholder="https://example.com/diagram.png"
+                    style={{ width: '100%', padding: '0.5rem 0.75rem', fontSize: '0.9rem' }}
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && imageUrl.trim()) {
+                        e.preventDefault();
+                        editor?.chain().focus().setImage({ src: imageUrl.trim() }).run();
+                        setShowImageInput(false);
+                        setImageUrl('');
+                      }
+                      if (e.key === 'Escape') {
+                        setShowImageInput(false);
+                        setImageUrl('');
+                      }
+                    }}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="img-caption">Caption (optional)</label>
+                  <input
+                    id="img-caption"
+                    value={imageCaption}
+                    onChange={(e) => setImageCaption(e.target.value)}
+                    placeholder="Diagram description"
+                    style={{ width: '100%', padding: '0.5rem 0.75rem', fontSize: '0.9rem' }}
+                  />
+                </div>
+                {imageUrl.trim() && (
+                  <div style={{ marginBottom: '0.75rem', textAlign: 'center' }}>
+                    <img
+                      src={imageUrl.trim()}
+                      alt="Preview"
+                      style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  </div>
+                )}
+                <div className="flex gap-2 justify-between">
+                  <button className="btn" onClick={() => { setShowImageInput(false); setImageUrl(''); setImageCaption(''); }}>Cancel</button>
+                  <button
+                    className="btn btn-primary"
+                    disabled={!imageUrl.trim()}
+                    onClick={() => {
+                      editor?.chain().focus().setImage({ src: imageUrl.trim() }).run();
+                      if (imageCaption.trim()) {
+                        editor?.chain().focus().insertContent({ type: 'paragraph', content: [{ type: 'text', text: imageCaption.trim() }] }).run();
+                      }
+                      setShowImageInput(false);
+                      setImageUrl('');
+                      setImageCaption('');
+                    }}
+                  >
+                    Insert Image
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Local file upload tab */}
+            {imageUploadTab === 'upload' && (
+              <>
+                <div
+                  style={{
+                    border: '2px dashed var(--color-border)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '2rem 1rem',
+                    textAlign: 'center',
+                    marginBottom: '0.75rem',
+                    cursor: 'pointer',
+                    background: 'var(--color-bg-secondary)',
+                    transition: 'border-color 0.2s',
+                  }}
+                  onClick={() => imageFileInputRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
+                  onDragLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.style.borderColor = 'var(--color-border)';
+                    const file = e.dataTransfer.files[0];
+                    if (file && file.type.startsWith('image/')) {
+                      setSelectedImageFile(file);
+                    }
+                  }}
+                >
+                  <input
+                    ref={imageFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+                      setSelectedImageFile(file);
+                    }}
+                  />
+                  {selectedImageFile ? (
+                    <div>
+                      <img
+                        src={URL.createObjectURL(selectedImageFile)}
+                        alt="Preview"
+                        style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 'var(--radius-sm)', marginBottom: '0.5rem' }}
+                      />
+                      <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                        {selectedImageFile.name} ({(selectedImageFile.size / 1024).toFixed(1)} KB)
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p style={{ fontSize: '2rem', marginBottom: '0.5rem', opacity: 0.5 }}>🖼</p>
+                      <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>
+                        Click to select an image, or drag & drop one here
+                      </p>
+                      <p className="text-xs text-muted" style={{ marginTop: '0.25rem' }}>
+                        Supports JPEG, PNG, GIF, WebP
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {imageUploadError && (
+                  <p style={{ color: 'var(--color-error)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>{imageUploadError}</p>
+                )}
+
+                <div className="form-group">
+                  <label htmlFor="img-caption-upload">Caption (optional)</label>
+                  <input
+                    id="img-caption-upload"
+                    value={imageCaption}
+                    onChange={(e) => setImageCaption(e.target.value)}
+                    placeholder="Diagram description"
+                    style={{ width: '100%', padding: '0.5rem 0.75rem', fontSize: '0.9rem' }}
+                  />
+                </div>
+
+                <div className="flex gap-2 justify-between">
+                  <button className="btn" onClick={() => { setShowImageInput(false); setImageUrl(''); setImageCaption(''); setSelectedImageFile(null); setImageUploadError(null); }}>Cancel</button>
+                  <button
+                    className="btn btn-primary"
+                    disabled={!selectedImageFile || isUploadingImage}
+                    onClick={async () => {
+                      if (!selectedImageFile || !editor) return;
+                      setIsUploadingImage(true);
+                      setImageUploadError(null);
+                      try {
+                        const result = await uploadsApi.uploadImage(selectedImageFile);
+                        editor.chain().focus().setImage({ src: result.url }).run();
+                        if (imageCaption.trim()) {
+                          editor?.chain().focus().insertContent({ type: 'paragraph', content: [{ type: 'text', text: imageCaption.trim() }] }).run();
+                        }
+                        setShowImageInput(false);
+                        setImageUrl('');
+                        setImageCaption('');
+                        setSelectedImageFile(null);
+                        setImageUploadError(null);
+                      } catch (err: any) {
+                        setImageUploadError(err.message || 'Upload failed');
+                      } finally {
+                        setIsUploadingImage(false);
+                      }
+                    }}
+                  >
+                    {isUploadingImage ? 'Uploading...' : 'Upload & Insert'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

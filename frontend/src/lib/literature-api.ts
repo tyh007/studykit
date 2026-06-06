@@ -106,6 +106,16 @@ export const literatureAiApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+  visionExtract: (data: { pages: string[]; prompt: string; geminiModel?: string; userApiKey?: string; temperature?: number; maxTokens?: number }) =>
+    litRequest<{ success: boolean; extractedData: any; error?: string }>('/literature/ai/vision-extract', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  chat: (data: { paperId?: string; paperIds?: string[]; messages: Array<{role: string; content: string}>; geminiApiKey?: string; geminiModel?: string }) =>
+    litRequest<{ message: { role: string; content: string }; sources?: string[] }>('/literature/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 };
 
 // ===== Stage Two: Zotero =====
@@ -187,4 +197,35 @@ export const readingListsApi = {
     }),
   removeItem: (readingListId: string, itemId: string) =>
     litRequest<{ success: boolean }>(`/reading-lists/${readingListId}/items/${itemId}`, { method: 'DELETE' }),
+};
+
+export const paperRelationsApi = {
+  list: (paperId: string) =>
+    litRequest<any[]>(`/literature/paper-relations?paperId=${paperId}`),
+  create: (data: { source_paper_id: string; target_paper_id: string; relation_type: string; description?: string }) =>
+    litRequest<any>('/literature/paper-relations', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) =>
+    litRequest<{ success: boolean }>(`/literature/paper-relations/${id}`, { method: 'DELETE' }),
+  graph: (projectId: string) =>
+    litRequest<{ nodes: any[]; edges: any[] }>(`/literature/paper-relations/graph?projectId=${projectId}`),
+};
+
+export const paperNotesApi = {
+  list: (paperId: string) =>
+    litRequest<any[]>(`/literature/paper-notes?paperId=${paperId}`),
+  create: (data: { paper_id: string; content: string }) =>
+    litRequest<any>('/literature/paper-notes', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: { content: string }) =>
+    litRequest<any>(`/literature/paper-notes/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) =>
+    litRequest<{ success: boolean }>(`/literature/paper-notes/${id}`, { method: 'DELETE' }),
 };

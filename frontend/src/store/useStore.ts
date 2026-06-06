@@ -96,8 +96,8 @@ interface StudyKitState {
   setCurrentLayout: (layout: 'slide_left_notes_right' | 'slide_top_notes_below') => void;
   zoom: number;
   setZoom: (zoom: number) => void;
-  activeLiteratureTab: 'papers' | 'readingLists';
-  setActiveLiteratureTab: (tab: 'papers' | 'readingLists') => void;
+  activeLiteratureTab: 'papers' | 'readingLists' | 'graph';
+  setActiveLiteratureTab: (tab: 'papers' | 'readingLists' | 'graph') => void;
 
   // Sync status
   syncStatus: 'synced' | 'pending' | 'error' | 'offline';

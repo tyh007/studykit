@@ -1367,7 +1367,7 @@ a:focus-visible {
 .lit-table .lit-cell-content { max-height: 80px; overflow: hidden; line-height: 1.4; }
 .lit-table .lit-cell-content.expanded { max-height: none; overflow: visible; }
 .lit-table .lit-cell-content p { margin: 0; }
-.lit-row-checkbox { width: 32px; }
+.lit-row-checkbox { width: 44px; text-align: center; }
 .lit-row-checkbox input { cursor: pointer; }
 .lit-row-resizable { position: relative; }
 /* Row resize handle — 4px hit area at the bottom of each cell */
@@ -1487,3 +1487,4 @@ a:focus-visible {
 .note-panel-tab.active {
   color: var(--color-primary); background: var(--color-primary-light);
 }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }

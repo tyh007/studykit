@@ -267,6 +267,10 @@ CREATE TABLE IF NOT EXISTS literature_papers (
   abstract          TEXT,
   full_text         TEXT,
   extracted_data    JSONB,
+  reading_status    TEXT NOT NULL DEFAULT 'unread'
+                    CHECK (reading_status IN ('unread','reading','read','reviewed')),
+  importance        INTEGER NOT NULL DEFAULT 0
+                    CHECK (importance >= 0 AND importance <= 5),
   processing_status TEXT NOT NULL DEFAULT 'completed'
                     CHECK (processing_status IN ('pending','processing','completed','error')),
   error_message     TEXT,
@@ -290,6 +294,30 @@ CREATE TABLE IF NOT EXISTS literature_custom_fields (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   deleted_at    TIMESTAMPTZ
 );
+
+-- ===== PAPER NOTES =====
+CREATE TABLE IF NOT EXISTS paper_notes (
+  id            UUID PRIMARY KEY,
+  paper_id      UUID NOT NULL REFERENCES literature_papers(id) ON DELETE CASCADE,
+  workspace_id  UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  content       TEXT NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_paper_notes_paper ON paper_notes(paper_id);
+
+-- ===== PAPER RELATIONS =====
+CREATE TABLE IF NOT EXISTS paper_relations (
+  id                UUID PRIMARY KEY,
+  source_paper_id   UUID NOT NULL REFERENCES literature_papers(id) ON DELETE CASCADE,
+  target_paper_id   UUID NOT NULL REFERENCES literature_papers(id) ON DELETE CASCADE,
+  relation_type     TEXT NOT NULL CHECK (relation_type IN ('cites','extends','contradicts','supports','related','method','dataset')),
+  description       TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(source_paper_id, target_paper_id, relation_type)
+);
+CREATE INDEX IF NOT EXISTS idx_paper_relations_source ON paper_relations(source_paper_id);
+CREATE INDEX IF NOT EXISTS idx_paper_relations_target ON paper_relations(target_paper_id);
 
 -- ===== STAGE TWO: EXTERNAL ACCOUNTS =====
 CREATE TABLE IF NOT EXISTS external_accounts (

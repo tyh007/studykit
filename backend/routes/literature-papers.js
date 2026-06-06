@@ -23,7 +23,7 @@ router.get('/', async (req, res) => {
     const result = await db.query(
       `SELECT id, project_id, workspace_id, file_name, file_size, file_type,
               uploaded_at, processed_at, title, authors, year, journal, doi,
-              abstract, extracted_data, processing_status, error_message,
+              abstract, extracted_data, reading_status, importance, processing_status, error_message,
               in_trash, trashed_at, storage_key, citation_item_id, created_at, updated_at
        FROM literature_papers
        WHERE workspace_id = $1 AND project_id = $2 AND deleted_at IS NULL AND in_trash = $3
@@ -86,7 +86,7 @@ router.get('/:id', async (req, res) => {
 router.patch('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, authors, year, journal, doi, abstract, full_text, extracted_data, processing_status, error_message, action } = req.body;
+    const { title, authors, year, journal, doi, abstract, full_text, extracted_data, processing_status, error_message, action, reading_status, importance } = req.body;
 
     // Handle special actions: moveToTrash, restoreFromTrash
     if (action === 'moveToTrash') {
@@ -120,6 +120,8 @@ router.patch('/:id', async (req, res) => {
     if (extracted_data !== undefined) { fields.push(`extracted_data = $${idx++}`); values.push(JSON.stringify(extracted_data)); }
     if (processing_status !== undefined) { fields.push(`processing_status = $${idx++}`); values.push(processing_status); }
     if (error_message !== undefined) { fields.push(`error_message = $${idx++}`); values.push(error_message); }
+    if (reading_status !== undefined) { fields.push(`reading_status = $${idx++}`); values.push(reading_status); }
+    if (importance !== undefined) { fields.push(`importance = $${idx++}`); values.push(importance); }
 
     if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
 

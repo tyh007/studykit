@@ -2,6 +2,8 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from './lib/auth';
 import { useStore } from './store/useStore';
 import { modulesApi, lecturesApi, sourceDocumentsApi } from './lib/api';
+import { literaturePapersApi, paperRelationsApi } from './lib/literature-api';
+import PaperRelationsGraph from './components/literature/PaperRelationsGraph';
 import { db } from './lib/db';
 import PDFViewer from './components/PDFViewer';
 import NoteEditor from './components/NoteEditor';
@@ -12,6 +14,7 @@ import SidebarContent from './components/SidebarContent';
 import SummaryTable from './components/literature/SummaryTable';
 
 import ReadingListsView from './components/literature/ReadingListsView';
+import PaperWorkspace from './components/literature/PaperWorkspace';
 import type { Module, Lecture, SourceDocument, SourcePage, NoteBlock } from './types';
 
 // ===== Auth Page =====
@@ -164,9 +167,18 @@ function StudyKitApp() {
     sidebarOpen, toggleSidebar, currentLayout, syncStatus, cornellMode,
     currentDocument, setCurrentDocument, currentPages, setCurrentPages,
     selectedPageIndex, selectPage,
-    sidebarMode, litProjects, selectedLitProjectId,
+    sidebarMode, litProjects, selectedLitProjectId, selectedLitPaperId, selectLitPaper, litPapers, setLitPapers,
     activeLiteratureTab, setActiveLiteratureTab,
   } = useStore();
+
+  const [graphData, setGraphData] = useState<{nodes: any[]; edges: any[]}>({nodes: [], edges: []});
+  
+  // Fetch graph data when graph tab is active
+  useEffect(() => {
+    if (activeLiteratureTab === 'graph' && selectedLitProjectId) {
+      paperRelationsApi.graph(selectedLitProjectId).then(setGraphData).catch(() => {});
+    }
+  }, [activeLiteratureTab, selectedLitProjectId]);
 
   const { user, workspace_id: authWorkspaceId, logout } = useAuth();
   const setWorkspaceId = useStore((s) => s.setWorkspaceId);
@@ -357,7 +369,7 @@ function StudyKitApp() {
                   background: 'var(--color-bg)',
                   gap: 0,
                 }}>
-                  {(['papers', 'readingLists'] as const).map((tab) => (
+                  {(['papers', 'readingLists', 'graph'] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setActiveLiteratureTab(tab)}
@@ -374,12 +386,39 @@ function StudyKitApp() {
                         transition: 'color 0.15s, border-color 0.15s',
                       }}
                     >
-                      {tab === 'papers' ? '📄 Papers' : '📋 Reading Lists'}
+                      {tab === 'papers' ? '📄 Papers' : tab === 'readingLists' ? '📋 Reading Lists' : '🔗 Graph'}
                     </button>
                   ))}
                 </div>
-                {activeLiteratureTab === 'papers' && <SummaryTable projectId={selectedLitProjectId} />}
-                {activeLiteratureTab === 'readingLists' && <ReadingListsView />}
+                {selectedLitPaperId ? (
+                  (() => {
+                    const paper = litPapers.find(p => p.id === selectedLitPaperId);
+                    return paper ? (
+                      <PaperWorkspace
+                        paper={paper}
+                        projectId={selectedLitProjectId}
+                        onBack={() => selectLitPaper(null)}
+                        onUpdated={() => literaturePapersApi.list(selectedLitProjectId, 'library').then(setLitPapers)}
+                      />
+                    ) : null;
+                  })()
+                ) : (
+                  <>
+                    {activeLiteratureTab === 'papers' && <SummaryTable projectId={selectedLitProjectId} />}
+                    {activeLiteratureTab === 'readingLists' && <ReadingListsView />}
+                    {activeLiteratureTab === 'graph' && (
+                      <div style={{ padding: '1rem', overflow: 'auto' }}>
+                        <PaperRelationsGraph
+                          nodes={graphData.nodes}
+                          edges={graphData.edges}
+                          onNodeClick={(id) => selectLitPaper(id)}
+                          width={800}
+                          height={500}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             ) : (
               <div className="empty-state">

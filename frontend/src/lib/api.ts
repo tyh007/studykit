@@ -127,6 +127,21 @@ export const sourceDocumentsApi = {
     request<any>(`/source-documents/${id}/process`, { method: 'POST' }),
 };
 
+
+
+// ===== File Uploads (for notes) =====
+
+export const uploadsApi = {
+  uploadImage: (file: File): Promise<{ url: string; original_filename: string; mime_type: string; file_size_bytes: number; is_image: boolean }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return request('/uploads', {
+      method: 'POST',
+      body: formData,
+    });
+  },
+};
+
 // ===== Sync =====
 
 export interface SyncPushPayload {
