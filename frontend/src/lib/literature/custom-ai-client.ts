@@ -1,4 +1,5 @@
 import { proxyFetch } from './proxy-fetch'
+import { getAuthToken } from '../api'
 
 export interface CustomAIMessage {
   role: 'system' | 'user' | 'assistant'
@@ -64,9 +65,10 @@ export class CustomAIClient {
 
   async checkConnection(): Promise<boolean> {
     try {
+      const token = getAuthToken()
       const response = await fetch('/api/literature/ai/proxy', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
         body: JSON.stringify({
           url: `${this.baseUrl}/models`,
           method: 'GET',
@@ -82,9 +84,10 @@ export class CustomAIClient {
 
   async getAvailableModels(): Promise<CustomAIModel[]> {
     try {
+      const token = getAuthToken()
       const response = await fetch('/api/literature/ai/proxy', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
         body: JSON.stringify({
           url: `${this.baseUrl}/models`,
           method: 'GET',
