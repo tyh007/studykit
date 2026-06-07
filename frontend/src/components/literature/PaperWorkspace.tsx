@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { literaturePapersApi, paperNotesApi, paperRelationsApi } from '../../lib/literature-api';
 import { createAIExtractionService } from '../../lib/literature/ai-extraction';
 import { PromptBuilder } from '../../lib/literature/prompt-builder';
