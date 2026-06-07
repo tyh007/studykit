@@ -165,6 +165,28 @@ async function migrateDatabase(pool) {
       }
     }
   }
+
+  // Literature Hub v2 migrations
+  try {
+    await pool.query(`ALTER TABLE literature_papers ADD COLUMN IF NOT EXISTS reading_status TEXT NOT NULL DEFAULT 'unread'`);
+    await pool.query(`ALTER TABLE literature_papers ADD COLUMN IF NOT EXISTS importance INTEGER NOT NULL DEFAULT 0`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS paper_notes (
+      id UUID PRIMARY KEY, paper_id UUID NOT NULL REFERENCES literature_papers(id) ON DELETE CASCADE,
+      workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      content TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS paper_relations (
+      id UUID PRIMARY KEY, source_paper_id UUID NOT NULL REFERENCES literature_papers(id) ON DELETE CASCADE,
+      target_paper_id UUID NOT NULL REFERENCES literature_papers(id) ON DELETE CASCADE,
+      relation_type TEXT NOT NULL, description TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(source_paper_id, target_paper_id, relation_type)
+    )`);
+    console.log('✅ Literature Hub v2 migrations applied');
+  } catch (migrateErr) {
+    console.warn('⚠️ Literature Hub v2 migration warning (non-fatal):', migrateErr.message);
+  }
 }
 
 // Run if called directly
