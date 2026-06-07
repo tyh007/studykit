@@ -5,6 +5,44 @@ import { readCustomAISettings } from '../../lib/literature/custom-ai-settings';
 import { CustomAIClient } from '../../lib/literature/custom-ai-client';
 import type { LiteraturePaper } from '../../types';
 
+// Parse AI response to separate thinking process from final answer
+function parseAIContent(text: string): { thinking: string | null; response: string } {
+  const marker = "Here's a thinking process:";
+  const idx = text.indexOf(marker);
+  if (idx === -1) return { thinking: null, response: text };
+
+  const afterMarker = text.substring(idx + marker.length);
+  const sections = afterMarker.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+
+  let thinkingParts: string[] = [];
+  let responseParts: string[] = [];
+  let foundResponse = false;
+
+  for (const section of sections) {
+    if (!foundResponse) {
+      const firstLine = section.split('\n')[0].trim();
+      // Check if this section looks like a thinking step
+      const isThinking = /^\d+\.|^[-*•]|^Here|^Let\s+me|^I['']ll|^Think|^Step|^Analyze|^Based on|^First|^Second|^Third|^Finally/i.test(firstLine);
+      if (isThinking || thinkingParts.length === 0) {
+        thinkingParts.push(section);
+      } else {
+        responseParts.push(section);
+        foundResponse = true;
+      }
+    } else {
+      responseParts.push(section);
+    }
+  }
+
+  if (thinkingParts.length > 0 && responseParts.length > 0) {
+    return {
+      thinking: thinkingParts.join('\n\n'),
+      response: responseParts.join('\n\n')
+    };
+  }
+  return { thinking: null, response: text };
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -160,7 +198,32 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
               lineHeight: 1.5,
               whiteSpace: 'pre-wrap',
             }}>
-              {msg.content}
+              {msg.role === 'assistant' ? (() => {
+                const parsed = parseAIContent(msg.content);
+                if (parsed.thinking) {
+                  return (
+                    <>
+                      <details style={{ marginBottom: '0.25rem' }}>
+                        <summary style={{ cursor: 'pointer', fontSize: '0.72rem', color: 'var(--color-text-muted)', userSelect: 'none' }}>
+                          💭 Thinking
+                        </summary>
+                        <div style={{
+                          fontSize: '0.72rem', color: 'var(--color-text-muted)',
+                          padding: '0.25rem 0 0.25rem 0.5rem',
+                          borderLeft: '2px solid var(--color-border)',
+                          marginTop: '0.125rem',
+                          whiteSpace: 'pre-wrap',
+                          lineHeight: 1.5,
+                        }}>
+                          {parsed.thinking}
+                        </div>
+                      </details>
+                      <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{parsed.response}</div>
+                    </>
+                  );
+                }
+                return msg.content;
+              })() : msg.content}
             </div>
           </div>
         ))}
