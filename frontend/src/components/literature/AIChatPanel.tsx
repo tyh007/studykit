@@ -3,6 +3,7 @@ import { literatureAiApi } from '../../lib/literature-api';
 import { readAIProviderConfig } from '../../lib/literature/ai-provider-config';
 import { readCustomAISettings } from '../../lib/literature/custom-ai-settings';
 import { CustomAIClient } from '../../lib/literature/custom-ai-client';
+import ReactMarkdown from 'react-markdown';
 import type { LiteraturePaper } from '../../types';
 
 // Parse AI response to separate thinking process from final answer
@@ -218,12 +219,12 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
                           {parsed.thinking}
                         </div>
                       </details>
-                      <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{parsed.response}</div>
+                      <div style={{ lineHeight: 1.5 }}><ReactMarkdown>{parsed.response}</ReactMarkdown></div>
                     </>
                   );
                 }
                 return msg.content;
-              })() : msg.content}
+              })() : <ReactMarkdown>{msg.content}</ReactMarkdown>}
             </div>
           </div>
         ))}
