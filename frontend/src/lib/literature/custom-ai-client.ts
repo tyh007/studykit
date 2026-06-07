@@ -1,5 +1,4 @@
 import { proxyFetch } from './proxy-fetch'
-import { getAuthToken } from '../api'
 
 export interface CustomAIMessage {
   role: 'system' | 'user' | 'assistant'
@@ -65,18 +64,11 @@ export class CustomAIClient {
 
   async checkConnection(): Promise<boolean> {
     try {
-      const token = getAuthToken()
-      const response = await fetch('/api/literature/ai/proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
-        body: JSON.stringify({
-          url: `${this.baseUrl}/models`,
-          method: 'GET',
-          headers: this.getHeaders(),
-        })
+      const response = await fetch(`${this.baseUrl}/models`, {
+        method: 'GET',
+        headers: this.getHeaders()
       })
-      const data = await response.json()
-      return data.success === true
+      return response.ok
     } catch {
       return false
     }
