@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { literatureAiApi } from '../../lib/literature-api';
 import { readAIProviderConfig } from '../../lib/literature/ai-provider-config';
+import { readCustomAISettings } from '../../lib/literature/custom-ai-settings';
+import { CustomAIClient } from '../../lib/literature/custom-ai-client';
 import type { LiteraturePaper } from '../../types';
 
 interface ChatMessage {
@@ -52,19 +54,35 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
         content: m.content,
       }));
 
-      const result = await literatureAiApi.chat({
-        paperId: paper?.id,
-        paperIds: paperIds || (paper?.id ? [paper.id] : undefined),
-        messages: chatMessages,
-        geminiApiKey: config.geminiApiKey,
-        geminiModel: config.geminiModel || 'gemini-2.0-flash',
-      });
-
-      setMessages(prev => [...prev, { role: 'assistant', content: result.message.content }]);
+      if (config.provider === 'custom') {
+        // Use CustomAIClient directly (matches user's MLX setup)
+        const customSettings = readCustomAISettings();
+        if (!customSettings.baseUrl) throw new Error('Custom API URL not configured in AI Settings');
+        const client = new CustomAIClient(customSettings.baseUrl, customSettings.model, customSettings.apiKey);
+        const result = await client.chat({
+          model: customSettings.model || 'default',
+          messages: chatMessages,
+          temperature: 0.3,
+          max_tokens: 2048,
+          stream: false,
+        });
+        const reply = result.choices?.[0]?.message?.content || '';
+        setMessages(prev => [...prev, { role: 'assistant', content: reply || '(no response)' }]);
+      } else {
+        // Fallback: backend Gemini chat
+        const result = await literatureAiApi.chat({
+          paperId: paper?.id,
+          paperIds: paperIds || (paper?.id ? [paper.id] : undefined),
+          messages: chatMessages,
+          geminiApiKey: config.geminiApiKey,
+          geminiModel: config.geminiModel || 'gemini-2.0-flash',
+        });
+        setMessages(prev => [...prev, { role: 'assistant', content: result.message.content }]);
+      }
     } catch (err: any) {
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: `Error: ${err.message || 'Failed to get response. Check your API key.'}`
+        content: `Error: ${err.message || 'Failed to get response.'}`
       }]);
     } finally {
       setLoading(false);
