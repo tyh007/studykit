@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { api } from '../lib/api'
+import { getAuthToken } from '../lib/api'
 import { PDFProcessor } from '../lib/literature/pdf-processor'
 
 export interface UploadProgress {
@@ -28,9 +28,22 @@ export function useLiteratureFileUpload() {
     formData.append('file', file)
     formData.append('project_id', projectId)
 
-    const paper = await api.post('/api/literature/papers/upload', formData)
+    const token = getAuthToken()
+    const headers: Record<string, string> = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
 
-    return paper
+    const response = await fetch('/api/literature/papers/upload', {
+      method: 'POST',
+      headers,
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: 'Upload failed' }))
+      throw new Error(err.error || `HTTP ${response.status}`)
+    }
+
+    return response.json()
   }
 
   const uploadFiles = async (files: File[], projectId: string): Promise<FileUploadResult> => {
