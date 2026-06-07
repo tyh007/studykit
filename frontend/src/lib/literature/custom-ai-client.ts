@@ -143,7 +143,8 @@ export class CustomAIClient {
       ],
       temperature: 0.5,
       max_tokens: 4096,
-      stream: false
+      stream: false,
+      response_format: { type: 'json_object' }
     })
 
     const content = response.choices[0]?.message?.content || ''
