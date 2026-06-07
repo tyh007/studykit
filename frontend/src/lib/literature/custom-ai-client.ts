@@ -171,23 +171,25 @@ export class CustomAIClient {
     if (cleaned.startsWith('```')) {
       cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '')
     }
-    // Find the LAST valid JSON object (skip thinking preambles)
-    let jsonEnd = cleaned.lastIndexOf('}')
-    if (jsonEnd !== -1) {
-      // Walk backwards to find matching opening brace
-      let depth = 0
-      let jsonStart = -1
-      for (let i = jsonEnd; i >= 0; i--) {
-        if (cleaned[i] === '}') depth++
-        else if (cleaned[i] === '{') depth--
-        if (depth === 0) { jsonStart = i; break }
-      }
-      if (jsonStart !== -1) {
-        const candidate = cleaned.substring(jsonStart, jsonEnd + 1)
-        try {
-          JSON.parse(candidate)
-          return candidate
-        } catch {}
+    // Scan forward to find every valid JSON object, return the first one that parses
+    let depth = 0
+    let start = -1
+    for (let i = 0; i < cleaned.length; i++) {
+      if (cleaned[i] === '{') {
+        if (depth === 0) start = i
+        depth++
+      } else if (cleaned[i] === '}') {
+        depth--
+        if (depth === 0 && start !== -1) {
+          const candidate = cleaned.substring(start, i + 1)
+          try {
+            JSON.parse(candidate)
+            return candidate
+          } catch {
+            // This wasn't a valid JSON object, keep scanning
+            start = -1
+          }
+        }
       }
     }
     return cleaned
