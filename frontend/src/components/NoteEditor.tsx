@@ -2,6 +2,7 @@ import React, { useEffect, useCallback, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
+import { LinkIcon, UnlinkIcon, CiteIcon } from './ui/Icons';
 import Underline from '@tiptap/extension-underline';
 import Highlight from '@tiptap/extension-highlight';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
@@ -438,9 +439,9 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
           title="Insert or remove link"
           aria-label="Insert or remove hyperlink"
           aria-pressed={editor?.isActive('link') ?? false}
-        >{editor?.isActive('link') ? '🔗 Unlink' : '🔗 Link'}</button>
+        >{editor?.isActive("link") ? <><UnlinkIcon size="sm" /> Unlink</> : <><LinkIcon size="sm" /> Link</>}</button>
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
-        <button className="btn btn-ghost btn-sm" onClick={() => setShowCitationPicker(true)} title="Insert citation" aria-label="Insert citation">📚 Cite</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => setShowCitationPicker(true)} title="Insert citation" aria-label="Insert citation"><CiteIcon size="sm" /> Cite</button>
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
         <button className="btn btn-ghost btn-sm" onClick={() => setShowShortcuts(true)} title="Keyboard shortcuts" aria-label="Show keyboard shortcuts">⌨️</button>
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
