@@ -62,6 +62,35 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [panelHeight, setPanelHeight] = useState(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('lit-chat-height') : null;
+    return saved ? parseInt(saved) : 250;
+  });
+  const chatDragRef = useRef<{ startY: number; startH: number } | null>(null);
+
+  const handleChatResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    chatDragRef.current = { startY: e.clientY, startH: panelHeight };
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+    const handleMouseMove = (ev: MouseEvent) => {
+      if (!chatDragRef.current) return;
+      const dy = ev.clientY - chatDragRef.current.startY;
+      const newH = chatDragRef.current.startH - dy;
+      const clamped = Math.max(120, Math.min(500, newH));
+      setPanelHeight(clamped);
+      localStorage.setItem('lit-chat-height', String(clamped));
+    };
+    const handleMouseUp = () => {
+      chatDragRef.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [panelHeight]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -148,9 +177,14 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
       display: 'flex',
       flexDirection: 'column',
       flexShrink: 0,
-      maxHeight: 300,
+      height: panelHeight + 'px',
       background: 'var(--color-bg)',
     }}>
+      {/* Resize handle */}
+      <div
+        onMouseDown={handleChatResizeStart}
+        style={{ height: 5, cursor: 'row-resize', background: 'var(--color-border-light)', flexShrink: 0 }}
+      />
       {/* Header */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
