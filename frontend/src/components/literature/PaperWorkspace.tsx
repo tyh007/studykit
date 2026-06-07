@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { literaturePapersApi, paperNotesApi, paperRelationsApi } from '../../lib/literature-api';
 import { createAIExtractionService } from '../../lib/literature/ai-extraction';
 import { PromptBuilder } from '../../lib/literature/prompt-builder';
+import { StarIcon, CloseIcon } from '../ui/Icons';
 import { readAIProviderConfig } from '../../lib/literature/ai-provider-config';
 import LiteraturePDFViewer from './LiteraturePDFViewer';
 import PaperAnnotationLayer from './PaperAnnotationLayer';
@@ -335,7 +336,7 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
               style={{ cursor: 'pointer', color: n <= importance ? '#f59e0b' : 'var(--color-border)', transition: 'color 0.1s' }}
               title={`${n} star${n > 1 ? 's' : ''}`}
             >
-              ★
+              <StarIcon size="sm" />
             </span>
           ))}
         </div>
@@ -658,7 +659,7 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
                           onClick={async () => { try { await paperRelationsApi.delete(rel.id); await loadRelations(); } catch {} }}
                           style={{ fontSize: '0.65rem', padding: '0.125rem 0.25rem', color: 'var(--color-danger)', flexShrink: 0 }}
                         >
-                          ✕
+                          <CloseIcon size="sm" />
                         </button>
                       </div>
                     ))}

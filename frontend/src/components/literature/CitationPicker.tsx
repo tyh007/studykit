@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { citationsApi } from '../../lib/literature-api';
+import { CloseIcon } from '../ui/Icons';
 
 interface CitationPickerProps {
   onSelect: (citation: any) => void;
@@ -52,7 +53,7 @@ export default function CitationPicker({ onSelect, onClose }: CitationPickerProp
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
           <h3 style={{ margin: 0, fontSize: '1rem' }}>Insert Citation</h3>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}><CloseIcon size="sm" /></button>
         </div>
 
         <input

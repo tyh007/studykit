@@ -3,6 +3,7 @@ import { useStore } from '../../store/useStore';
 import { literaturePapersApi, readingListsApi, literatureAiApi } from '../../lib/literature-api';
 import { useLiteratureFileUpload } from '../../hooks/useLiteratureFileUpload';
 
+import { StarIcon, LiteratureIcon, ReadingListIcon, GraphIcon } from '../ui/Icons';
 import AIStatusIndicator from './AIStatusIndicator';
 import AISettingsPanel from './AISettingsPanel';
 import ColumnConfigDialog, { getVisibleColumnKeys, saveColumnConfig, type ColumnConfigItem } from './ColumnConfigDialog';
@@ -527,24 +528,24 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
                     <td style={{ fontSize: '0.78rem' }}>{paper.year || '—'}</td>
                     <td>
                       <span
-                        onClick={(e) => {{
+                        onClick={(e) => {
                           e.stopPropagation();
                           const cycle = ['unread','reading','read','reviewed'];
                           const current = paper.reading_status || 'unread';
                           const next = cycle[(cycle.indexOf(current) + 1) % cycle.length];
-                          literaturePapersApi.update(paper.id, {{ reading_status: next }}).then(() => loadPapers());
-                        }}}
+                          literaturePapersApi.update(paper.id, { reading_status: next }).then(() => loadPapers());
+                        }}
                         style={{
                           display: 'inline-block', padding: '0.1rem 0.4rem', borderRadius: '10px',
                           fontSize: '0.7rem', fontWeight: 500, cursor: 'pointer',
-                          background: (() => {{
-                            const colors = {{ unread: '#f1f5f9', reading: '#eff6ff', read: '#f0fdf4', reviewed: '#f5f3ff' }};
+                          background: (() => {
+                            const colors = { unread: '#f1f5f9', reading: '#eff6ff', read: '#f0fdf4', reviewed: '#f5f3ff' };
                             return colors[paper.reading_status as keyof typeof colors] || colors.unread;
-                          }})(),
-                          color: (() => {{
-                            const colors = {{ unread: '#64748b', reading: '#2563eb', read: '#16a34a', reviewed: '#7c3aed' }};
+                          })(),
+                          color: (() => {
+                            const colors = { unread: '#64748b', reading: '#2563eb', read: '#16a34a', reviewed: '#7c3aed' };
                             return colors[paper.reading_status as keyof typeof colors] || colors.unread;
-                          }})(),
+                          })(),
                         }}
                         title="Click to cycle: Unread → Reading → Read → Reviewed"
                       >
@@ -555,18 +556,18 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
                       {[1,2,3,4,5].map(n => (
                         <span
                           key={n}
-                          onClick={(e) => {{
+                          onClick={(e) => {
                             e.stopPropagation();
                             const val = n === (paper.importance || 0) ? 0 : n;
-                            literaturePapersApi.update(paper.id, {{ importance: val }}).then(() => loadPapers());
-                          }}}
-                          style={{{
+                            literaturePapersApi.update(paper.id, { importance: val }).then(() => loadPapers());
+                          }}
+                          style={{
                             cursor: 'pointer',
                             color: n <= (paper.importance || 0) ? '#f59e0b' : 'var(--color-border)',
                             transition: 'color 0.1s',
-                          }}}
+                          }}
                         >
-                          ★
+                          <StarIcon size="sm" />
                         </span>
                       ))}
                     </td>

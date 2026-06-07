@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { literaturePapersApi } from '../../lib/literature-api';
+import { AnnotationIcon } from '../ui/Icons';
 
 interface PaperAnnotation {
   id: string;
@@ -173,7 +174,7 @@ export default function PaperAnnotationLayer({ paperId, pageNumber }: PaperAnnot
           }}
           title="Draw (D)"
         >
-          ✎
+          <AnnotationIcon size="sm" />
         </button>
       </div>
 

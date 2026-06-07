@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { literatureAiApi } from '../../lib/literature-api';
+import { CloseIcon } from '../ui/Icons';
 import { readAIProviderConfig } from '../../lib/literature/ai-provider-config';
 import { readCustomAISettings } from '../../lib/literature/custom-ai-settings';
 import { CustomAIClient } from '../../lib/literature/custom-ai-client';
@@ -135,7 +136,7 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
           userSelect: 'none',
         }}
       >
-        <span>💬</span>
+        <span style={{ opacity: 0.7 }}>AI</span>
         <span>Ask AI about this paper...</span>
       </div>
     );
@@ -157,13 +158,13 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
         borderBottom: '1px solid var(--color-border-light)',
         background: 'var(--color-bg-secondary)',
       }}>
-        <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>💬 AI Assistant</span>
+        <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>AI Assistant</span>
         <button
           className="btn btn-ghost btn-sm"
           onClick={() => { setExpanded(false); onClose?.(); }}
           style={{ fontSize: '0.7rem', padding: '0.125rem 0.375rem' }}
         >
-          ✕
+          <CloseIcon size="sm" />
         </button>
       </div>
 

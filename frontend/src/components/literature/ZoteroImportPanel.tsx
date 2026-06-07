@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
+import { CloseIcon } from '../ui/Icons';
 import { zoteroApi, readingListsApi, literatureProjectsApi, literaturePapersApi } from '../../lib/literature-api';
 import { createAIExtractionService } from '../../lib/literature/ai-extraction';
 import { readAIProviderConfig } from '../../lib/literature/ai-provider-config';
@@ -200,7 +201,7 @@ export default function ZoteroImportPanel() {
               onClick={() => { setExpanded(false); setCollections([]); setError(null); }}
               style={{ fontSize: '0.7rem', padding: '0.125rem 0.375rem' }}
             >
-              ✕
+              <CloseIcon size="sm" />
             </button>
           </div>
 
