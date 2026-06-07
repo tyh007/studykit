@@ -100,24 +100,18 @@ export class CustomAIClient {
       body.response_format = request.response_format
     }
 
-    const response = await fetch('/api/literature/ai/proxy', {
+    const response = await fetch(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: `${this.baseUrl}/chat/completions`,
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify(body)
-      })
+      headers: this.getHeaders(),
+      body: JSON.stringify(body)
     })
 
     if (!response.ok) {
-      const err = await response.json().catch(() => ({ error: 'Proxy request failed' }))
-      throw new Error(err.error || `HTTP ${response.status}`)
+      const errText = await response.text().catch(() => '')
+      throw new Error(`API error ${response.status}: ${errText}`)
     }
 
-    const data = await response.json()
-    return data.data as CustomAIResponse
+    return response.json() as Promise<CustomAIResponse>
   }
 
   async generateText(
