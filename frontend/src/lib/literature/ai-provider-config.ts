@@ -9,6 +9,12 @@ export interface AIProviderConfig {
   customBaseUrl?: string
   customModel?: string
   customApiKey?: string
+  // Extended settings for AI extraction
+  temperature?: number
+  maxTokens?: number
+  enabledFields?: string[]
+  customInstructions?: string
+  useVision?: boolean
 }
 
 export function readAIProviderConfig(): AIProviderConfig {
@@ -45,6 +51,11 @@ export function saveAIProviderConfig(config: Partial<AIProviderConfig>): AIProvi
     customBaseUrl: config.customBaseUrl !== undefined ? config.customBaseUrl : current.customBaseUrl,
     customModel: config.customModel !== undefined ? config.customModel : current.customModel,
     customApiKey: config.customApiKey !== undefined ? config.customApiKey : current.customApiKey,
+  temperature: config.temperature !== undefined ? config.temperature : current.temperature,
+  maxTokens: config.maxTokens !== undefined ? config.maxTokens : current.maxTokens,
+  enabledFields: config.enabledFields !== undefined ? config.enabledFields : current.enabledFields,
+  customInstructions: config.customInstructions !== undefined ? config.customInstructions : current.customInstructions,
+  useVision: config.useVision !== undefined ? config.useVision : current.useVision,
   }
 
   if (typeof window !== 'undefined') {

@@ -560,87 +560,98 @@ router.post('/import-items', async (req, res) => {
         );
 
         if (existingPaper.rows.length === 0) {
-          // Fetch child items to find PDF attachments
-          const childrenResult = await zoteroFetch(
-            `/users/${zoteroUserId}/items/${itemKey}/children`,
-            apiKey
-          );
-          const children = childrenResult.data || [];
+          // Try to find and download PDF attachment (don't fail import if no PDF)
+          let storageKey = null;
+          let pdfBuffer = null;
+          let fileName = `${itemData.title || 'untitled'}.pdf`;
+          let fullText = null;
 
-          // Find PDF attachment
-          const pdfAttachment = children.find(c =>
-            c.data?.contentType === 'application/pdf'
-            || (c.data?.itemType === 'attachment' && c.data?.contentType === 'application/pdf')
-            || (c.data?.filename || '').toLowerCase().endsWith('.pdf')
-          );
+          try {
+            // Fetch child items to find PDF attachments
+            const childrenResult = await zoteroFetch(
+              `/users/${zoteroUserId}/items/${itemKey}/children`,
+              apiKey
+            );
+            const children = childrenResult.data || [];
 
-          if (pdfAttachment?.links?.enclosure?.href) {
-            // Download PDF from Zotero
-            const pdfResponse = await fetch(pdfAttachment.links.enclosure.href, {
-              headers: {
-                'Zotero-API-Key': apiKey,
-                'Zotero-API-Version': '3',
-              },
-            });
+            // Find PDF attachment
+            const pdfAttachment = children.find(c =>
+              c.data?.contentType === 'application/pdf'
+              || (c.data?.itemType === 'attachment' && c.data?.contentType === 'application/pdf')
+              || (c.data?.filename || '').toLowerCase().endsWith('.pdf')
+            );
 
-            if (pdfResponse.ok) {
-              const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
-              const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '..', '..', 'uploads');
-              const storageKey = `lit-${uuidv4()}.pdf`;
-              const pdfPath = path.join(uploadDir, storageKey);
+            if (pdfAttachment?.links?.enclosure?.href) {
+              // Download PDF from Zotero
+              const pdfResponse = await fetch(pdfAttachment.links.enclosure.href, {
+                headers: {
+                  'Zotero-API-Key': apiKey,
+                  'Zotero-API-Version': '3',
+                },
+              });
 
-              // Ensure directory exists
-              fs.mkdirSync(path.dirname(pdfPath), { recursive: true });
-              fs.writeFileSync(pdfPath, pdfBuffer);
+              if (pdfResponse.ok) {
+                pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
+                storageKey = `lit-${uuidv4()}.pdf`;
+                const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '..', '..', 'uploads');
+                const pdfPath = path.join(uploadDir, storageKey);
 
-              // Extract text using pdf-parse
-              let fullText = null;
-              try {
-                const pdfParse = require('pdf-parse');
-                const pdfData = await pdfParse(pdfBuffer);
-                fullText = pdfData.text;
-              } catch (parseErr) {
-                console.warn(`Failed to extract text from PDF for item ${itemKey}:`, parseErr.message);
-              }
+                // Ensure directory exists
+                fs.mkdirSync(path.dirname(pdfPath), { recursive: true });
+                fs.writeFileSync(pdfPath, pdfBuffer);
 
-              // Create literature_paper record
-              const newPaperId = uuidv4();
-              const fileName = pdfAttachment.data?.filename || `${itemData.title || 'untitled'}.pdf`;
-              const authorsStr = creators.map(c => `${c.lastName || ''}, ${c.firstName || ''}`).filter(Boolean).join('; ');
+                fileName = pdfAttachment.data?.filename || fileName;
 
-              if (projectId) {
-                await db.query(
-                  `INSERT INTO literature_papers
-                   (id, project_id, workspace_id, file_name, file_size, file_type,
-                    storage_key, citation_item_id, title, authors, year, journal,
-                    doi, abstract, full_text, processing_status)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
-                  [
-                    newPaperId, projectId, wsId, fileName, pdfBuffer.length, 'application/pdf',
-                    storageKey, citationId, itemData.title || null, authorsStr || null, issuedYear,
-                    itemData.publicationTitle || null, itemData.DOI || null,
-                    itemData.abstractNote || null, fullText,
-                    fullText ? 'pending' : 'pending',
-                  ]
-                );
-
-                // Link paper to reading list and citation
-                if (effectiveReadingListId) {
-                  await db.query(
-                    `INSERT INTO literature_pdf_references (id, paper_id, reading_list_id, citation_item_id)
-                     VALUES ($1, $2, $3, $4)`,
-                    [uuidv4(), newPaperId, effectiveReadingListId, citationId]
-                  );
+                // Extract text using pdf-parse
+                try {
+                  const pdfParse = require('pdf-parse');
+                  const pdfData = await pdfParse(pdfBuffer);
+                  fullText = pdfData.text;
+                } catch (parseErr) {
+                  console.warn(`Failed to extract text from PDF for item ${itemKey}:`, parseErr.message);
                 }
+              } else {
+                console.warn(`Zotero PDF download failed for ${itemKey}: HTTP ${pdfResponse.status}`);
               }
-
-              paperId = newPaperId;
             } else {
-              console.warn(`Zotero PDF download failed for ${itemKey}: HTTP ${pdfResponse.status}`);
+              console.log(`No PDF attachment found for item ${itemKey} — importing as metadata-only paper`);
             }
-          } else {
-            console.log(`No PDF attachment found for item ${itemKey}`);
+          } catch (pdfFetchErr) {
+            console.error(`PDF fetch error for ${itemKey}:`, pdfFetchErr.message);
+            // Don't fail — continue with paper creation using citation metadata
           }
+
+          // Create literature_paper record (with or without PDF)
+          const newPaperId = uuidv4();
+          const authorsStr = creators.map(c => `${c.lastName || ''}, ${c.firstName || ''}`).filter(Boolean).join('; ');
+
+          if (projectId) {
+            await db.query(
+              `INSERT INTO literature_papers
+               (id, project_id, workspace_id, file_name, file_size, file_type,
+                storage_key, citation_item_id, title, authors, year, journal,
+                doi, abstract, full_text, processing_status)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+              [
+                newPaperId, projectId, wsId, fileName, pdfBuffer ? pdfBuffer.length : 0, 'application/pdf',
+                storageKey, citationId, itemData.title || null, authorsStr || null, issuedYear,
+                itemData.publicationTitle || null, itemData.DOI || null,
+                itemData.abstractNote || null, fullText,
+                fullText ? 'pending' : 'pending',
+              ]
+            );
+
+            // Link paper to reading list and citation
+            if (effectiveReadingListId) {
+              await db.query(
+                `INSERT INTO literature_pdf_references (id, paper_id, reading_list_id, citation_item_id)
+                 VALUES ($1, $2, $3, $4)`,
+                [uuidv4(), newPaperId, effectiveReadingListId, citationId]
+              );
+            }
+          }
+
+          paperId = newPaperId;
         } else {
           paperId = existingPaper.rows[0].id;
         }

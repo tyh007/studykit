@@ -2,6 +2,9 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from './lib/auth';
 import { useStore } from './store/useStore';
 import { modulesApi, lecturesApi, sourceDocumentsApi } from './lib/api';
+import { literaturePapersApi, paperRelationsApi } from './lib/literature-api';
+import PaperRelationsGraph from './components/literature/PaperRelationsGraph';
+import { SidebarIcon, LiteratureIcon, ReadingListIcon, GraphIcon } from './components/ui/Icons';
 import { db } from './lib/db';
 import PDFViewer from './components/PDFViewer';
 import NoteEditor from './components/NoteEditor';
@@ -12,6 +15,7 @@ import SidebarContent from './components/SidebarContent';
 import SummaryTable from './components/literature/SummaryTable';
 
 import ReadingListsView from './components/literature/ReadingListsView';
+import PaperWorkspace from './components/literature/PaperWorkspace';
 import type { Module, Lecture, SourceDocument, SourcePage, NoteBlock } from './types';
 
 // ===== Auth Page =====
@@ -42,7 +46,7 @@ function AuthPage() {
 
   return (
     <div className="auth-container">
-      <div className="auth-card">
+      <div className="auth-card glass-dialog">
         <h1>StudyKit</h1>
         <p>{isLogin ? 'Welcome back' : 'Create your account'}</p>
 
@@ -164,9 +168,18 @@ function StudyKitApp() {
     sidebarOpen, toggleSidebar, currentLayout, syncStatus, cornellMode,
     currentDocument, setCurrentDocument, currentPages, setCurrentPages,
     selectedPageIndex, selectPage,
-    sidebarMode, litProjects, selectedLitProjectId,
+    sidebarMode, litProjects, selectedLitProjectId, selectedLitPaperId, selectLitPaper, litPapers, setLitPapers,
     activeLiteratureTab, setActiveLiteratureTab,
   } = useStore();
+
+  const [graphData, setGraphData] = useState<{nodes: any[]; edges: any[]}>({nodes: [], edges: []});
+  
+  // Fetch graph data when graph tab is active
+  useEffect(() => {
+    if (activeLiteratureTab === 'graph' && selectedLitProjectId) {
+      paperRelationsApi.graph(selectedLitProjectId).then(setGraphData).catch(() => {});
+    }
+  }, [activeLiteratureTab, selectedLitProjectId]);
 
   const { user, workspace_id: authWorkspaceId, logout } = useAuth();
   const setWorkspaceId = useStore((s) => s.setWorkspaceId);
@@ -274,9 +287,9 @@ function StudyKitApp() {
       </div>
 
       {/* Header */}
-      <header className="app-header">
+      <header className="app-header glass-header">
         <button className="btn btn-ghost btn-icon" onClick={toggleSidebar} title="Toggle sidebar" aria-label="Toggle sidebar">
-          ☰
+          <SidebarIcon size="lg" />
         </button>
         <div className="logo">StudyKit</div>
         <div className="spacer" />
@@ -295,7 +308,7 @@ function StudyKitApp() {
 
       <div className="app-body">
         {/* Sidebar */}
-        <aside className={`sidebar ${sidebarOpen ? '' : 'closed'} ${sidebarResizing ? 'resizing' : ''}`} aria-label="Module navigation" style={{ width: sidebarOpen ? sidebarWidth : 0 }}>
+        <aside className={`sidebar glass-sidebar ${sidebarOpen ? '' : 'closed'} ${sidebarResizing ? 'resizing' : ''}`} aria-label="Module navigation" style={{ width: sidebarOpen ? sidebarWidth : 0 }}>
           <SidebarContent
             onShowNewModule={() => setShowNewModule(true)}
             onShowNewLecture={() => setShowNewLecture(true)}
@@ -357,7 +370,7 @@ function StudyKitApp() {
                   background: 'var(--color-bg)',
                   gap: 0,
                 }}>
-                  {(['papers', 'readingLists'] as const).map((tab) => (
+                  {(['papers', 'readingLists', 'graph'] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setActiveLiteratureTab(tab)}
@@ -374,12 +387,39 @@ function StudyKitApp() {
                         transition: 'color 0.15s, border-color 0.15s',
                       }}
                     >
-                      {tab === 'papers' ? '📄 Papers' : '📋 Reading Lists'}
+                      {tab === 'papers' ? <><LiteratureIcon size="sm" /> Papers</> : tab === 'readingLists' ? <><ReadingListIcon size="sm" /> Reading Lists</> : <><GraphIcon size="sm" /> Graph</>}
                     </button>
                   ))}
                 </div>
-                {activeLiteratureTab === 'papers' && <SummaryTable projectId={selectedLitProjectId} />}
-                {activeLiteratureTab === 'readingLists' && <ReadingListsView />}
+                {selectedLitPaperId ? (
+                  (() => {
+                    const paper = litPapers.find(p => p.id === selectedLitPaperId);
+                    return paper ? (
+                      <PaperWorkspace
+                        paper={paper}
+                        projectId={selectedLitProjectId}
+                        onBack={() => selectLitPaper(null)}
+                        onUpdated={() => literaturePapersApi.list(selectedLitProjectId, 'library').then(setLitPapers)}
+                      />
+                    ) : null;
+                  })()
+                ) : (
+                  <>
+                    {activeLiteratureTab === 'papers' && <SummaryTable projectId={selectedLitProjectId} />}
+                    {activeLiteratureTab === 'readingLists' && <ReadingListsView />}
+                    {activeLiteratureTab === 'graph' && (
+                      <div style={{ padding: '1rem', overflow: 'auto' }}>
+                        <PaperRelationsGraph
+                          nodes={graphData.nodes}
+                          edges={graphData.edges}
+                          onNodeClick={(id) => selectLitPaper(id)}
+                          width={800}
+                          height={500}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             ) : (
               <div className="empty-state">
@@ -585,11 +625,11 @@ function LectureView({
         <div className="note-panel-header">
           <div className="note-panel-tabs">
             <div
-              className={`note-panel-tab ${activeLectureTab === 'notes' ? 'active' : ''}`}
+              className={`note-panel-tab glass-tab ${activeLectureTab === 'notes' ? 'active' : ''}`}
               onClick={() => setActiveLectureTab('notes')}
             >Notes</div>
             <div
-              className={`note-panel-tab ${activeLectureTab === 'literature' ? 'active' : ''}`}
+              className={`note-panel-tab glass-tab ${activeLectureTab === 'literature' ? 'active' : ''}`}
               onClick={() => setActiveLectureTab('literature')}
             >Literature Review</div>
           </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
+import { RenameIcon, CloseIcon } from '../ui/Icons';
 import { literatureProjectsApi } from '../../lib/literature-api';
 import { literaturePapersApi, literatureCustomFieldsApi } from '../../lib/literature-api';
 
@@ -98,13 +99,13 @@ export default function ProjectSidebar() {
                     title="Rename"
                     onClick={e => { e.stopPropagation(); setEditingId(project.id); setEditName(project.name); }}
                     style={{ opacity: 0.5, fontSize: '0.7rem', padding: '2px 4px' }}
-                  >✎</button>
+                  ><RenameIcon size="sm" /></button>
                   <button
                     className="btn btn-ghost btn-icon btn-xs"
                     title="Delete"
                     onClick={e => { e.stopPropagation(); handleDelete(project.id); }}
                     style={{ opacity: 0.5, fontSize: '0.7rem', padding: '2px 4px', color: 'var(--color-danger)' }}
-                  >✕</button>
+                  ><CloseIcon size="sm" /></button>
                 </div>
               )}
             </div>

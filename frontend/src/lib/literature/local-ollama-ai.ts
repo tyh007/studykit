@@ -47,7 +47,7 @@ function getClient(settings: OllamaSettings = readOllamaSettings()) {
   return new OllamaClient(settings.baseUrl, settings.model)
 }
 
-export function truncatePaperText(text: string, maxLength: number = 16000) {
+export function truncatePaperText(text: string, maxLength: number = 4000) {
   if (text.length <= maxLength) return text
   const truncated = text.slice(0, maxLength)
   const lastParagraph = truncated.lastIndexOf('\n\n')

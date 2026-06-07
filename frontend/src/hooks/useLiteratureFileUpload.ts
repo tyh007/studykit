@@ -1,6 +1,6 @@
 import { useState } from 'react'
+import { getAuthToken } from '../lib/api'
 import { PDFProcessor } from '../lib/literature/pdf-processor'
-import { literaturePapersApi } from '../lib/literature-api'
 
 export interface UploadProgress {
   fileName: string
@@ -23,26 +23,27 @@ export function useLiteratureFileUpload() {
     const validation = PDFProcessor.validatePDFFile(file)
     if (!validation.valid) throw new Error(validation.error)
 
-    const extractedContent = await PDFProcessor.extractPDFContent(file)
-    const bibInfo = PDFProcessor.extractBibliographicInfo(extractedContent.fullText, extractedContent.metadata)
+    // Upload PDF to server (server extracts text, creates paper record, stores file)
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('project_id', projectId)
 
-    // Create paper record (AI extraction is done on-demand via AI Summary button)
-    const paper = await literaturePapersApi.create({
-      project_id: projectId,
-      file_name: file.name,
-      file_size: file.size,
-      file_type: file.type,
-      title: bibInfo.title || file.name.replace('.pdf', ''),
-      authors: bibInfo.authors,
-      year: bibInfo.year,
-      journal: bibInfo.journal,
-      doi: bibInfo.doi,
-      abstract: extractedContent.abstract,
-      full_text: extractedContent.fullText,
-      processing_status: 'pending'
+    const token = getAuthToken()
+    const headers: Record<string, string> = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    const response = await fetch('/api/literature/papers/upload', {
+      method: 'POST',
+      headers,
+      body: formData,
     })
 
-    return paper
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: 'Upload failed' }))
+      throw new Error(err.error || `HTTP ${response.status}`)
+    }
+
+    return response.json()
   }
 
   const uploadFiles = async (files: File[], projectId: string): Promise<FileUploadResult> => {

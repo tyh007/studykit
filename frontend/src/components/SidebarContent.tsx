@@ -3,6 +3,7 @@ import { useStore } from '../store/useStore';
 import { modulesApi, lecturesApi } from '../lib/api';
 import { db } from '../lib/db';
 import ProjectSidebar from './literature/ProjectSidebar';
+import { ModulesIcon, LiteratureIcon, RenameIcon, CopyIcon, TrashIcon, CloseIcon, ChevronUpIcon, ChevronDownIcon, RestoreIcon, DragIcon, BackIcon, AddIcon, MoreIcon } from '../components/ui/Icons';
 import ZoteroConnectionPanel from './literature/ZoteroConnectionPanel';
 import ZoteroImportPanel from './literature/ZoteroImportPanel';
 import type { Module, Lecture } from '../types';
@@ -287,9 +288,9 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
 
   const contextActions = (item: SelectableItem) => (
     <div className="context-menu" style={{ position: 'fixed', left: contextMenu!.x, top: contextMenu!.y, zIndex: 1000 }}>
-      <button onClick={() => startRename(item)}>✏️ Rename</button>
-      <button onClick={() => { handleCopy(item); setContextMenu(null); }}>📋 Copy</button>
-      <button onClick={() => { setContextMenu(null); setDeleteConfirm({ items: [item], checkboxAccepted: false }); }}>🗑️ Delete</button>
+      <button onClick={() => startRename(item)}><RenameIcon size="sm" /> Rename</button>
+      <button onClick={() => { handleCopy(item); setContextMenu(null); }}><CopyIcon size="sm" /> Copy</button>
+      <button onClick={() => { setContextMenu(null); setDeleteConfirm({ items: [item], checkboxAccepted: false }); }}><TrashIcon size="sm" /> Delete</button>
       {item.type === 'lecture' && (
         <>
           <button onClick={async () => {
@@ -307,7 +308,7 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
               }));
             }
             setContextMenu(null);
-          }}>⬆ Move Up</button>
+          }}><ChevronUpIcon size="sm" /> Move Up</button>
           <button onClick={async () => {
             const lec = lectures.find((l) => l.id === item.id);
             const lecs = lectures.filter((l) => l.module_id === lec?.module_id).sort((a, b) => a.sort_order - b.sort_order);
@@ -323,7 +324,7 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
               }));
             }
             setContextMenu(null);
-          }}>⬇ Move Down</button>
+          }}><ChevronDownIcon size="sm" /> Move Down</button>
         </>
       )}
       {item.type === 'module' && (
@@ -341,7 +342,7 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
               setModules(reordered);
             }
             setContextMenu(null);
-          }}>⬆ Move Up</button>
+          }}><ChevronUpIcon size="sm" /> Move Up</button>
           <button onClick={async () => {
             const idx = modules.findIndex((m) => m.id === item.id);
             if (idx < modules.length - 1) {
@@ -355,7 +356,7 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
               setModules(reordered);
             }
             setContextMenu(null);
-          }}>⬇ Move Down</button>
+          }}><ChevronDownIcon size="sm" /> Move Down</button>
         </>
       )}
     </div>
@@ -368,10 +369,10 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
       {/* Mode toggle: Modules / Literature */}
       <div className="lit-mode-toggle">
         <button className={sidebarMode === 'modules' ? 'active' : ''} onClick={() => setSidebarMode('modules')}>
-          📚 Modules
+          <ModulesIcon size="sm" /> Modules
         </button>
         <button className={sidebarMode === 'literature' ? 'active' : ''} onClick={() => setSidebarMode('literature')}>
-          📄 Literature
+          <LiteratureIcon size="sm" /> Literature
         </button>
       </div>
 
@@ -390,7 +391,7 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
         <h2>{showTrash ? 'Trash' : 'Modules'}</h2>
         <div className="flex gap-1">
           <button className="btn btn-ghost btn-sm" onClick={() => { setShowTrash(!showTrash); clearSelection(); }} title={showTrash ? 'Back to modules' : 'Trash'}>
-            {showTrash ? '← Back' : '🗑️'}
+            {showTrash ? <><BackIcon size="sm" /> Back</> : <TrashIcon size="sm" />}
           </button>
           {!showTrash && <button className="btn btn-ghost btn-sm" onClick={onShowNewModule}>+ New</button>}
         </div>
@@ -411,9 +412,9 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
             {selectedIds.size > 0 && (
               <div className="batch-bar">
                 <span className="text-xs">{selectedIds.size} selected</span>
-                <button className="btn btn-ghost btn-sm" onClick={clearSelection}>✕</button>
-                <button className="btn btn-ghost btn-sm" onClick={batchCopy}>📋 Copy</button>
-                <button className="btn btn-ghost btn-sm" onClick={batchDelete}>🗑️ Delete</button>
+                <button className="btn btn-ghost btn-sm" onClick={clearSelection}><CloseIcon size="sm" /></button>
+                <button className="btn btn-ghost btn-sm" onClick={batchCopy}><CopyIcon size="sm" /> Copy</button>
+                <button className="btn btn-ghost btn-sm" onClick={batchDelete}><TrashIcon size="sm" /> Delete</button>
               </div>
             )}
 
@@ -454,7 +455,7 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
                       <span className="module-title">{mod.title}</span>
                     )}
                     {mod.code && !renamingItem && <span className="module-code">{mod.code}</span>}
-                    <span className="drag-handle" title="Drag to reorder">⠿</span>
+                    <span className="drag-handle" title="Drag to reorder"><DragIcon size="sm" /></span>
                   </div>
 
                   {selectedModuleId === mod.id && (
@@ -498,7 +499,7 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
                               )}
                               {lec.week_label && <div className="lecture-week">{lec.week_label}</div>}
                             </div>
-                            <span className="drag-handle" title="Drag to reorder">⠿</span>
+                            <span className="drag-handle" title="Drag to reorder"><DragIcon size="sm" /></span>
                           </div>
                         ))
                       ) : (
@@ -519,8 +520,8 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
       {contextMenu && contextActions(contextMenu.item)}
 
       {deleteConfirm && (
-        <div className="modal-overlay" onClick={() => setDeleteConfirm(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 380 }}>
+        <div className="modal-overlay glass-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="modal-content glass-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 380 }}>
             <h2>Move to Trash?</h2>
             <p className="text-sm" style={{ marginBottom: '0.75rem', color: 'var(--color-text-secondary)' }}>
               {deleteConfirm.items.length === 1
@@ -614,8 +615,8 @@ function TrashView({ onRestore }: { onRestore: () => void }) {
         <div key={mod.id} className="trash-item">
           <div className="trash-item-info"><span className="trash-item-type">Module</span><span>{mod.title}</span></div>
           <div className="flex gap-1">
-            <button className="btn btn-ghost btn-sm" onClick={() => handleRestore('module', mod.id)}>↩ Restore</button>
-            <button className="btn btn-ghost btn-sm" style={{ color: 'var(--color-danger)' }} onClick={() => handlePermanentDelete('module', mod.id)}>🗑️ Delete</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => handleRestore('module', mod.id)}><RestoreIcon size="sm" /> Restore</button>
+            <button className="btn btn-ghost btn-sm" style={{ color: 'var(--color-danger)' }} onClick={() => handlePermanentDelete('module', mod.id)}><TrashIcon size="sm" /> Delete</button>
           </div>
         </div>
       ))}
@@ -623,8 +624,8 @@ function TrashView({ onRestore }: { onRestore: () => void }) {
         <div key={lec.id} className="trash-item">
           <div className="trash-item-info"><span className="trash-item-type">Lecture</span><span>{lec.title}</span></div>
           <div className="flex gap-1">
-            <button className="btn btn-ghost btn-sm" onClick={() => handleRestore('lecture', lec.id)}>↩ Restore</button>
-            <button className="btn btn-ghost btn-sm" style={{ color: 'var(--color-danger)' }} onClick={() => handlePermanentDelete('lecture', lec.id)}>🗑️ Delete</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => handleRestore('lecture', lec.id)}><RestoreIcon size="sm" /> Restore</button>
+            <button className="btn btn-ghost btn-sm" style={{ color: 'var(--color-danger)' }} onClick={() => handlePermanentDelete('lecture', lec.id)}><TrashIcon size="sm" /> Delete</button>
           </div>
         </div>
       ))}

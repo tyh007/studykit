@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useStore } from '../store/useStore';
+import { AnnotationIcon, RestoreIcon } from './ui/Icons';
 import { db } from '../lib/db';
 import type {
   SourcePage,
@@ -241,9 +242,9 @@ export default function AnnotationLayer({ page }: AnnotationLayerProps) {
           aria-label="Freehand draw tool"
           aria-pressed={activeTool === 'ink'}
         >
-          ✎
+          <AnnotationIcon size="sm" />
         </button>
-        <button onClick={handleUndo} title="Undo (Ctrl+Z)" aria-label="Undo annotation">↩</button>
+        <button onClick={handleUndo} title="Undo (Ctrl+Z)" aria-label="Undo annotation"><RestoreIcon size="sm" /></button>
         <button onClick={handleRedo} title="Redo (Ctrl+Shift+Z)" aria-label="Redo annotation">↪</button>
       </div>
 

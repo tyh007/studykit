@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { readingListsApi } from '../../lib/literature-api';
+import { readingListsApi, literaturePapersApi } from '../../lib/literature-api';
 import { useStore } from '../../store/useStore';
+import { createAIExtractionService } from '../../lib/literature/ai-extraction';
 
 export default function ReadingListsView() {
   const { readingLists, setReadingLists } = useStore();
@@ -10,6 +11,7 @@ export default function ReadingListsView() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<Set<string>>(new Set());
+  const [extractingAll, setExtractingAll] = useState(false);
 
   const loadLists = useCallback(async () => {
     setLoading(true);
@@ -27,6 +29,39 @@ export default function ReadingListsView() {
   useEffect(() => {
     loadLists();
   }, [loadLists]);
+
+  const handleExtractAll = async () => {
+    if (!listDetail?.items || listDetail.items.length === 0) return;
+    setExtractingAll(true);
+    try {
+      const projectIds = new Set<string>();
+      for (const item of listDetail.items) {
+        if (item.paper_id) projectIds.add(''); // Will find from API
+      }
+      // Get all papers
+      const papers = await literaturePapersApi.list('');
+      const targetPapers = papers.filter((p: any) => {
+        return listDetail.items.some((item: any) =>
+          item.citation_item_id === p.citation_item_id
+        );
+      });
+      const unextracted = targetPapers.filter((p: any) => !p.extracted_data && p.full_text);
+      if (unextracted.length === 0) return;
+      const service = createAIExtractionService();
+      for (const paper of unextracted) {
+        try {
+          const { extractedData } = await service.extractWithFallback(paper.full_text!, 'brief');
+          await literaturePapersApi.update(paper.id, { extracted_data: extractedData, processing_status: 'completed' });
+        } catch (err) {
+          console.error('Extraction failed for', paper.title, err);
+        }
+      }
+    } catch (err: any) {
+      console.error('Extract All failed:', err);
+    } finally {
+      setExtractingAll(false);
+    }
+  };
 
   useEffect(() => {
     if (!selectedListId) { setListDetail(null); return; }
@@ -125,16 +160,26 @@ export default function ReadingListsView() {
           </div>
         ) : (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
               <div>
                 <h2 style={{ margin: 0, fontSize: '1.1rem' }}>{listDetail.name}</h2>
                 {listDetail.description && (
                   <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginTop: '0.125rem' }}>{listDetail.description}</div>
                 )}
               </div>
-              <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
-                {listDetail.items?.length || 0} item(s)
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <button
+                  className="btn btn-sm"
+                  onClick={handleExtractAll}
+                  disabled={extractingAll || !listDetail.items?.length}
+                  style={{ fontSize: '0.78rem' }}
+                >
+                  {extractingAll ? 'Extracting...' : 'AI Extract All'}
+                </button>
+                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                  {listDetail.items?.length || 0} item(s)
+                </span>
+              </div>
             </div>
 
             {!listDetail.items || listDetail.items.length === 0 ? (

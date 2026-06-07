@@ -279,6 +279,8 @@ export interface LiteraturePaper {
   abstract?: string;
   full_text?: string;
   extracted_data?: ExtractedData;
+  reading_status?: 'unread' | 'reading' | 'read' | 'reviewed';
+  importance?: number;
   storage_key?: string;
   citation_item_id?: string;
   processing_status: 'pending' | 'processing' | 'completed' | 'error';
@@ -320,6 +322,49 @@ export interface UndoEntry {
   previousStyle: any;
   action: 'create' | 'delete' | 'modify';
 }
+
+// ===== Paper Notes =====
+export interface PaperNote {
+  id: string;
+  paper_id: string;
+  workspace_id: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// ===== Paper Relations =====
+export interface PaperRelation {
+  id: string;
+  source_paper_id: string;
+  target_paper_id: string;
+  related_paper_id: string;
+  related_title: string;
+  relation_type: 'cites' | 'extends' | 'contradicts' | 'supports' | 'related' | 'method' | 'dataset';
+  description?: string;
+  direction: 'outgoing' | 'incoming';
+  created_at: string;
+}
+
+export const RELATION_LABELS: Record<string, string> = {
+  cites: 'Cites',
+  extends: 'Extends',
+  contradicts: 'Contradicts',
+  supports: 'Supports',
+  related: 'Related',
+  method: 'Same Method',
+  dataset: 'Same Dataset',
+};
+
+export const RELATION_OPTIONS = [
+  { value: 'cites', label: 'Cites' },
+  { value: 'extends', label: 'Extends / Builds on' },
+  { value: 'contradicts', label: 'Contradicts' },
+  { value: 'supports', label: 'Supports / Confirms' },
+  { value: 'related', label: 'Generally Related' },
+  { value: 'method', label: 'Same Methodology' },
+  { value: 'dataset', label: 'Same Dataset' },
+];
 
 // ===== Stage Two: Zotero Integration =====
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../store/useStore';
+import { AnnotationIcon, CloseIcon, CheckIcon } from './ui/Icons';
 import { db } from '../lib/db';
 import type { NoteBlock, BlockContent } from '../types';
 
@@ -82,14 +83,13 @@ export default function AnnotationPanel({ lectureId }: AnnotationPanelProps) {
         {annotations.map((anno) => (
           <div key={anno.id} className="annotation-entry">
             <div className="annotation-entry-header">
-              <span className="annotation-entry-label">✏️ Paragraph {anno.paragraphIndex + 1}</span>
+              <span className="annotation-entry-label"><AnnotationIcon size="sm" /> Paragraph {anno.paragraphIndex + 1}</span>
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={(e) => { e.stopPropagation(); deleteAnnotation(anno.id); }}
                 style={{ fontSize: '0.65rem', padding: '0.1rem 0.3rem', marginLeft: 'auto' }}
                 title="Delete"
-              >
-                ✕
+              ><CloseIcon size="sm" />
               </button>
             </div>
             <div className="annotation-entry-text">{anno.text}</div>
@@ -170,7 +170,7 @@ export function AddAnnotationButton({ paragraphIndex, paragraphPreview, hasAnnot
           onClick={(e) => { e.stopPropagation(); setShowInput(true); }}
           title={hasAnnotation ? 'Edit annotation' : 'Add margin annotation'}
         >
-          {hasAnnotation ? '💬' : '✏️'}
+          <>{hasAnnotation ? <AnnotationIcon size="sm" /> : <AnnotationIcon size="sm" />}</>
         </button>
       ) : (
         <span className="annotation-inline-form" onClick={(e) => e.stopPropagation()}>
@@ -186,12 +186,10 @@ export function AddAnnotationButton({ paragraphIndex, paragraphPreview, hasAnnot
             className="annotation-inline-input"
           />
           <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={!text.trim()}
-            style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}>
-            ✓
+            style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}><CheckIcon size="sm" />
           </button>
           <button className="btn btn-ghost btn-sm" onClick={() => { setShowInput(false); setText(''); }}
-            style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}>
-            ✕
+            style={{ fontSize: '0.7rem', padding: '0.15rem 0.4rem' }}><CloseIcon size="sm" />
           </button>
         </span>
       )}

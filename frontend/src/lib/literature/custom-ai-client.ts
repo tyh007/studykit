@@ -1,4 +1,3 @@
-import { proxyFetch } from './proxy-fetch'
 
 export interface CustomAIMessage {
   role: 'system' | 'user' | 'assistant'
@@ -64,10 +63,11 @@ export class CustomAIClient {
 
   async checkConnection(): Promise<boolean> {
     try {
-      await proxyFetch(`${this.baseUrl}/models`, {
+      const response = await fetch(`${this.baseUrl}/models`, {
+        method: 'GET',
         headers: this.getHeaders()
       })
-      return true
+      return response.ok
     } catch {
       return false
     }
@@ -75,9 +75,11 @@ export class CustomAIClient {
 
   async getAvailableModels(): Promise<CustomAIModel[]> {
     try {
-      const data = await proxyFetch(`${this.baseUrl}/models`, {
+      const response = await fetch(`${this.baseUrl}/models`, {
+        method: 'GET',
         headers: this.getHeaders()
       })
+      const data = await response.json()
       return data.data || []
     } catch (error) {
       console.error('Failed to get available models:', error)
@@ -98,13 +100,18 @@ export class CustomAIClient {
       body.response_format = request.response_format
     }
 
-    const data = await proxyFetch(`${this.baseUrl}/chat/completions`, {
+    const response = await fetch(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify(body)
     })
 
-    return data as CustomAIResponse
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '')
+      throw new Error(`API error ${response.status}: ${errText}`)
+    }
+
+    return response.json() as Promise<CustomAIResponse>
   }
 
   async generateText(
@@ -165,10 +172,26 @@ export class CustomAIClient {
     if (cleaned.startsWith('```')) {
       cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '')
     }
-    const jsonStart = cleaned.indexOf('{')
-    const jsonEnd = cleaned.lastIndexOf('}')
-    if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
-      cleaned = cleaned.substring(jsonStart, jsonEnd + 1)
+    // Scan forward to find every valid JSON object, return the first one that parses
+    let depth = 0
+    let start = -1
+    for (let i = 0; i < cleaned.length; i++) {
+      if (cleaned[i] === '{') {
+        if (depth === 0) start = i
+        depth++
+      } else if (cleaned[i] === '}') {
+        depth--
+        if (depth === 0 && start !== -1) {
+          const candidate = cleaned.substring(start, i + 1)
+          try {
+            JSON.parse(candidate)
+            return candidate
+          } catch {
+            // This wasn't a valid JSON object, keep scanning
+            start = -1
+          }
+        }
+      }
     }
     return cleaned
   }
