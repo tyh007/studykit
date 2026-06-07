@@ -520,8 +520,8 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
       {contextMenu && contextActions(contextMenu.item)}
 
       {deleteConfirm && (
-        <div className="modal-overlay" onClick={() => setDeleteConfirm(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 380 }}>
+        <div className="modal-overlay glass-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="modal-content glass-dialog" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 380 }}>
             <h2>Move to Trash?</h2>
             <p className="text-sm" style={{ marginBottom: '0.75rem', color: 'var(--color-text-secondary)' }}>
               {deleteConfirm.items.length === 1

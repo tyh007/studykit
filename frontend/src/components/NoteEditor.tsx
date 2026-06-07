@@ -443,7 +443,7 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
         <button className="btn btn-ghost btn-sm" onClick={() => setShowCitationPicker(true)} title="Insert citation" aria-label="Insert citation"><CiteIcon size="sm" /> Cite</button>
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
-        <button className="btn btn-ghost btn-sm" onClick={() => setShowShortcuts(true)} title="Keyboard shortcuts" aria-label="Show keyboard shortcuts">⌨️</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => setShowShortcuts(true)} title="Keyboard shortcuts" aria-label="Show keyboard shortcuts">⌨</button>
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
         {activeParagraphIndex !== null && (
           <AddAnnotationButton

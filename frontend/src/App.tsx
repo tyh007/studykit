@@ -4,6 +4,7 @@ import { useStore } from './store/useStore';
 import { modulesApi, lecturesApi, sourceDocumentsApi } from './lib/api';
 import { literaturePapersApi, paperRelationsApi } from './lib/literature-api';
 import PaperRelationsGraph from './components/literature/PaperRelationsGraph';
+import { SidebarIcon, LiteratureIcon, ReadingListIcon, GraphIcon } from './components/ui/Icons';
 import { db } from './lib/db';
 import PDFViewer from './components/PDFViewer';
 import NoteEditor from './components/NoteEditor';
@@ -45,7 +46,7 @@ function AuthPage() {
 
   return (
     <div className="auth-container">
-      <div className="auth-card">
+      <div className="auth-card glass-dialog">
         <h1>StudyKit</h1>
         <p>{isLogin ? 'Welcome back' : 'Create your account'}</p>
 
@@ -286,9 +287,9 @@ function StudyKitApp() {
       </div>
 
       {/* Header */}
-      <header className="app-header">
+      <header className="app-header glass-header">
         <button className="btn btn-ghost btn-icon" onClick={toggleSidebar} title="Toggle sidebar" aria-label="Toggle sidebar">
-          ☰
+          <SidebarIcon size="lg" />
         </button>
         <div className="logo">StudyKit</div>
         <div className="spacer" />
@@ -307,7 +308,7 @@ function StudyKitApp() {
 
       <div className="app-body">
         {/* Sidebar */}
-        <aside className={`sidebar ${sidebarOpen ? '' : 'closed'} ${sidebarResizing ? 'resizing' : ''}`} aria-label="Module navigation" style={{ width: sidebarOpen ? sidebarWidth : 0 }}>
+        <aside className={`sidebar glass-sidebar ${sidebarOpen ? '' : 'closed'} ${sidebarResizing ? 'resizing' : ''}`} aria-label="Module navigation" style={{ width: sidebarOpen ? sidebarWidth : 0 }}>
           <SidebarContent
             onShowNewModule={() => setShowNewModule(true)}
             onShowNewLecture={() => setShowNewLecture(true)}
@@ -386,7 +387,7 @@ function StudyKitApp() {
                         transition: 'color 0.15s, border-color 0.15s',
                       }}
                     >
-                      {tab === 'papers' ? '📄 Papers' : tab === 'readingLists' ? '📋 Reading Lists' : '🔗 Graph'}
+                      {tab === 'papers' ? <><LiteratureIcon size="sm" /> Papers</> : tab === 'readingLists' ? <><ReadingListIcon size="sm" /> Reading Lists</> : <><GraphIcon size="sm" /> Graph</>}
                     </button>
                   ))}
                 </div>
@@ -624,11 +625,11 @@ function LectureView({
         <div className="note-panel-header">
           <div className="note-panel-tabs">
             <div
-              className={`note-panel-tab ${activeLectureTab === 'notes' ? 'active' : ''}`}
+              className={`note-panel-tab glass-tab ${activeLectureTab === 'notes' ? 'active' : ''}`}
               onClick={() => setActiveLectureTab('notes')}
             >Notes</div>
             <div
-              className={`note-panel-tab ${activeLectureTab === 'literature' ? 'active' : ''}`}
+              className={`note-panel-tab glass-tab ${activeLectureTab === 'literature' ? 'active' : ''}`}
               onClick={() => setActiveLectureTab('literature')}
             >Literature Review</div>
           </div>
