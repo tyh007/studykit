@@ -57,7 +57,36 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
   const [relationLoading, setRelationLoading] = useState(false);
   const [graphData, setGraphData] = useState<{nodes: any[]; edges: any[]}>({nodes: [], edges: []});
   const [graphExpanded, setGraphExpanded] = useState(false);
+  const [splitPercent, setSplitPercent] = useState(55);
   const { selectLitPaper } = useStore();
+  const dragSplitRef = useRef<{ startX: number; startPercent: number } | null>(null);
+
+  const handleSplitDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const container = (e.target as HTMLElement).parentElement;
+    if (!container) return;
+    const containerWidth = container.getBoundingClientRect().width;
+    if (containerWidth === 0) return;
+    dragSplitRef.current = { startX: e.clientX, startPercent: splitPercent };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const handleMouseMove = (ev: MouseEvent) => {
+      if (!dragSplitRef.current) return;
+      const dx = ev.clientX - dragSplitRef.current.startX;
+      const cw = container.getBoundingClientRect().width;
+      const pct = dragSplitRef.current.startPercent + (dx / cw) * 100;
+      setSplitPercent(Math.max(25, Math.min(75, pct)));
+    };
+    const handleMouseUp = () => {
+      dragSplitRef.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [splitPercent]);
 
   // Notes
   const [notes, setNotes] = useState<PaperNote[]>([]);
@@ -315,7 +344,7 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
       {/* Main content: split pane */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         {/* Left: PDF Viewer */}
-        <div style={{ flex: 1, minWidth: 0, overflow: 'auto', borderRight: '1px solid var(--color-border)' }}>
+        <div style={{ width: splitPercent + '%', minWidth: 0, overflow: 'auto' }}>
           {paper.storage_key ? (
             <LiteraturePDFViewer
               paperId={paper.id}
@@ -340,7 +369,8 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
         </div>
 
         {/* Right: Tabs */}
-        <div style={{ width: '45%', minWidth: 360, maxWidth: 600, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <div onMouseDown={handleSplitDragStart} style={{ width: 6, cursor: 'col-resize', background: 'var(--color-bg-secondary)', flexShrink: 0, position: 'relative', zIndex: 5 }} />
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {/* Tab bar */}
           <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
             {(['summary', 'notes', 'metadata', 'relations'] as const).map(t => (
