@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api } from '../lib/api'
+import { PDFProcessor } from '../lib/literature/pdf-processor'
 
 export interface UploadProgress {
   fileName: string
