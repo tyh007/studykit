@@ -12,34 +12,23 @@ function parseAIContent(text: string): { thinking: string | null; response: stri
   const idx = text.indexOf(marker);
   if (idx === -1) return { thinking: null, response: text };
 
-  const afterMarker = text.substring(idx + marker.length);
-  const sections = afterMarker.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+  const lines = text.split('\n');
+  let markerLine = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes("Here's a thinking process:")) { markerLine = i; break; }
+  }
+  if (markerLine === -1) return { thinking: null, response: text };
 
-  let thinkingParts: string[] = [];
-  let responseParts: string[] = [];
-  let foundResponse = false;
-
-  for (const section of sections) {
-    if (!foundResponse) {
-      const firstLine = section.split('\n')[0].trim();
-      // Check if this section looks like a thinking step
-      const isThinking = /^\d+\.|^[-*•]|^Here|^Let\s+me|^I['']ll|^Think|^Step|^Analyze|^Based on|^First|^Second|^Third|^Finally/i.test(firstLine);
-      if (isThinking || thinkingParts.length === 0) {
-        thinkingParts.push(section);
-      } else {
-        responseParts.push(section);
-        foundResponse = true;
-      }
-    } else {
-      responseParts.push(section);
-    }
+  // Find the LAST numbered step (1., 2., etc.) after the marker
+  let lastNumLine = -1;
+  for (let i = markerLine + 1; i < lines.length; i++) {
+    if (/^\s*\d+\./.test(lines[i])) { lastNumLine = i; }
   }
 
-  if (thinkingParts.length > 0 && responseParts.length > 0) {
-    return {
-      thinking: thinkingParts.join('\n\n'),
-      response: responseParts.join('\n\n')
-    };
+  if (lastNumLine !== -1) {
+    const thinking = lines.slice(0, lastNumLine + 1).join('\n').trim();
+    const rest = lines.slice(lastNumLine + 1).map(l => l.trim()).filter(Boolean).join('\n').trim();
+    return { thinking, response: rest || text };
   }
   return { thinking: null, response: text };
 }
