@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { literatureAiApi } from '../../lib/literature-api';
 import { CloseIcon } from '../ui/Icons';
 import { readAIProviderConfig } from '../../lib/literature/ai-provider-config';
