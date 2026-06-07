@@ -3,6 +3,26 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const path = require('path');
 const fs = require('fs');
+const multer = require('multer');
+
+const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '..', '..', 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.pdf';
+    cb(null, `lit-${uuidv4()}${ext}`);
+  },
+});
+const parsePdfUpload = multer({ 
+  storage,
+  fileFilter: (req, file, cb) => {
+    cb(null, file.mimetype === 'application/pdf');
+  },
+  limits: { fileSize: 50 * 1024 * 1024 },
+}).single('file');
 
 const router = express.Router();
 
@@ -23,7 +43,7 @@ router.get('/', async (req, res) => {
     const result = await db.query(
       `SELECT id, project_id, workspace_id, file_name, file_size, file_type,
               uploaded_at, processed_at, title, authors, year, journal, doi,
-              abstract, extracted_data, reading_status, importance, processing_status, error_message,
+              abstract, full_text, extracted_data, reading_status, importance, processing_status, error_message,
               in_trash, trashed_at, storage_key, citation_item_id, created_at, updated_at
        FROM literature_papers
        WHERE workspace_id = $1 AND project_id = $2 AND deleted_at IS NULL AND in_trash = $3
@@ -189,5 +209,66 @@ router.get('/:id/download', async (req, res) => {
     res.status(500).json({ error: 'Failed to download paper' });
   }
 });
+
+
+/**
+ * POST /api/literature/papers/upload — upload PDF and create paper
+ */
+router.post('/upload', (req, res) => {
+  parsePdfUpload(req, res, async (err) => {
+    if (err) {
+      return res.status(400).json({ error: err.message || 'Upload failed' });
+    }
+    try {
+      const file = req.file;
+      if (!file) return res.status(400).json({ error: 'No PDF file uploaded' });
+
+      const { project_id } = req.body;
+      if (!project_id) {
+        fs.unlinkSync(file.path);
+        return res.status(400).json({ error: 'project_id is required' });
+      }
+
+      const ws = await db.query(
+        'SELECT id FROM workspaces WHERE owner_user_id = $1 AND deleted_at IS NULL LIMIT 1',
+        [req.user.id]
+      );
+      if (ws.rows.length === 0) return res.status(400).json({ error: 'No workspace found' });
+
+      // Extract text from PDF
+      let fullText = null;
+      try {
+        const pdfParse = require('pdf-parse');
+        const pdfBuffer = fs.readFileSync(file.path);
+        const pdfData = await pdfParse(pdfBuffer);
+        fullText = pdfData.text;
+      } catch (parseErr) {
+        console.warn('PDF text extraction failed:', parseErr.message);
+      }
+
+      const id = uuidv4();
+      const storageKey = file.filename;
+
+      await db.query(
+        `INSERT INTO literature_papers (id, project_id, workspace_id, file_name, file_size, file_type,
+          storage_key, title, full_text, processing_status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [id, project_id, ws.rows[0].id, file.originalname, file.size, 'application/pdf',
+         storageKey, file.originalname.replace('.pdf', ''), fullText, fullText ? 'pending' : 'completed']
+      );
+
+      const result = await db.query('SELECT * FROM literature_papers WHERE id = $1', [id]);
+      res.status(201).json(result.rows[0]);
+    } catch (err) {
+      console.error('Upload error:', err);
+      // Clean up uploaded file on error
+      if (req.file?.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      res.status(500).json({ error: 'Failed to upload paper' });
+    }
+  });
+});
+
 
 module.exports = router;
