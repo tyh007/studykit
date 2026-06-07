@@ -64,10 +64,17 @@ export class CustomAIClient {
 
   async checkConnection(): Promise<boolean> {
     try {
-      await proxyFetch(`${this.baseUrl}/models`, {
-        headers: this.getHeaders()
+      const response = await fetch('/api/literature/ai/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: `${this.baseUrl}/models`,
+          method: 'GET',
+          headers: this.getHeaders(),
+        })
       })
-      return true
+      const data = await response.json()
+      return data.success === true
     } catch {
       return false
     }
@@ -75,10 +82,17 @@ export class CustomAIClient {
 
   async getAvailableModels(): Promise<CustomAIModel[]> {
     try {
-      const data = await proxyFetch(`${this.baseUrl}/models`, {
-        headers: this.getHeaders()
+      const response = await fetch('/api/literature/ai/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: `${this.baseUrl}/models`,
+          method: 'GET',
+          headers: this.getHeaders(),
+        })
       })
-      return data.data || []
+      const data = await response.json()
+      return data.data?.data || []
     } catch (error) {
       console.error('Failed to get available models:', error)
       throw error
@@ -98,13 +112,24 @@ export class CustomAIClient {
       body.response_format = request.response_format
     }
 
-    const data = await proxyFetch(`${this.baseUrl}/chat/completions`, {
+    const response = await fetch('/api/literature/ai/proxy', {
       method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify(body)
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: `${this.baseUrl}/chat/completions`,
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(body)
+      })
     })
 
-    return data as CustomAIResponse
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: 'Proxy request failed' }))
+      throw new Error(err.error || `HTTP ${response.status}`)
+    }
+
+    const data = await response.json()
+    return data.data as CustomAIResponse
   }
 
   async generateText(

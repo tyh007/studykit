@@ -95,8 +95,10 @@ router.post('/proxy', async (req, res) => {
     // Security: only allow local addresses
     let parsedUrl = new URL(url);
     const hostname = parsedUrl.hostname;
-    if (!['localhost', '127.0.0.1', '::1', 'host.docker.internal'].includes(hostname)) {
-      return res.status(403).json({ error: 'Only local addresses are allowed' });
+    const allowedHostnames = ['localhost', '127.0.0.1', '::1', 'host.docker.internal',
+      'api.deepseek.com', 'api.openai.com', 'api.groq.com', 'openrouter.ai'];
+    if (!allowedHostnames.includes(hostname)) {
+      return res.status(403).json({ error: 'Domain not allowed for proxy' });
     }
 
     // In Docker, localhost refers to the container, not the host
