@@ -143,8 +143,7 @@ export class CustomAIClient {
       ],
       temperature: 0.5,
       max_tokens: 4096,
-      stream: false,
-      response_format: { type: 'json_object' }
+      stream: false
     })
 
     const content = response.choices[0]?.message?.content || ''
@@ -172,10 +171,24 @@ export class CustomAIClient {
     if (cleaned.startsWith('```')) {
       cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '')
     }
-    const jsonStart = cleaned.indexOf('{')
-    const jsonEnd = cleaned.lastIndexOf('}')
-    if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
-      cleaned = cleaned.substring(jsonStart, jsonEnd + 1)
+    // Find the LAST valid JSON object (skip thinking preambles)
+    let jsonEnd = cleaned.lastIndexOf('}')
+    if (jsonEnd !== -1) {
+      // Walk backwards to find matching opening brace
+      let depth = 0
+      let jsonStart = -1
+      for (let i = jsonEnd; i >= 0; i--) {
+        if (cleaned[i] === '}') depth++
+        else if (cleaned[i] === '{') depth--
+        if (depth === 0) { jsonStart = i; break }
+      }
+      if (jsonStart !== -1) {
+        const candidate = cleaned.substring(jsonStart, jsonEnd + 1)
+        try {
+          JSON.parse(candidate)
+          return candidate
+        } catch {}
+      }
     }
     return cleaned
   }

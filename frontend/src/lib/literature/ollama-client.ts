@@ -1,5 +1,4 @@
 import { readOllamaSettings, type OllamaSettings } from './ollama-settings'
-import { proxyFetch } from './proxy-fetch'
 
 export interface OllamaMessage {
   role: 'system' | 'user' | 'assistant'
@@ -61,8 +60,8 @@ export class OllamaClient {
 
   async checkConnection(): Promise<boolean> {
     try {
-      await proxyFetch(`${this.baseUrl}/api/tags`)
-      return true
+      const response = await fetch(`${this.baseUrl}/api/tags`)
+      return response.ok
     } catch (error) {
       console.error('Ollama connection check failed:', error)
       return false
@@ -71,7 +70,8 @@ export class OllamaClient {
 
   async getAvailableModels(): Promise<OllamaModel[]> {
     try {
-      const data = await proxyFetch(`${this.baseUrl}/api/tags`)
+      const response = await fetch(`${this.baseUrl}/api/tags`)
+      const data = await response.json()
       return data.models || []
     } catch (error) {
       console.error('Failed to get available models:', error)
@@ -100,15 +100,17 @@ export class OllamaClient {
   }
 
   async pullModel(model: string): Promise<void> {
-    await proxyFetch(`${this.baseUrl}/api/pull`, {
+    await fetch(`${this.baseUrl}/api/pull`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: model })
     })
   }
 
   async chat(request: OllamaRequest): Promise<OllamaResponse> {
-    const data = await proxyFetch(`${this.baseUrl}/api/chat`, {
+    const response = await fetch(`${this.baseUrl}/api/chat`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: request.model || this.defaultModel,
         messages: request.messages,
@@ -125,6 +127,7 @@ export class OllamaClient {
       })
     })
 
+    const data = await response.json()
     return data as OllamaResponse
   }
 
