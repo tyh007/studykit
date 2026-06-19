@@ -5,7 +5,6 @@
    ========================================================================== */
 
 import React from 'react';
-import { LogoMark } from './Logo';
 
 type IconSize = 'sm' | 'md' | 'lg' | 'xl';
 type IconProps = {
@@ -28,8 +27,17 @@ function IconWrap({ children, size = 'md', className = '', style, onClick, title
   );
 }
 
-/* ---- Brand Logo (re-exported from Logo.tsx for back-compat) ---- */
-export { LogoMark as LogoIcon } from './Logo';
+/* ---- Brand Logo ---- */
+export function LogoIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      {/* Stylized 'S' mark — simple line art compatible with IconWrap */}
+      <path d="M12 4a5 5 0 0 1 0 10H9" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+      <path d="M12 14a5 5 0 0 1 0 6H9" strokeWidth="1.5" strokeLinecap="round" fill="none" />
+      <line x1="9" y1="12" x2="15" y2="12" strokeWidth="1.5" strokeLinecap="round" opacity="0.35" />
+    </IconWrap>
+  );
+}
 
 /* ---- Sidebar Toggle (panel icon) ---- */
 export function SidebarIcon(props: IconProps) {
@@ -534,7 +542,7 @@ export function CornellIcon(props: IconProps) {
    Combined icon component for dynamic rendering
    ========================================================================== */
 const iconMap: Record<string, React.ComponentType<IconProps>> = {
-  logo: LogoMark,
+  logo: LogoIcon,
   sidebar: SidebarIcon,
   modules: ModulesIcon,
   literature: LiteratureIcon,
