@@ -5,6 +5,7 @@ import { modulesApi, lecturesApi, sourceDocumentsApi } from './lib/api';
 import { literaturePapersApi, paperRelationsApi } from './lib/literature-api';
 import PaperRelationsGraph from './components/literature/PaperRelationsGraph';
 import { SidebarIcon, LiteratureIcon, ReadingListIcon, GraphIcon } from './components/ui/Icons';
+import { LogoMarkWithWordmark } from './components/ui/Logo';
 import { db } from './lib/db';
 import PDFViewer from './components/PDFViewer';
 import NoteEditor from './components/NoteEditor';
@@ -291,7 +292,7 @@ function StudyKitApp() {
         <button className="btn btn-ghost btn-icon" onClick={toggleSidebar} title="Toggle sidebar" aria-label="Toggle sidebar">
           <SidebarIcon size="lg" />
         </button>
-        <div className="logo">StudyKit</div>
+        <div className="logo"><LogoMarkWithWordmark size="md" /></div>
         <div className="spacer" />
         <div className="header-right">
           <div className="sync-indicator" role="status" aria-label={`Save status: ${syncStatus}`}>
