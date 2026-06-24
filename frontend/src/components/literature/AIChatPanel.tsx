@@ -266,6 +266,8 @@ EXTRACTED DATA: ${JSON.stringify(paper.extracted_data || {})}`
               fontSize: '0.8rem',
               lineHeight: 1.5,
               whiteSpace: 'pre-wrap',
+              maxHeight: msg.role === 'assistant' ? '30rem' : '20rem',
+              overflow: 'auto',
             }}>
               {msg.role === 'assistant' ? (() => {
                 const parsed = parseAIContent(msg.content);
@@ -274,7 +276,7 @@ EXTRACTED DATA: ${JSON.stringify(paper.extracted_data || {})}`
                     <>
                       <details style={{ marginBottom: '0.25rem' }}>
                         <summary style={{ cursor: 'pointer', fontSize: '0.72rem', color: 'var(--color-text-muted)', userSelect: 'none' }}>
-                          💭 Thinking
+                          💭 Thinking (click to expand)
                         </summary>
                         <div style={{
                           fontSize: '0.72rem', color: 'var(--color-text-muted)',
@@ -283,15 +285,17 @@ EXTRACTED DATA: ${JSON.stringify(paper.extracted_data || {})}`
                           marginTop: '0.125rem',
                           whiteSpace: 'pre-wrap',
                           lineHeight: 1.5,
+                          maxHeight: '12rem',
+                          overflow: 'auto',
                         }}>
                           {parsed.thinking}
                         </div>
                       </details>
-                      <div style={{ lineHeight: 1.5 }}><ReactMarkdown>{parsed.response}</ReactMarkdown></div>
+                      <div style={{ lineHeight: 1.5, overflow: 'auto', maxHeight: '20rem' }}><ReactMarkdown>{parsed.response}</ReactMarkdown></div>
                     </>
                   );
                 }
-                return msg.content;
+                return <ReactMarkdown>{msg.content}</ReactMarkdown>;
               })() : <ReactMarkdown>{msg.content}</ReactMarkdown>}
             </div>
           </div>

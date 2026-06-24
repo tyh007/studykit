@@ -118,7 +118,11 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
     literatureAiApi.profiles().then(result => {
       const compatible = result.profiles.filter((profile: AIProfile) => profile.capabilities.structured);
       setAIProfiles(compatible);
-      setExtractionProfileId(current => current || result.defaults?.summaryProfileId || compatible[0]?.id || '');
+      const defaultProfileId = result.defaults?.summaryProfileId;
+      const resolvedProfileId = compatible.some((profile: AIProfile) => profile.id === defaultProfileId)
+        ? defaultProfileId
+        : compatible[0]?.id || '';
+      setExtractionProfileId(resolvedProfileId);
     }).catch(() => {
       setAIProfiles([]);
       setExtractionProfileId('');
