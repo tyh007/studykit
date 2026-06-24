@@ -1,10 +1,10 @@
 /* ==========================================================================
    StudyKit — Custom SVG Icon Library
    Premium minimalist line icons for Liquid Glass design language.
-   All icons use 24x24 viewBox, 1.75px stroke, round caps, round joins.
+   All icons use stable pixel sizing, rounded caps/joins, and currentColor.
    ========================================================================== */
 
-import React from 'react';
+import React, { useId } from 'react';
 
 type IconSize = 'sm' | 'md' | 'lg' | 'xl';
 type IconProps = {
@@ -19,8 +19,16 @@ type IconProps = {
 function IconWrap({ children, size = 'md', className = '', style, onClick, title }: IconProps & { children: React.ReactNode }) {
   const sizeClass = size === 'sm' ? 'sk-icon-sm' : size === 'lg' ? 'sk-icon-lg' : size === 'xl' ? 'sk-icon-xl' : '';
   return (
-    <span className={`sk-icon ${sizeClass} ${className}`} style={style} onClick={onClick} role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined} title={title}>
-      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <span
+      className={`sk-icon ${sizeClass} ${className}`.trim()}
+      style={style}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      title={title}
+      aria-hidden={title ? undefined : true}
+    >
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" focusable="false">
         {children}
       </svg>
     </span>
@@ -29,13 +37,47 @@ function IconWrap({ children, size = 'md', className = '', style, onClick, title
 
 /* ---- Brand Logo ---- */
 export function LogoIcon(props: IconProps) {
+  const rawId = useId();
+  const prismId = `sk-icon-prism-${rawId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+
   return (
-    <IconWrap {...props}>
-      {/* Stylized 'S' mark — simple line art compatible with IconWrap */}
-      <path d="M12 4a5 5 0 0 1 0 10H9" strokeWidth="1.75" strokeLinecap="round" fill="none" />
-      <path d="M12 14a5 5 0 0 1 0 6H9" strokeWidth="1.75" strokeLinecap="round" fill="none" />
-      <line x1="9" y1="12" x2="15" y2="12" strokeWidth="1.75" strokeLinecap="round" opacity="0.35" />
-    </IconWrap>
+    <span
+      className={`sk-icon sk-icon-logo ${props.size === 'sm' ? 'sk-icon-sm' : props.size === 'lg' ? 'sk-icon-lg' : props.size === 'xl' ? 'sk-icon-xl' : ''} ${props.className || ''}`.trim()}
+      style={props.style}
+      onClick={props.onClick}
+      role={props.onClick ? 'button' : undefined}
+      tabIndex={props.onClick ? 0 : undefined}
+      title={props.title}
+      aria-hidden={props.title ? undefined : true}
+    >
+      <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" focusable="false">
+        <defs>
+          <linearGradient id={prismId} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stopColor="var(--accent-butter, #F5E5BE)" />
+            <stop offset="0.33" stopColor="var(--accent-blush, #F2D5D2)" />
+            <stop offset="0.66" stopColor="var(--accent-rose, #E5B8B0)" />
+            <stop offset="1" stopColor="var(--accent-lilac, #DCC8DC)" />
+          </linearGradient>
+        </defs>
+        <path
+          d="M 23 6 H 11 a 5 5 0 0 0 0 10 H 21 a 5 5 0 0 1 0 10 H 9"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <line
+          x1="13"
+          y1="16"
+          x2="19"
+          y2="16"
+          stroke={`url(#${prismId})`}
+          strokeWidth="4.5"
+          strokeLinecap="round"
+        />
+      </svg>
+    </span>
   );
 }
 

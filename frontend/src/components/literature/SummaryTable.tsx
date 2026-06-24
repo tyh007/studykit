@@ -9,7 +9,7 @@ import AISettingsPanel from './AISettingsPanel';
 import ColumnConfigDialog, { getVisibleColumnKeys, saveColumnConfig, type ColumnConfigItem } from './ColumnConfigDialog';
 import { createAIExtractionService } from '../../lib/literature/ai-extraction';
 import { smartExtract } from '../../lib/literature/multimodal-extraction';
-import { readAIProviderConfig } from '../../lib/literature/ai-provider-config';
+import type { AIProfile } from '../../lib/literature/ai-profiles';
 import type { LiteraturePaper, ExtractedData } from '../../types';
 
 const FIELD_LABELS: Record<string, string> = {
@@ -80,6 +80,8 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
   const [showExtractMenu, setShowExtractMenu] = useState(false);
   const [extractingBatch, setExtractingBatch] = useState(false);
   const [extractingSingle, setExtractingSingle] = useState<Set<string>>(new Set());
+  const [aiProfiles, setAIProfiles] = useState<AIProfile[]>([]);
+  const [extractionProfileId, setExtractionProfileId] = useState('');
   const [filterReadingListId, setFilterReadingListId] = useState<string | null>(null);
   const [filterCitationIds, setFilterCitationIds] = useState<Set<string>>(new Set());
   const tableRef = useRef<HTMLDivElement>(null);
@@ -111,6 +113,19 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
   }, [projectId, view]);
 
   useEffect(() => { loadPapers(); }, [loadPapers]);
+
+  const loadAIProfiles = useCallback(() => {
+    literatureAiApi.profiles().then(result => {
+      const compatible = result.profiles.filter((profile: AIProfile) => profile.capabilities.structured);
+      setAIProfiles(compatible);
+      setExtractionProfileId(current => current || result.defaults?.summaryProfileId || compatible[0]?.id || '');
+    }).catch(() => {
+      setAIProfiles([]);
+      setExtractionProfileId('');
+    });
+  }, []);
+
+  useEffect(() => { loadAIProfiles(); }, [loadAIProfiles]);
 
   const handleFileDrop = async (e: React.DragEvent) => {
     e.preventDefault();
@@ -159,7 +174,7 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
     loadPapers();
   };
 
-  const handleBatchExtract = async () => {
+  const handleBatchExtract = async (mode: 'text' | 'vision' | 'auto' = extractMode) => {
     const targetPapers = selectedIds.size > 0
       ? filteredPapers.filter(p => selectedIds.has(p.id))
       : filteredPapers.filter(p => !p.extracted_data && p.processing_status !== 'processing');
@@ -167,18 +182,16 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
     if (targetPapers.length === 0) return;
 
     setExtractingBatch(true);
-    const service = createAIExtractionService();
-    const aiConfig = readAIProviderConfig();
-
+    const service = createAIExtractionService(extractionProfileId || undefined);
     for (const paper of targetPapers) {
       try {
         // Try text extraction first if text exists and mode allows it
-        const useVision = extractMode === 'vision' || (extractMode === 'auto' && (!paper.full_text || paper.full_text.length < 200));
+        const useVision = mode === 'vision' || (mode === 'auto' && (!paper.full_text || paper.full_text.length < 200));
 
         if (useVision && paper.storage_key) {
           // Vision mode: render pages as images
           const pdfUrl = `/uploads/${paper.storage_key}`;
-          const extractedData = await smartExtract(pdfUrl, paper.full_text, undefined, aiConfig);
+          const extractedData = await smartExtract(pdfUrl, paper.full_text, undefined, extractionProfileId || undefined);
           if (extractedData) {
             await literaturePapersApi.update(paper.id, { extracted_data: extractedData, processing_status: 'completed' });
             continue;
@@ -209,17 +222,16 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
     if (!paper) return;
 
     try {
-      const aiConfig = readAIProviderConfig();
       const useVision = extractMode === 'vision' || (extractMode === 'auto' && (!paper.full_text || paper.full_text.length < 200));
 
       if (useVision && paper.storage_key) {
         const pdfUrl = `/uploads/${paper.storage_key}`;
-        const extractedData = await smartExtract(pdfUrl, paper.full_text, undefined, aiConfig);
+        const extractedData = await smartExtract(pdfUrl, paper.full_text, undefined, extractionProfileId || undefined);
         if (extractedData) {
           await literaturePapersApi.update(paper.id, { extracted_data: extractedData, processing_status: 'completed' });
         }
       } else if (paper.full_text) {
-        const service = createAIExtractionService();
+        const service = createAIExtractionService(extractionProfileId || undefined);
         const { extractedData } = await service.extractWithFallback(
           paper.full_text,
           'brief',
@@ -342,7 +354,7 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
           onChange={e => setSearchQuery(e.target.value)}
           style={{ flex: 1, minWidth: 150 }}
         />
-        <AIStatusIndicator />
+        <AIStatusIndicator onOpenSettings={() => setShowSettings(true)} />
         <button
           className={`btn btn-sm ${view === 'library' ? 'btn-primary' : 'btn-ghost'}`}
           onClick={() => { setView('library'); setSelectedIds(new Set()); }}
@@ -373,19 +385,35 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
                 position: 'absolute', top: '100%', right: 0, zIndex: 100,
                 background: 'var(--color-bg)', border: '1px solid var(--color-border)',
                 borderRadius: 'var(--radius-sm)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                minWidth: 160, padding: '0.25rem',
+                minWidth: 250, padding: '0.45rem',
               }}>
+                <label className="text-xs text-muted" style={{ display: 'block', margin: '0 0.25rem 0.3rem' }}>本次使用</label>
+                <select
+                  value={extractionProfileId}
+                  onChange={event => setExtractionProfileId(event.target.value)}
+                  style={{ width: '100%', fontSize: '0.75rem', marginBottom: '0.35rem' }}
+                >
+                  {aiProfiles.length === 0 && <option value="">尚未配置 AI</option>}
+                  {aiProfiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name} · {profile.model || '未选模型'}</option>)}
+                </select>
                 <button className="btn btn-ghost btn-sm" style={{ display: 'block', width: '100%', textAlign: 'left', fontSize: '0.78rem' }}
-                  onClick={() => { setExtractMode('auto'); setShowExtractMenu(false); handleBatchExtract(); }}>
+                  disabled={!extractionProfileId}
+                  onClick={() => { setExtractMode('auto'); setShowExtractMenu(false); handleBatchExtract('auto'); }}>
                   ⚡ Auto (text or vision)
                 </button>
                 <button className="btn btn-ghost btn-sm" style={{ display: 'block', width: '100%', textAlign: 'left', fontSize: '0.78rem' }}
-                  onClick={() => { setExtractMode('text'); setShowExtractMenu(false); handleBatchExtract(); }}>
+                  disabled={!extractionProfileId}
+                  onClick={() => { setExtractMode('text'); setShowExtractMenu(false); handleBatchExtract('text'); }}>
                   📝 Text only
                 </button>
                 <button className="btn btn-ghost btn-sm" style={{ display: 'block', width: '100%', textAlign: 'left', fontSize: '0.78rem' }}
-                  onClick={() => { setExtractMode('vision'); setShowExtractMenu(false); handleBatchExtract(); }}>
+                  disabled={!extractionProfileId}
+                  onClick={() => { setExtractMode('vision'); setShowExtractMenu(false); handleBatchExtract('vision'); }}>
                   👁 Vision (page images)
+                </button>
+                <button className="btn btn-ghost btn-sm" style={{ display: 'block', width: '100%', textAlign: 'left', fontSize: '0.72rem', marginTop: '0.2rem' }}
+                  onClick={() => { setShowExtractMenu(false); setShowSettings(true); }}>
+                  管理 AI 配置…
                 </button>
               </div>
             )}
@@ -591,7 +619,10 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
       {showSettings && (
         <AISettingsPanel
           onClose={() => setShowSettings(false)}
-          onSave={() => {}}
+          onSave={() => {
+            loadAIProfiles();
+            window.dispatchEvent(new Event('studykit-ai-config-changed'));
+          }}
         />
       )}
 

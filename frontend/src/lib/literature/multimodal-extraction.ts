@@ -1,7 +1,8 @@
 import * as pdfjsLib from 'pdfjs-dist'
-import { readAIProviderConfig, type AIProviderConfig } from './ai-provider-config'
 import { getAuthToken } from '../api'
 import { fetchWithTimeout } from './fetch-with-timeout'
+import { literatureAiApi } from '../literature-api'
+import type { AITaskDefaults } from './ai-profiles'
 
 // Ensure PDF.js worker is set (do once)
 if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
@@ -60,9 +61,10 @@ export async function renderPDFPagesToBase64(
 export async function extractWithVision(
   pages: string[],
   customPrompt?: string,
-  config?: AIProviderConfig,
+  profileId?: string,
 ): Promise<any> {
-  const cfg = config || readAIProviderConfig()
+  const defaults = await literatureAiApi.taskDefaults() as AITaskDefaults
+  const cfg = defaults.summaryOptions
 
   // Build extraction prompt with field definitions
   const enabledFields = cfg.enabledFields?.length
@@ -119,8 +121,7 @@ Do NOT wrap in markdown code blocks.`
     body: JSON.stringify({
       pages,
       prompt,
-      geminiModel: cfg.geminiModel || 'gemini-2.0-flash',
-      userApiKey: cfg.geminiApiKey,
+      profileId,
       temperature: cfg.temperature ?? 0.3,
       maxTokens: cfg.maxTokens || 4096,
     }),
@@ -156,9 +157,10 @@ export async function smartExtract(
   pdfUrl: string,
   existingText?: string | null,
   customPrompt?: string,
-  config?: AIProviderConfig,
+  profileId?: string,
 ): Promise<any> {
-  const cfg = config || readAIProviderConfig()
+  const defaults = await literatureAiApi.taskDefaults() as AITaskDefaults
+  const cfg = defaults.summaryOptions
 
   // Determine whether to use vision mode
   const textIsEmpty = !existingText || existingText.trim().length < 200
@@ -174,5 +176,5 @@ export async function smartExtract(
   const pages = await renderPDFPagesToBase64(pdfUrl, 20)
   if (pages.length === 0) throw new Error('Failed to render PDF pages')
 
-  return await extractWithVision(pages, customPrompt, cfg)
+  return await extractWithVision(pages, customPrompt, profileId || defaults.visionProfileId || undefined)
 }

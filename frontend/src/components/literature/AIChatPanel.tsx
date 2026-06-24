@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { literatureAiApi } from '../../lib/literature-api';
 import { CloseIcon } from '../ui/Icons';
-import { readAIProviderConfig } from '../../lib/literature/ai-provider-config';
-import { readCustomAISettings } from '../../lib/literature/custom-ai-settings';
+import { OllamaClient } from '../../lib/literature/ollama-client';
 import { CustomAIClient } from '../../lib/literature/custom-ai-client';
+import { readLocalProfileCredential, type AIProfile } from '../../lib/literature/ai-profiles';
 import ReactMarkdown from 'react-markdown';
 import type { LiteraturePaper } from '../../types';
 
@@ -61,6 +61,8 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
   });
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [profiles, setProfiles] = useState<AIProfile[]>([]);
+  const [profileId, setProfileId] = useState('');
   const [expanded, setExpanded] = useState(false);
   const [panelHeight, setPanelHeight] = useState(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('lit-chat-height') : null;
@@ -97,6 +99,17 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    literatureAiApi.profiles().then(result => {
+      const available = result.profiles.filter((profile: AIProfile) => profile.capabilities.text);
+      setProfiles(available);
+      setProfileId(result.defaults?.chatProfileId || available[0]?.id || '');
+    }).catch(() => {
+      setProfiles([]);
+      setProfileId('');
+    });
+  }, []);
+
   const handleSend = async () => {
     if (!input.trim() || loading) return;
 
@@ -106,34 +119,54 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
     setLoading(true);
 
     try {
-      const config = readAIProviderConfig();
       const chatMessages = [...messages, userMessage].map(m => ({
         role: m.role,
         content: m.content,
       }));
 
-      if (config.provider === 'custom') {
-        // Use CustomAIClient directly (matches user's MLX setup)
-        const customSettings = readCustomAISettings();
-        if (!customSettings.baseUrl) throw new Error('Custom API URL not configured in AI Settings');
-        const client = new CustomAIClient(customSettings.baseUrl, customSettings.model, customSettings.apiKey);
+      const profile = profiles.find(item => item.id === profileId);
+      if (!profile) throw new Error('请先在 Literature AI 配置中心设置论文问答模型');
+
+      if (profile.provider === 'ollama') {
+        const client = new OllamaClient(profile.baseUrl, profile.model);
+        const paperContext = paper
+          ? `You are analyzing this academic paper.
+TITLE: ${paper.title || 'Untitled'}
+AUTHORS: ${paper.authors || 'Unknown'}
+YEAR: ${paper.year || 'Unknown'}
+ABSTRACT: ${paper.abstract || 'Not available'}
+EXTRACTED DATA: ${JSON.stringify(paper.extracted_data || {})}
+Answer from this paper and say when information is unavailable.`
+          : 'You are a research assistant helping analyze academic literature.';
         const result = await client.chat({
-          model: customSettings.model || 'default',
-          messages: chatMessages,
-          temperature: 0.3,
-          max_tokens: 2048,
+          model: profile.model,
+          messages: [{ role: 'system', content: paperContext }, ...chatMessages],
           stream: false,
-        });
-        const reply = result.choices?.[0]?.message?.content || '';
-        setMessages(prev => [...prev, { role: 'assistant', content: reply || '(no response)' }]);
+          options: { temperature: 0.3, max_tokens: 4096 },
+        })
+        setMessages(prev => [...prev, { role: 'assistant', content: result.message?.content || '(no response)' }]);
+      } else if (profile.provider === 'custom' && profile.local) {
+        const client = new CustomAIClient(profile.baseUrl, profile.model, readLocalProfileCredential(profile.id));
+        const paperContext = paper
+          ? `You are analyzing this academic paper.
+TITLE: ${paper.title || 'Untitled'}
+ABSTRACT: ${paper.abstract || 'Not available'}
+EXTRACTED DATA: ${JSON.stringify(paper.extracted_data || {})}`
+          : 'You are a research assistant helping analyze academic literature.';
+        const result = await client.chat({
+          model: profile.model,
+          messages: [{ role: 'system', content: paperContext }, ...chatMessages],
+          temperature: 0.3,
+          max_tokens: 4096,
+          stream: false,
+        })
+        setMessages(prev => [...prev, { role: 'assistant', content: result.choices?.[0]?.message?.content || '(no response)' }]);
       } else {
-        // Fallback: backend Gemini chat
         const result = await literatureAiApi.chat({
           paperId: paper?.id,
           paperIds: paperIds || (paper?.id ? [paper.id] : undefined),
           messages: chatMessages,
-          geminiApiKey: config.geminiApiKey,
-          geminiModel: config.geminiModel || 'gemini-2.0-flash',
+          profileId: profile.id,
         });
         setMessages(prev => [...prev, { role: 'assistant', content: result.message.content }]);
       }
@@ -192,7 +225,18 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
         borderBottom: '1px solid var(--color-border-light)',
         background: 'var(--color-bg-secondary)',
       }}>
-        <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>AI Assistant</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+          <span style={{ fontSize: '0.78rem', fontWeight: 600, whiteSpace: 'nowrap' }}>AI Assistant</span>
+          <select
+            value={profileId}
+            onChange={event => setProfileId(event.target.value)}
+            style={{ maxWidth: 210, minWidth: 120, fontSize: '0.72rem', padding: '0.15rem 0.35rem' }}
+            title="仅切换本次对话使用的 AI 配置"
+          >
+            {profiles.length === 0 && <option value="">未配置 AI</option>}
+            {profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name} · {profile.model || '未选模型'}</option>)}
+          </select>
+        </div>
         <button
           className="btn btn-ghost btn-sm"
           onClick={() => { setExpanded(false); onClose?.(); }}

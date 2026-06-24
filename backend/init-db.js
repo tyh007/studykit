@@ -45,6 +45,8 @@ async function initDatabase() {
 async function migrateDatabase(pool) {
   // Check and create Stage Two tables if missing
   const tables = [
+    'ai_provider_profiles',
+    'ai_task_defaults',
     'external_accounts',
     'external_objects',
     'connector_sync_events',
@@ -137,6 +139,7 @@ async function migrateDatabase(pool) {
 
   // Check and create indexes for these tables
   const indexes = [
+    'idx_ai_profiles_workspace',
     'idx_ext_accounts_workspace_provider',
     'idx_ext_objects_account',
     'idx_ext_objects_local',

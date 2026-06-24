@@ -101,18 +101,33 @@ export const literatureCustomFieldsApi = {
 
 export const literatureAiApi = {
   check: () => litRequest<{ available: boolean }>('/literature/ai/check', { method: 'POST' }),
-  extract: (data: { systemPrompt: string; userPrompt: string; detailLevel?: string; geminiModel?: string; userApiKey?: string }) =>
-    litRequest<{ success: boolean; extractedData: any; error?: string }>('/literature/ai/extract', {
+  providers: () => litRequest<{ providers: any[] }>('/literature/ai/providers'),
+  profiles: () => litRequest<{ profiles: any[]; defaults: any }>('/literature/ai/profiles'),
+  createProfile: (data: { name: string; provider: string; baseUrl?: string; model?: string; apiKey?: string; options?: Record<string, unknown> }) =>
+    litRequest<{ profile: any }>('/literature/ai/profiles', { method: 'POST', body: JSON.stringify(data) }),
+  updateProfile: (id: string, data: { name?: string; provider?: string; baseUrl?: string; model?: string; apiKey?: string; clearCredential?: boolean; options?: Record<string, unknown> }) =>
+    litRequest<{ profile: any }>(`/literature/ai/profiles/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteProfile: (id: string) =>
+    litRequest<{ success: boolean }>(`/literature/ai/profiles/${id}`, { method: 'DELETE' }),
+  testProfile: (id: string) =>
+    litRequest<{ success: boolean; models?: string[]; local?: boolean; baseUrl?: string }>(`/literature/ai/profiles/${id}/test`, { method: 'POST' }),
+  profileModels: (id: string) =>
+    litRequest<{ models: string[]; local?: boolean; baseUrl?: string }>(`/literature/ai/profiles/${id}/models`),
+  taskDefaults: () => litRequest<any>('/literature/ai/task-defaults'),
+  updateTaskDefaults: (data: Record<string, unknown>) =>
+    litRequest<any>('/literature/ai/task-defaults', { method: 'PATCH', body: JSON.stringify(data) }),
+  extract: (data: { systemPrompt: string; userPrompt: string; detailLevel?: string; profileId?: string; temperature?: number; maxTokens?: number }) =>
+    litRequest<{ success: boolean; extractedData: any; error?: string; profile?: any }>('/literature/ai/extract', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  visionExtract: (data: { pages: string[]; prompt: string; geminiModel?: string; userApiKey?: string; temperature?: number; maxTokens?: number }) =>
-    litRequest<{ success: boolean; extractedData: any; error?: string }>('/literature/ai/vision-extract', {
+  visionExtract: (data: { pages: string[]; prompt: string; profileId?: string; temperature?: number; maxTokens?: number }) =>
+    litRequest<{ success: boolean; extractedData: any; error?: string; profile?: any }>('/literature/ai/vision-extract', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  chat: (data: { paperId?: string; paperIds?: string[]; messages: Array<{role: string; content: string}>; geminiApiKey?: string; geminiModel?: string }) =>
-    litRequest<{ message: { role: string; content: string }; sources?: string[] }>('/literature/ai/chat', {
+  chat: (data: { paperId?: string; paperIds?: string[]; messages: Array<{role: string; content: string}>; profileId?: string; temperature?: number; maxTokens?: number }) =>
+    litRequest<{ message: { role: string; content: string }; sources?: string[]; profile?: any }>('/literature/ai/chat', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
@@ -138,7 +153,22 @@ export const zoteroApi = {
       body: JSON.stringify(data),
     }),
   importCollectionItems: (data: { collectionId?: string; readingListId?: string; projectId?: string }) =>
-    litRequest<{ citationItems: any[]; projectId?: string }>('/zotero/import-items', {
+    litRequest<{
+      citationItems: any[];
+      importedCount: number;
+      projectId?: string;
+      stats?: {
+        totalItems: number;
+        importedItems: number;
+        existingItems: number;
+        skippedItems: number;
+        papersCreated: number;
+        pdfsDownloaded: number;
+        pdfsMissing: number;
+        pdfsFailed: number;
+        warnings: string[];
+      };
+    }>('/zotero/import-items', {
       method: 'POST',
       body: JSON.stringify(data),
     }),

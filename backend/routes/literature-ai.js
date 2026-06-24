@@ -1,354 +1,446 @@
 const express = require('express');
-const db = require('../db');
 const { v4: uuidv4 } = require('uuid');
+const db = require('../db');
+const { encryptCredential, decryptCredential, maskCredential } = require('../lib/ai-credentials');
+const {
+  PROVIDERS,
+  serializeProviderCatalog,
+  inferCapabilities,
+  assertSafeCustomUrl,
+  listModels,
+  generate,
+  generateStructured,
+} = require('../lib/ai-providers');
 
 const router = express.Router();
+const DEFAULT_SUMMARY_OPTIONS = {
+  temperature: 0.3,
+  maxTokens: 4096,
+  enabledFields: ['background', 'theory', 'methodology', 'measures', 'results', 'implications', 'limitations'],
+  customInstructions: '',
+  useVision: true,
+};
 
 async function getWorkspaceId(userId) {
-  const ws = await db.query(
+  const result = await db.query(
     'SELECT id FROM workspaces WHERE owner_user_id = $1 AND deleted_at IS NULL LIMIT 1',
     [userId]
   );
-  return ws.rows[0]?.id;
+  return result.rows[0]?.id;
 }
 
-// POST /api/literature/ai/check — health check (Ollama stays browser-side)
-router.post('/check', async (req, res) => {
-  res.json({ available: true });
+function jsonValue(value, fallback = {}) {
+  if (!value) return fallback;
+  return typeof value === 'string' ? JSON.parse(value) : value;
+}
+
+function serializeProfile(row) {
+  const options = jsonValue(row.options_json);
+  return {
+    id: row.id,
+    name: row.name,
+    provider: row.provider,
+    baseUrl: row.base_url || PROVIDERS[row.provider]?.baseUrl || '',
+    model: row.model || '',
+    options,
+    capabilities: jsonValue(row.capabilities_json, inferCapabilities(row.provider, row.model)),
+    hasCredential: !!row.credential_encrypted,
+    credentialMask: row.credential_mask || null,
+    local: !!PROVIDERS[row.provider]?.local || options.browserLocal === true,
+    lastTestStatus: row.last_test_status,
+    lastTestError: row.last_test_error,
+    lastTestedAt: row.last_tested_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function getProfile(workspaceId, profileId) {
+  const result = await db.query(
+    `SELECT * FROM ai_provider_profiles
+     WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL`,
+    [profileId, workspaceId]
+  );
+  return result.rows[0] || null;
+}
+
+async function getDefaults(workspaceId) {
+  const result = await db.query(
+    `SELECT * FROM ai_task_defaults WHERE workspace_id = $1`,
+    [workspaceId]
+  );
+  const row = result.rows[0];
+  return {
+    summaryProfileId: row?.summary_profile_id || null,
+    visionProfileId: row?.vision_profile_id || null,
+    chatProfileId: row?.chat_profile_id || null,
+    summaryOptions: { ...DEFAULT_SUMMARY_OPTIONS, ...jsonValue(row?.summary_options_json) },
+  };
+}
+
+async function resolveTaskProfile(workspaceId, task, explicitProfileId) {
+  const defaults = await getDefaults(workspaceId);
+  const profileId = explicitProfileId || defaults[`${task}ProfileId`];
+  if (!profileId) throw new Error(`尚未设置${task === 'summary' ? '文献总结' : task === 'vision' ? '视觉提取' : '论文问答'}的默认 AI 配置`);
+  const profile = await getProfile(workspaceId, profileId);
+  if (!profile) throw new Error('AI 配置不存在或已被删除');
+  return { profile, defaults };
+}
+
+function getCredential(profile) {
+  return profile.credential_encrypted ? decryptCredential(profile.credential_encrypted) : '';
+}
+
+function profileInput(body) {
+  const provider = String(body.provider || '');
+  if (!PROVIDERS[provider]) throw new Error('不支持的 AI 供应商');
+  const preset = PROVIDERS[provider];
+  const requestedBaseUrl = String(body.baseUrl || preset.baseUrl || '').trim().replace(/\/+$/, '');
+  const baseUrl = preset.custom || preset.local ? requestedBaseUrl : preset.baseUrl;
+  if (!baseUrl && provider !== 'ollama') throw new Error('Base URL 不能为空');
+  return {
+    name: String(body.name || preset.label).trim().slice(0, 80),
+    provider,
+    baseUrl,
+    model: String(body.model || '').trim().slice(0, 200),
+    options: body.options && typeof body.options === 'object' ? body.options : {},
+  };
+}
+
+async function validateProfileUrl(input) {
+  if (input.provider === 'custom' && input.options.browserLocal !== true) await assertSafeCustomUrl(input.baseUrl);
+}
+
+router.get('/providers', (req, res) => {
+  res.json({ providers: serializeProviderCatalog() });
 });
 
-// POST /api/literature/ai/extract — proxy for Gemini AI extraction
-router.post('/extract', async (req, res) => {
+router.get('/profiles', async (req, res) => {
   try {
-    const { systemPrompt, userPrompt, detailLevel, userApiKey, geminiModel } = req.body;
-    if (!userPrompt) return res.status(400).json({ error: 'userPrompt is required' });
-
-    const apiKey = userApiKey || process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return res.status(400).json({
-        success: false,
-        error: 'No Gemini API key configured. Set GEMINI_API_KEY in environment or provide one.',
-      });
-    }
-
-    const model = geminiModel || 'gemini-2.0-flash';
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60000);
-    let response;
-    try {
-      response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            system_instruction: systemPrompt ? { parts: [{ text: systemPrompt }] } : undefined,
-            contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-            generationConfig: {
-              temperature: 0.3,
-              maxOutputTokens: 4096,
-            },
-          }),
-          signal: controller.signal,
-        }
-      );
-    } finally {
-      clearTimeout(timeout);
-    }
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error('Gemini API error:', errText);
-      return res.status(502).json({ success: false, error: `Gemini API error: ${response.status}` });
-    }
-
-    const data = await response.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-    // Extract JSON from the response (handle potential markdown wrapping)
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return res.status(422).json({ success: false, error: 'Failed to parse AI response as JSON' });
-    }
-
-    let extractedData;
-    try {
-      extractedData = JSON.parse(jsonMatch[0]);
-    } catch {
-      return res.status(422).json({ success: false, error: 'Invalid JSON from AI response' });
-    }
-
-    res.json({ success: true, extractedData });
-  } catch (err) {
-    console.error('AI extraction error:', err);
-    res.status(500).json({ success: false, error: 'AI extraction failed' });
+    const workspaceId = await getWorkspaceId(req.user.id);
+    const result = await db.query(
+      `SELECT * FROM ai_provider_profiles
+       WHERE workspace_id = $1 AND deleted_at IS NULL
+       ORDER BY created_at ASC`,
+      [workspaceId]
+    );
+    res.json({ profiles: result.rows.map(serializeProfile), defaults: await getDefaults(workspaceId) });
+  } catch (error) {
+    res.status(500).json({ error: '无法读取 AI 配置' });
   }
 });
 
-// POST /api/literature/ai/proxy — CORS proxy for local LLM (Ollama/Custom API)
-router.post('/proxy', async (req, res) => {
+router.post('/profiles', async (req, res) => {
   try {
-    const { url, method, headers, body } = req.body;
-    if (!url) return res.status(400).json({ error: 'url is required' });
+    const workspaceId = await getWorkspaceId(req.user.id);
+    const input = profileInput(req.body);
+    await validateProfileUrl(input);
+    const credential = String(req.body.apiKey || '').trim();
+    const id = uuidv4();
+    const capabilities = inferCapabilities(input.provider, input.model);
+    const result = await db.query(
+      `INSERT INTO ai_provider_profiles
+       (id, workspace_id, name, provider, base_url, model, credential_encrypted,
+        credential_mask, options_json, capabilities_json)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       RETURNING *`,
+      [
+        id, workspaceId, input.name, input.provider, input.baseUrl, input.model,
+        credential ? encryptCredential(credential) : null,
+        credential ? maskCredential(credential) : null,
+        JSON.stringify(input.options), JSON.stringify(capabilities),
+      ]
+    );
+    res.status(201).json({ profile: serializeProfile(result.rows[0]) });
+  } catch (error) {
+    res.status(400).json({ error: error.message || '无法创建 AI 配置' });
+  }
+});
 
-    // Security: only allow local addresses
-    let parsedUrl = new URL(url);
-    const hostname = parsedUrl.hostname;
-    const allowedHostnames = ['localhost', '127.0.0.1', '::1', 'host.docker.internal',
-      'api.deepseek.com', 'api.openai.com', 'api.groq.com', 'openrouter.ai'];
-    if (!allowedHostnames.includes(hostname)) {
-      return res.status(403).json({ error: 'Domain not allowed for proxy' });
+router.patch('/profiles/:id', async (req, res) => {
+  try {
+    const workspaceId = await getWorkspaceId(req.user.id);
+    const current = await getProfile(workspaceId, req.params.id);
+    if (!current) return res.status(404).json({ error: 'AI 配置不存在' });
+    const input = profileInput({
+      name: req.body.name ?? current.name,
+      provider: req.body.provider ?? current.provider,
+      baseUrl: req.body.baseUrl ?? current.base_url,
+      model: req.body.model ?? current.model,
+      options: req.body.options ?? jsonValue(current.options_json),
+    });
+    await validateProfileUrl(input);
+    const suppliedCredential = req.body.apiKey;
+    const clearCredential = req.body.clearCredential === true;
+    let encrypted = current.credential_encrypted;
+    let mask = current.credential_mask;
+    if (clearCredential || (input.provider !== current.provider && !(typeof suppliedCredential === 'string' && suppliedCredential.trim()))) {
+      encrypted = null;
+      mask = null;
+    } else if (typeof suppliedCredential === 'string' && suppliedCredential.trim()) {
+      encrypted = encryptCredential(suppliedCredential.trim());
+      mask = maskCredential(suppliedCredential.trim());
     }
+    const capabilities = inferCapabilities(input.provider, input.model);
+    const result = await db.query(
+      `UPDATE ai_provider_profiles SET
+       name=$1, provider=$2, base_url=$3, model=$4, credential_encrypted=$5,
+       credential_mask=$6, options_json=$7, capabilities_json=$8,
+       last_test_status='untested', last_test_error=NULL, updated_at=NOW()
+       WHERE id=$9 AND workspace_id=$10 RETURNING *`,
+      [
+        input.name, input.provider, input.baseUrl, input.model, encrypted, mask,
+        JSON.stringify(input.options), JSON.stringify(capabilities), current.id, workspaceId,
+      ]
+    );
+    res.json({ profile: serializeProfile(result.rows[0]) });
+  } catch (error) {
+    res.status(400).json({ error: error.message || '无法更新 AI 配置' });
+  }
+});
 
-    // In Docker, localhost refers to the container, not the host
-    if (process.env.DOCKER_CONTAINER === 'true' && ['localhost', '127.0.0.1'].includes(hostname)) {
-      parsedUrl.hostname = 'host.docker.internal';
+router.delete('/profiles/:id', async (req, res) => {
+  const workspaceId = await getWorkspaceId(req.user.id);
+  const result = await db.query(
+    `UPDATE ai_provider_profiles SET deleted_at=NOW(), updated_at=NOW()
+     WHERE id=$1 AND workspace_id=$2 AND deleted_at IS NULL RETURNING id`,
+    [req.params.id, workspaceId]
+  );
+  if (!result.rows.length) return res.status(404).json({ error: 'AI 配置不存在' });
+  await db.query(
+    `UPDATE ai_task_defaults SET
+     summary_profile_id = CASE WHEN summary_profile_id=$1 THEN NULL ELSE summary_profile_id END,
+     vision_profile_id = CASE WHEN vision_profile_id=$1 THEN NULL ELSE vision_profile_id END,
+     chat_profile_id = CASE WHEN chat_profile_id=$1 THEN NULL ELSE chat_profile_id END,
+     updated_at=NOW()
+     WHERE workspace_id=$2`,
+    [req.params.id, workspaceId]
+  );
+  res.json({ success: true });
+});
+
+router.get('/profiles/:id/models', async (req, res) => {
+  try {
+    const workspaceId = await getWorkspaceId(req.user.id);
+    const profile = await getProfile(workspaceId, req.params.id);
+    if (!profile) return res.status(404).json({ error: 'AI 配置不存在' });
+    if (serializeProfile(profile).local) {
+      return res.json({ models: [], local: true, baseUrl: profile.base_url || PROVIDERS.ollama.baseUrl });
     }
-    const resolvedUrl = parsedUrl.toString();
+    const models = await listModels(profile, getCredential(profile));
+    res.json({ models });
+  } catch (error) {
+    res.status(502).json({ error: error.message || '无法获取模型列表' });
+  }
+});
 
-    const controller = new AbortController();
-    const proxyTimeout = setTimeout(() => controller.abort(), 300000);
-    let response;
+router.post('/profiles/:id/test', async (req, res) => {
+  const workspaceId = await getWorkspaceId(req.user.id);
+  const profile = await getProfile(workspaceId, req.params.id);
+  if (!profile) return res.status(404).json({ error: 'AI 配置不存在' });
+  if (serializeProfile(profile).local) {
+    return res.json({
+      success: true,
+      local: true,
+      message: '请由当前浏览器连接本机 Ollama',
+      baseUrl: profile.base_url || PROVIDERS.ollama.baseUrl,
+    });
+  }
+  try {
+    let models = [];
     try {
-      const fetchOptions = {
-        method: method || 'GET',
-        headers: { 'Content-Type': 'application/json', ...(headers || {}) },
-        signal: controller.signal,
-      };
-      if (body && method !== 'GET') {
-        fetchOptions.body = typeof body === 'string' ? body : JSON.stringify(body);
+      models = await listModels(profile, getCredential(profile));
+    } catch (modelError) {
+      if (!profile.model) throw modelError;
+      await generate(profile, getCredential(profile), {
+        messages: [{ role: 'user', content: 'Reply with OK.' }],
+        maxTokens: 8,
+        temperature: 0,
+      });
+    }
+    await db.query(
+      `UPDATE ai_provider_profiles SET last_test_status='success', last_test_error=NULL,
+       last_tested_at=NOW(), updated_at=NOW() WHERE id=$1 AND workspace_id=$2`,
+      [profile.id, workspaceId]
+    );
+    res.json({ success: true, models });
+  } catch (error) {
+    const safeError = String(error.message || '连接失败').slice(0, 500);
+    await db.query(
+      `UPDATE ai_provider_profiles SET last_test_status='error', last_test_error=$1,
+       last_tested_at=NOW(), updated_at=NOW() WHERE id=$2 AND workspace_id=$3`,
+      [safeError, profile.id, workspaceId]
+    );
+    res.status(502).json({ error: safeError });
+  }
+});
+
+router.get('/task-defaults', async (req, res) => {
+  const workspaceId = await getWorkspaceId(req.user.id);
+  res.json(await getDefaults(workspaceId));
+});
+
+router.patch('/task-defaults', async (req, res) => {
+  try {
+    const workspaceId = await getWorkspaceId(req.user.id);
+    const current = await getDefaults(workspaceId);
+    const next = {
+      summaryProfileId: req.body.summaryProfileId !== undefined ? req.body.summaryProfileId : current.summaryProfileId,
+      visionProfileId: req.body.visionProfileId !== undefined ? req.body.visionProfileId : current.visionProfileId,
+      chatProfileId: req.body.chatProfileId !== undefined ? req.body.chatProfileId : current.chatProfileId,
+      summaryOptions: { ...current.summaryOptions, ...(req.body.summaryOptions || {}) },
+    };
+    for (const [task, profileId] of [['summary', next.summaryProfileId], ['vision', next.visionProfileId], ['chat', next.chatProfileId]]) {
+      if (!profileId) continue;
+      const profile = await getProfile(workspaceId, profileId);
+      if (!profile) throw new Error(`${task} 的 AI 配置不存在`);
+      if (task === 'vision' && !serializeProfile(profile).capabilities.vision) {
+        throw new Error('所选模型尚未识别为支持视觉输入；请先选择视觉模型并测试连接');
       }
-
-      response = await fetch(resolvedUrl, fetchOptions);
-    } finally {
-      clearTimeout(proxyTimeout);
     }
+    await db.query(
+      `INSERT INTO ai_task_defaults
+       (workspace_id, summary_profile_id, vision_profile_id, chat_profile_id, summary_options_json, updated_at)
+       VALUES ($1,$2,$3,$4,$5,NOW())
+       ON CONFLICT (workspace_id) DO UPDATE SET
+       summary_profile_id=EXCLUDED.summary_profile_id,
+       vision_profile_id=EXCLUDED.vision_profile_id,
+       chat_profile_id=EXCLUDED.chat_profile_id,
+       summary_options_json=EXCLUDED.summary_options_json,
+       updated_at=NOW()`,
+      [
+        workspaceId, next.summaryProfileId, next.visionProfileId, next.chatProfileId,
+        JSON.stringify(next.summaryOptions),
+      ]
+    );
+    res.json(next);
+  } catch (error) {
+    res.status(400).json({ error: error.message || '无法保存任务默认设置' });
+  }
+});
 
-    let data;
-    const contentType = response.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      data = await response.json();
-    } else {
-      data = await response.text();
+router.post('/check', async (req, res) => {
+  const workspaceId = await getWorkspaceId(req.user.id);
+  const defaults = await getDefaults(workspaceId);
+  res.json({ available: !!defaults.summaryProfileId, defaults });
+});
+
+router.post('/extract', async (req, res) => {
+  try {
+    if (!req.body.userPrompt) return res.status(400).json({ error: 'userPrompt is required' });
+    const workspaceId = await getWorkspaceId(req.user.id);
+    const { profile, defaults } = await resolveTaskProfile(workspaceId, 'summary', req.body.profileId);
+    if (serializeProfile(profile).local) return res.status(409).json({ error: 'local_provider', profile: serializeProfile(profile) });
+    const options = defaults.summaryOptions;
+    const extractedData = await generateStructured(profile, getCredential(profile), {
+      messages: [
+        { role: 'system', content: req.body.systemPrompt || 'You extract structured information from academic papers.' },
+        { role: 'user', content: req.body.userPrompt },
+      ],
+      temperature: req.body.temperature ?? options.temperature,
+      maxTokens: req.body.maxTokens || options.maxTokens,
+    });
+    res.json({ success: true, extractedData, profile: serializeProfile(profile) });
+  } catch (error) {
+    res.status(502).json({ success: false, error: error.message || 'AI extraction failed' });
+  }
+});
+
+router.post('/vision-extract', async (req, res) => {
+  try {
+    if (!Array.isArray(req.body.pages) || !req.body.pages.length) {
+      return res.status(400).json({ error: 'pages array is required' });
     }
+    const workspaceId = await getWorkspaceId(req.user.id);
+    const { profile, defaults } = await resolveTaskProfile(workspaceId, 'vision', req.body.profileId);
+    const serialized = serializeProfile(profile);
+    if (!serialized.capabilities.vision) return res.status(400).json({ error: '所选配置不支持视觉输入' });
+    if (serialized.local) return res.status(409).json({ error: 'local_provider', profile: serialized });
+    const extractedData = await generateStructured(profile, getCredential(profile), {
+      messages: [{ role: 'user', content: req.body.prompt || 'Extract structured information from these academic PDF pages. Return JSON only.' }],
+      images: req.body.pages,
+      temperature: req.body.temperature ?? defaults.summaryOptions.temperature,
+      maxTokens: req.body.maxTokens || defaults.summaryOptions.maxTokens,
+    });
+    res.json({ success: true, extractedData, profile: serialized });
+  } catch (error) {
+    res.status(502).json({ success: false, error: error.message || 'Vision extraction failed' });
+  }
+});
 
-    res.json({ success: response.ok, status: response.status, data });
-  } catch (err) {
-    console.error('Proxy error:', err.message);
-    res.status(502).json({ success: false, error: err.message });
+async function buildPaperContext(workspaceId, paperId, paperIds) {
+  const titles = [];
+  if (paperId) {
+    const result = await db.query(
+      `SELECT id,title,authors,year,journal,abstract,full_text,extracted_data
+       FROM literature_papers WHERE id=$1 AND workspace_id=$2 AND deleted_at IS NULL`,
+      [paperId, workspaceId]
+    );
+    const paper = result.rows[0];
+    if (!paper) return { titles, context: 'No accessible paper was found.' };
+    titles.push(paper.title || 'Untitled');
+    return {
+      titles,
+      context: `You are a research assistant analyzing this academic paper.
+TITLE: ${paper.title || 'Untitled'}
+AUTHORS: ${paper.authors || 'Unknown'}
+YEAR: ${paper.year || 'Unknown'}
+JOURNAL: ${paper.journal || 'Unknown'}
+ABSTRACT: ${paper.abstract || 'Not available'}
+AI EXTRACTION:
+${JSON.stringify(jsonValue(paper.extracted_data), null, 2)}
+FULL TEXT:
+${paper.full_text ? paper.full_text.slice(0, 30000) : '(Full text not available)'}
+Answer only from the supplied paper. State clearly when the paper does not contain the requested information.`,
+    };
+  }
+  if (Array.isArray(paperIds) && paperIds.length) {
+    const result = await db.query(
+      `SELECT id,title,authors,year,abstract,extracted_data
+       FROM literature_papers WHERE id=ANY($1) AND workspace_id=$2 AND deleted_at IS NULL`,
+      [paperIds, workspaceId]
+    );
+    const content = result.rows.map((paper, index) => {
+      titles.push(paper.title || 'Untitled');
+      return `--- PAPER ${index + 1}: ${paper.title || 'Untitled'} ---
+AUTHORS: ${paper.authors || 'Unknown'} (${paper.year || 'Unknown'})
+ABSTRACT: ${paper.abstract || 'Not available'}
+EXTRACTION: ${JSON.stringify(jsonValue(paper.extracted_data), null, 2)}`;
+    }).join('\n\n');
+    return {
+      titles,
+      context: `You are a research assistant comparing the supplied papers. Use specific evidence and state when information is unavailable.\n\n${content}`,
+    };
+  }
+  return { titles, context: 'You are a research assistant helping analyze academic literature.' };
+}
+
+router.post('/chat', async (req, res) => {
+  try {
+    if (!Array.isArray(req.body.messages)) return res.status(400).json({ error: 'messages array is required' });
+    const workspaceId = await getWorkspaceId(req.user.id);
+    const { profile } = await resolveTaskProfile(workspaceId, 'chat', req.body.profileId);
+    if (serializeProfile(profile).local) return res.status(409).json({ error: 'local_provider', profile: serializeProfile(profile) });
+    const paperContext = await buildPaperContext(workspaceId, req.body.paperId, req.body.paperIds);
+    const content = await generate(profile, getCredential(profile), {
+      messages: [
+        { role: 'system', content: paperContext.context },
+        ...req.body.messages.filter(message => message.role !== 'system').map(message => ({
+          role: message.role === 'assistant' ? 'assistant' : 'user',
+          content: String(message.content || ''),
+        })),
+      ],
+      temperature: req.body.temperature ?? 0.3,
+      maxTokens: req.body.maxTokens || 4096,
+    });
+    res.json({
+      message: { role: 'assistant', content },
+      sources: paperContext.titles,
+      profile: serializeProfile(profile),
+    });
+  } catch (error) {
+    res.status(502).json({ error: error.message || 'AI chat failed' });
   }
 });
 
 module.exports = router;
-
-// POST /api/literature/ai/vision-extract — multi-modal PDF page extraction via Gemini Vision
-router.post('/vision-extract', async (req, res) => {
-  try {
-    const { pages, prompt, geminiModel, userApiKey, temperature, maxTokens } = req.body;
-    if (!pages || !Array.isArray(pages) || pages.length === 0) {
-      return res.status(400).json({ error: 'pages array is required' });
-    }
-
-    const apiKey = userApiKey || process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return res.status(400).json({
-        success: false,
-        error: 'No Gemini API key configured. Set GEMINI_API_KEY in environment or provide one.',
-      });
-    }
-
-    const model = geminiModel || 'gemini-2.0-flash';
-    const temp = temperature !== undefined ? temperature : 0.3;
-    const maxOut = maxTokens || 4096;
-
-    // Build inline data parts from pages (skip data:image/jpeg;base64, prefix)
-    const pageParts = pages.map((b64, i) => {
-      const clean = b64.includes('base64,') ? b64.split('base64,')[1] : b64;
-      return {
-        inlineData: { mimeType: 'image/jpeg', data: clean },
-        text: `[Page ${i + 1}]`,
-      };
-    });
-
-    // Flatten parts: system prompt text + page images interleaved
-    const parts = [
-      { text: prompt || 'Extract structured information from these academic PDF pages.' },
-      ...pageParts.flatMap(p => [p, { text: '' }]),
-      { text: 'Return ONLY valid JSON with the extracted fields. Do NOT wrap in markdown code blocks.' },
-    ];
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 180000); // 3min for multi-page
-    
-    let response;
-    try {
-      response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts }],
-            generationConfig: { temperature: temp, maxOutputTokens: maxOut },
-          }),
-          signal: controller.signal,
-        }
-      );
-    } finally {
-      clearTimeout(timeout);
-    }
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error('Gemini Vision API error:', errText);
-      return res.status(502).json({ success: false, error: `Gemini Vision API error: ${response.status}` });
-    }
-
-    const data = await response.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return res.status(422).json({ success: false, error: 'Failed to parse AI response as JSON' });
-    }
-
-    let extractedData;
-    try {
-      extractedData = JSON.parse(jsonMatch[0]);
-    } catch {
-      return res.status(422).json({ success: false, error: 'Invalid JSON from AI response' });
-    }
-
-    res.json({ success: true, extractedData });
-  } catch (err) {
-    console.error('Vision extraction error:', err);
-    res.status(500).json({ success: false, error: 'Vision extraction failed' });
-  }
-});
-
-
-/**
- * POST /api/literature/ai/chat
- * Conversational AI chat about papers. Accepts conversation history + paper context.
- */
-router.post('/chat', async (req, res) => {
-  try {
-    const { paperId, messages, scope, paperIds, geminiApiKey, geminiModel } = req.body;
-    if (!messages || !Array.isArray(messages)) {
-      return res.status(400).json({ error: 'messages array is required' });
-    }
-
-    const apiKey = geminiApiKey || process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return res.status(400).json({ error: 'No Gemini API key configured. Set GEMINI_API_KEY in environment or provide one.' });
-    }
-
-    const model = geminiModel || 'gemini-2.0-flash';
-
-    // Build system context from paper(s)
-    let systemContext = 'You are a research assistant helping analyze academic papers. Answer questions based on the provided paper content. If information is not in the provided text, say so.';
-    let paperTitles = [];
-
-    if (paperId) {
-      // Load single paper context
-      const paperResult = await db.query(
-        `SELECT id, title, authors, year, journal, abstract, full_text, extracted_data FROM literature_papers WHERE id = $1 AND deleted_at IS NULL`,
-        [paperId]
-      );
-      if (paperResult.rows.length > 0) {
-        const p = paperResult.rows[0];
-        paperTitles.push(p.title || 'Untitled');
-        const extracted = p.extracted_data || {};
-        const extractedStr = typeof extracted === 'string' ? extracted : JSON.stringify(extracted, null, 2);
-        const fullText = p.full_text ? p.full_text.substring(0, 12000) : '(Full text not available)';
-        systemContext = `You are a research assistant analyzing the following academic paper.
-
-TITLE: ${p.title || 'Untitled'}
-AUTHORS: ${p.authors || 'Unknown'}
-YEAR: ${p.year || 'Unknown'}
-JOURNAL: ${p.journal || 'Unknown'}
-ABSTRACT: ${p.abstract || 'Not available'}
-AI EXTRACTION:
-${extractedStr}
-
-FULL TEXT (first 12000 chars):
-${fullText}
-
-Answer the user's questions about this paper based on the content above. If asked about something not in the provided text, say so. Use specific details from the paper when relevant.`;
-      }
-    } else if (paperIds && paperIds.length > 0) {
-      // Load multiple papers for cross-paper analysis
-      const papersResult = await db.query(
-        `SELECT id, title, authors, year, journal, abstract, extracted_data FROM literature_papers WHERE id = ANY($1) AND deleted_at IS NULL`,
-        [paperIds]
-      );
-      if (papersResult.rows.length > 0) {
-        const papersStr = papersResult.rows.map((p, i) => {
-          paperTitles.push(p.title || 'Untitled');
-          const extracted = p.extracted_data || {};
-          const extractedStr = typeof extracted === 'string' ? extracted : JSON.stringify(extracted, null, 2);
-          return `--- PAPER ${i + 1}: ${p.title || 'Untitled'} ---
-AUTHORS: ${p.authors || 'Unknown'} (${p.year || 'Unknown'})
-ABSTRACT: ${p.abstract || 'Not available'}
-EXTRACTION:
-${extractedStr}`;
-        }).join('\n\n');
-        systemContext = `You are a research assistant analyzing the following academic papers. Compare, contrast, and synthesize findings across papers as needed.
-
-${papersStr}
-
-Answer the user's questions based on these papers. Use specific examples. If information is not available, say so.`;
-      }
-    }
-
-    // Build the full messages array for Gemini
-    const geminiMessages = [
-      { role: 'user', parts: [{ text: systemContext }] },
-      { role: 'model', parts: [{ text: 'I have analyzed the paper(s). I am ready to answer your questions.' }] },
-      ...messages.map(m => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }]
-      }))
-    ];
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 120000);
-    let response;
-    try {
-      response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: geminiMessages,
-            generationConfig: {
-              temperature: 0.3,
-              maxOutputTokens: 4096,
-            },
-          }),
-          signal: controller.signal,
-        }
-      );
-    } finally {
-      clearTimeout(timeout);
-    }
-
-    if (!response.ok) {
-      const errText = await response.text();
-      return res.status(502).json({ error: `Gemini API error: ${response.status}`, detail: errText });
-    }
-
-    const data = await response.json();
-    const replyText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-    res.json({
-      message: { role: 'assistant', content: replyText },
-      sources: paperTitles,
-    });
-  } catch (err) {
-    console.error('AI chat error:', err);
-    res.status(500).json({ error: 'AI chat failed: ' + err.message });
-  }
-});

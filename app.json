@@ -12,6 +12,10 @@
     "JWT_SECRET": {
       "description": "Secret key for JWT token signing",
       "generator": "secret"
+    },
+    "AI_CREDENTIAL_ENCRYPTION_KEY": {
+      "description": "32-byte base64 or 64-character hex key used to encrypt user AI API credentials",
+      "generator": "secret"
     }
   },
   "addons": [

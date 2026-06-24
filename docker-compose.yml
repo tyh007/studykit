@@ -27,6 +27,7 @@ services:
       DB_USER: studykit
       DB_PASSWORD: ${DB_PASSWORD:-studykit_dev_pass}
       JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
+      AI_CREDENTIAL_ENCRYPTION_KEY: ${AI_CREDENTIAL_ENCRYPTION_KEY:-}
       DOCKER_CONTAINER: 'true'
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       UPLOAD_DIR: /data/uploads

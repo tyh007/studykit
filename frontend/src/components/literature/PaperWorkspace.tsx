@@ -3,7 +3,6 @@ import { literaturePapersApi, paperNotesApi, paperRelationsApi } from '../../lib
 import { createAIExtractionService } from '../../lib/literature/ai-extraction';
 import { PromptBuilder } from '../../lib/literature/prompt-builder';
 import { StarIcon, CloseIcon } from '../ui/Icons';
-import { readAIProviderConfig } from '../../lib/literature/ai-provider-config';
 import LiteraturePDFViewer from './LiteraturePDFViewer';
 import PaperAnnotationLayer from './PaperAnnotationLayer';
 import AIChatPanel from './AIChatPanel';
