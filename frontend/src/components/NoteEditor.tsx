@@ -194,7 +194,11 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
                 }
                 // Save server blocks locally
                 for (const block of blocks) {
-                  await db.noteBlocks.add(block as any);
+                  try {
+                    await db.noteBlocks.put(block as any);
+                  } catch (e) {
+                    // ignore single-block write errors
+                  }
                 }
               }
             }
@@ -318,7 +322,11 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
       }
 
       for (const block of newBlocks) {
-        await db.noteBlocks.add(block);
+        try {
+          await db.noteBlocks.put(block);
+        } catch (e) {
+          // ignore single-block write errors
+        }
       }
 
       // Also save to backend PostgreSQL for persistence
