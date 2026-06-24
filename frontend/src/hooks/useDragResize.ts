@@ -38,6 +38,17 @@ export interface UseDragResizeOptions {
    * `containerRef` is required in this mode.
    */
   asPercentOfContainer?: boolean
+  /**
+   * Sign of the delta applied to `startValue`.
+   *  - `'standard'` (default): drag in the positive axis direction GROWS the
+   *    value (e.g. drag-resize a left sidebar's right edge to the right →
+   *    sidebar widens).
+   *  - `'invert'`: drag in the positive axis direction SHRINKS the value.
+   *    Use this when the divider sits on the INNER edge of the resized
+   *    region — e.g. an AI chat panel anchored to the bottom of its parent,
+   *    where dragging UP (negative clientY) should grow the panel.
+   */
+  direction?: 'standard' | 'invert'
 }
 
 /**
@@ -92,6 +103,7 @@ export function useDragResize(opts: UseDragResizeOptions): UseDragResizeResult {
     onCommit,
     persistKey,
     asPercentOfContainer,
+    direction = 'standard',
   } = opts
 
   const startRef = useRef<DragState | null>(null)
@@ -116,8 +128,11 @@ export function useDragResize(opts: UseDragResizeOptions): UseDragResizeResult {
   const handlePointerMove = useCallback(
     (e: PointerEvent) => {
       if (!startRef.current) return
-      const delta =
+      const rawDelta =
         axis === 'x' ? e.clientX - startRef.current.pointer : e.clientY - startRef.current.pointer
+      // 'invert' is used when the divider sits on the INNER edge of the
+      // resized region (e.g. bottom-anchored panel — drag up to grow).
+      const delta = direction === 'invert' ? -rawDelta : rawDelta
 
       let next: number
       if (asPercentOfContainer && containerRef?.current) {
@@ -133,7 +148,7 @@ export function useDragResize(opts: UseDragResizeOptions): UseDragResizeResult {
       setValue(next)
       onChangeRef.current(next)
     },
-    [axis, asPercentOfContainer, containerRef, min, max],
+    [axis, asPercentOfContainer, containerRef, direction, min, max],
   )
 
   const cleanup = useCallback(() => {

@@ -88,13 +88,17 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
     return saved ? parseInt(saved) : 250;
   });
 
-  // Drag-resize the AI chat panel vertically. Persists the committed height
-  // to localStorage on pointerup only (the old code wrote on every move).
+  // Drag-resize the AI chat panel vertically. The panel sits at the bottom of
+  // its parent flex container, so the handle is on the INNER (top) edge of
+  // the panel — dragging UP must GROW the panel, not shrink it. Persists the
+  // committed height to localStorage on pointerup only (the old code wrote on
+  // every move).
   const { onPointerDown: onChatResizeDown, separatorProps: chatResizeProps } = useDragResize({
     axis: 'y',
     startValue: panelHeight,
     min: 120,
     max: 500,
+    direction: 'invert',
     onChange: setPanelHeight,
     persistKey: 'lit-chat-height',
   });
@@ -200,7 +204,7 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
         {...chatResizeProps}
         onPointerDown={onChatResizeDown}
         aria-label="Resize AI assistant"
-        style={{ height: 5, cursor: 'row-resize', background: 'var(--color-border-light)', flexShrink: 0 }}
+        style={{ height: 5, cursor: 'row-resize', background: 'var(--color-border-light)', flexShrink: 0, touchAction: 'none' }}
       />
       {/* Header */}
       <div style={{

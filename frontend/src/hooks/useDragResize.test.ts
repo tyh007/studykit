@@ -188,6 +188,57 @@ describe('useDragResize', () => {
     expect(removeSpy).toHaveBeenCalledWith('pointercancel', expect.any(Function))
   })
 
+  it('direction: "invert" flips the delta sign so dragging up GROWS the value', () => {
+    // Used by AIChatPanel — the handle sits on the INNER edge of a bottom-
+    // anchored panel, so dragging up must grow it (not shrink it).
+    const onChange = vi.fn()
+    const { result } = renderHook(() =>
+      useDragResize({
+        axis: 'y',
+        startValue: 250,
+        min: 120,
+        max: 500,
+        direction: 'invert',
+        onChange,
+      }),
+    )
+
+    act(() => {
+      result.current.onPointerDown({
+        clientX: 0,
+        clientY: 100,
+        button: 0,
+        pointerType: 'mouse',
+        pointerId: 1,
+        preventDefault: () => undefined,
+        target: document.createElement('div'),
+      } as unknown as React.PointerEvent)
+    })
+    // Drag up by 30 (smaller clientY) → with invert, value = 250 + 30 = 280
+    act(() => {
+      document.dispatchEvent(new PointerEvent('pointermove', { clientX: 0, clientY: 70 }))
+    })
+    expect(onChange).toHaveBeenLastCalledWith(280)
+    // Drag down by 50 → value shrinks: 280 - 50 = 230
+    act(() => {
+      document.dispatchEvent(new PointerEvent('pointermove', { clientX: 0, clientY: 120 }))
+    })
+    expect(onChange).toHaveBeenLastCalledWith(230)
+    // Clamps on the upper bound: drag up far past max → 500
+    act(() => {
+      document.dispatchEvent(new PointerEvent('pointermove', { clientX: 0, clientY: -9999 }))
+    })
+    expect(onChange).toHaveBeenLastCalledWith(500)
+    // Clamps on the lower bound: drag down far past min → 120
+    act(() => {
+      document.dispatchEvent(new PointerEvent('pointermove', { clientX: 0, clientY: 9999 }))
+    })
+    expect(onChange).toHaveBeenLastCalledWith(120)
+    act(() => {
+      document.dispatchEvent(new PointerEvent('pointerup'))
+    })
+  })
+
   it('asPercentOfContainer computes the value against the container width', () => {
     const onChange = vi.fn()
     const container = document.createElement('div')
