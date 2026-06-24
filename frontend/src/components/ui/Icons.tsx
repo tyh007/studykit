@@ -6,7 +6,7 @@
 
 import React, { useId } from 'react';
 
-type IconSize = 'sm' | 'md' | 'lg' | 'xl';
+type IconSize = 'sm' | 'md' | 'lg' | 'xl' | '2xl';
 type IconProps = {
   size?: IconSize;
   className?: string;
@@ -17,7 +17,11 @@ type IconProps = {
 
 /* ---- Base icon wrapper ---- */
 function IconWrap({ children, size = 'md', className = '', style, onClick, title }: IconProps & { children: React.ReactNode }) {
-  const sizeClass = size === 'sm' ? 'sk-icon-sm' : size === 'lg' ? 'sk-icon-lg' : size === 'xl' ? 'sk-icon-xl' : '';
+  const sizeClass =
+    size === 'sm' ? 'sk-icon-sm' :
+    size === 'lg' ? 'sk-icon-lg' :
+    size === 'xl' ? 'sk-icon-xl' :
+    size === '2xl' ? 'sk-icon-2xl' : '';
   return (
     <span
       className={`sk-icon ${sizeClass} ${className}`.trim()}
@@ -42,7 +46,7 @@ export function LogoIcon(props: IconProps) {
 
   return (
     <span
-      className={`sk-icon sk-icon-logo ${props.size === 'sm' ? 'sk-icon-sm' : props.size === 'lg' ? 'sk-icon-lg' : props.size === 'xl' ? 'sk-icon-xl' : ''} ${props.className || ''}`.trim()}
+      className={`sk-icon sk-icon-logo ${props.size === 'sm' ? 'sk-icon-sm' : props.size === 'lg' ? 'sk-icon-lg' : props.size === 'xl' ? 'sk-icon-xl' : props.size === '2xl' ? 'sk-icon-2xl' : ''} ${props.className || ''}`.trim()}
       style={props.style}
       onClick={props.onClick}
       role={props.onClick ? 'button' : undefined}
@@ -581,6 +585,206 @@ export function CornellIcon(props: IconProps) {
 }
 
 /* ==========================================================================
+   Rich-text editor toolbar icons
+   ========================================================================== */
+
+/* ---- Heading level (H) with a small numeric badge ---- */
+export function Heading1Icon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <path d="M5 5v14M13 5v14M5 12h8" strokeWidth="1.75" strokeLinecap="round" />
+      <path d="M17.5 9v9.5" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M17.5 9l3-1.5" strokeWidth="1.5" strokeLinecap="round" />
+    </IconWrap>
+  );
+}
+
+export function Heading2Icon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <path d="M5 5v14M11 5v14M5 12h6" strokeWidth="1.75" strokeLinecap="round" />
+      <path d="M14.5 17.25c.4-1.1 1.5-2 3-2.4 1.7-.45 3 .35 3 1.85 0 1.2-.9 1.95-2.05 2.6-1.2.65-2.45 1.6-2.45 3.2h4.5" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </IconWrap>
+  );
+}
+
+export function Heading3Icon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <path d="M4 5v14M9 5v14M4 12h5" strokeWidth="1.75" strokeLinecap="round" />
+      <path d="M14.5 9.5c.5-.7 1.4-1 2.3-1 1.5 0 2.5.85 2.5 2 0 .85-.6 1.5-1.5 1.7" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M17.6 12.3c1.1.15 2 .95 2 2.2 0 1.4-1.2 2.3-2.7 2.3-1.1 0-2-.45-2.5-1.2" strokeWidth="1.5" strokeLinecap="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Bold (B) ---- */
+export function BoldIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <path d="M7 5h5.5a3.25 3.25 0 0 1 0 6.5H7zm0 6.5h6a3.5 3.5 0 0 1 0 7H7z" strokeWidth="1.75" strokeLinejoin="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Italic (I) ---- */
+export function ItalicIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <line x1="19" y1="4" x2="10" y2="4" strokeWidth="1.75" strokeLinecap="round" />
+      <line x1="14" y1="20" x2="5" y2="20" strokeWidth="1.75" strokeLinecap="round" />
+      <line x1="15" y1="4" x2="9" y2="20" strokeWidth="1.75" strokeLinecap="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Underline (U) ---- */
+export function UnderlineIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <path d="M6 4v8a6 6 0 0 0 12 0V4" strokeWidth="1.75" strokeLinecap="round" />
+      <line x1="5" y1="20" x2="19" y2="20" strokeWidth="1.75" strokeLinecap="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Strikethrough (S with line) ---- */
+export function StrikeIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <path d="M16 6.5a4 4 0 0 0-3.8-2.5c-2 0-3.7 1-3.7 2.7 0 1.5 1.2 2.2 3 2.7l1.5.4c2.5.65 4 1.7 4 3.7 0 2-1.9 3.5-4.3 3.5a4.5 4.5 0 0 1-4.4-3" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="4" y1="12" x2="20" y2="12" strokeWidth="1.75" strokeLinecap="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Highlight (pen) - already exists as HighlightIcon ---- */
+
+/* ---- Highlight Clear (pen with diagonal slash) ---- */
+export function HighlightClearIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <path d="M9 3l6.5 5.5L13 11l-1 3.5L5 8z" strokeWidth="1.75" strokeLinejoin="round" />
+      <path d="M4 19h10" strokeWidth="1.75" strokeLinecap="round" />
+      <line x1="3" y1="3" x2="21" y2="21" strokeWidth="1.75" strokeLinecap="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Bullet list (3 lines with filled dots) ---- */
+export function BulletListIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <circle cx="5" cy="6" r="1.25" fill="currentColor" stroke="none" />
+      <circle cx="5" cy="12" r="1.25" fill="currentColor" stroke="none" />
+      <circle cx="5" cy="18" r="1.25" fill="currentColor" stroke="none" />
+      <line x1="9" y1="6" x2="20" y2="6" strokeWidth="1.75" strokeLinecap="round" />
+      <line x1="9" y1="12" x2="20" y2="12" strokeWidth="1.75" strokeLinecap="round" />
+      <line x1="9" y1="18" x2="20" y2="18" strokeWidth="1.75" strokeLinecap="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Ordered list (1. 2. 3.) ---- */
+export function OrderedListIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <line x1="10" y1="6" x2="20" y2="6" strokeWidth="1.75" strokeLinecap="round" />
+      <line x1="10" y1="12" x2="20" y2="12" strokeWidth="1.75" strokeLinecap="round" />
+      <line x1="10" y1="18" x2="20" y2="18" strokeWidth="1.75" strokeLinecap="round" />
+      <path d="M5 4.5v3.5M5 8l1.5-1.5" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <text x="3.5" y="14" fontSize="6" fontWeight="700" fill="currentColor" stroke="none" fontFamily="system-ui">2</text>
+      <text x="3.5" y="20" fontSize="6" fontWeight="700" fill="currentColor" stroke="none" fontFamily="system-ui">3</text>
+    </IconWrap>
+  );
+}
+
+/* ---- Quote / Blockquote (large open quote mark) ---- */
+export function QuoteIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <path d="M6 17c0-3 1.5-5.5 4.5-7l.5 1.5c-1.5.7-2.5 2-2.5 3.5h2v4H6z" strokeWidth="1.75" strokeLinejoin="round" />
+      <path d="M14 17c0-3 1.5-5.5 4.5-7l.5 1.5c-1.5.7-2.5 2-2.5 3.5h2v4h-4.5z" strokeWidth="1.75" strokeLinejoin="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Equation (sigma + equals) ---- */
+export function EquationIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <path d="M18 5H8l4 7-4 7h10" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="4" y1="12" x2="6" y2="12" strokeWidth="1.75" strokeLinecap="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Image (mountain + sun) ---- */
+export function ImageIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="2" strokeWidth="1.75" />
+      <circle cx="8.5" cy="9.5" r="1.5" strokeWidth="1.75" />
+      <path d="M3 17l5-5 4 4 3-3 6 6" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Undo (curved arrow pointing left) ---- */
+export function UndoIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <path d="M9 14l-4-4 4-4" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5 10h9a5 5 0 0 1 0 10h-3" strokeWidth="1.75" strokeLinecap="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Redo (curved arrow pointing right) ---- */
+export function RedoIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <path d="M15 14l4-4-4-4" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M19 10h-9a5 5 0 0 0 0 10h3" strokeWidth="1.75" strokeLinecap="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Save (floppy disk) ---- */
+export function SaveIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" strokeWidth="1.75" strokeLinejoin="round" />
+      <path d="M7 3v5h7V3" strokeWidth="1.75" strokeLinejoin="round" />
+      <rect x="7" y="13" width="10" height="6" strokeWidth="1.75" strokeLinejoin="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Keyboard (grid of keys) ---- */
+export function KeyboardIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <rect x="2" y="6" width="20" height="13" rx="2" strokeWidth="1.75" />
+      <line x1="6" y1="10" x2="6" y2="10" strokeWidth="2" strokeLinecap="round" />
+      <line x1="10" y1="10" x2="10" y2="10" strokeWidth="2" strokeLinecap="round" />
+      <line x1="14" y1="10" x2="14" y2="10" strokeWidth="2" strokeLinecap="round" />
+      <line x1="18" y1="10" x2="18" y2="10" strokeWidth="2" strokeLinecap="round" />
+      <line x1="7" y1="13.5" x2="7" y2="13.5" strokeWidth="2" strokeLinecap="round" />
+      <line x1="12" y1="13.5" x2="12" y2="13.5" strokeWidth="2" strokeLinecap="round" />
+      <line x1="17" y1="13.5" x2="17" y2="13.5" strokeWidth="2" strokeLinecap="round" />
+      <line x1="5" y1="16.5" x2="19" y2="16.5" strokeWidth="1.75" strokeLinecap="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Equation glyph (sigma character as text) ---- */
+export function SigmaIcon(props: IconProps) {
+  // A simple sigma as a vector path - same as EquationIcon but stylistically standalone
+  return <EquationIcon {...props} />;
+}
+
+/* ==========================================================================
    Combined icon component for dynamic rendering
    ========================================================================== */
 const iconMap: Record<string, React.ComponentType<IconProps>> = {
@@ -627,6 +831,24 @@ const iconMap: Record<string, React.ComponentType<IconProps>> = {
   pen: PenIcon,
   bookmark: BookmarkIcon,
   cornell: CornellIcon,
+  // Rich-text editor toolbar
+  h1: Heading1Icon,
+  h2: Heading2Icon,
+  h3: Heading3Icon,
+  bold: BoldIcon,
+  italic: ItalicIcon,
+  underline: UnderlineIcon,
+  strike: StrikeIcon,
+  highlightClear: HighlightClearIcon,
+  bulletList: BulletListIcon,
+  orderedList: OrderedListIcon,
+  quote: QuoteIcon,
+  equation: EquationIcon,
+  image: ImageIcon,
+  undo: UndoIcon,
+  redo: RedoIcon,
+  save: SaveIcon,
+  keyboard: KeyboardIcon,
 };
 
 export type IconName = keyof typeof iconMap;

@@ -2,7 +2,7 @@ import React, { useEffect, useCallback, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-import { LinkIcon, UnlinkIcon, CiteIcon } from './ui/Icons';
+import { LinkIcon, UnlinkIcon, CiteIcon, Heading1Icon, Heading2Icon, Heading3Icon, BoldIcon, ItalicIcon, UnderlineIcon, HighlightClearIcon, BulletListIcon, OrderedListIcon, QuoteIcon, EquationIcon, ImageIcon, UndoIcon, RedoIcon, SaveIcon, KeyboardIcon, CodeIcon } from './ui/Icons';
 import Underline from '@tiptap/extension-underline';
 import Highlight from '@tiptap/extension-highlight';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
@@ -573,15 +573,15 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
   return (
     <div>
       <div role="toolbar" aria-label="Note formatting tools" style={{ marginBottom: '0.5rem', display: 'flex', gap: '0.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
-        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} title="Heading 1" aria-label="Heading 1" aria-pressed={editor.isActive('heading', { level: 1 })}>H1</button>
-        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} title="Heading 2" aria-label="Heading 2" aria-pressed={editor.isActive('heading', { level: 2 })}>H2</button>
-        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} title="Heading 3" aria-label="Heading 3" aria-pressed={editor.isActive('heading', { level: 3 })}>H3</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} title="Heading 1 (Ctrl+Alt+1)" aria-label="Heading 1" aria-pressed={editor.isActive('heading', { level: 1 })}><Heading1Icon size="sm" /></button>
+        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} title="Heading 2 (Ctrl+Alt+2)" aria-label="Heading 2" aria-pressed={editor.isActive('heading', { level: 2 })}><Heading2Icon size="sm" /></button>
+        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} title="Heading 3 (Ctrl+Alt+3)" aria-label="Heading 3" aria-pressed={editor.isActive('heading', { level: 3 })}><Heading3Icon size="sm" /></button>
         <span role="separator" aria-orientation="vertical" style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
-        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleBold().run()} title="Bold (Ctrl+B)" aria-label="Bold" aria-pressed={editor.isActive('bold')}><strong>B</strong></button>
-        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleItalic().run()} title="Italic (Ctrl+I)" aria-label="Italic" aria-pressed={editor.isActive('italic')}><em>I</em></button>
-        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleUnderline().run()} title="Underline (Ctrl+U)" aria-label="Underline" aria-pressed={editor.isActive('underline')}><span style={{ textDecoration: 'underline' }}>U</span></button>
+        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleBold().run()} title="Bold (Ctrl+B)" aria-label="Bold" aria-pressed={editor.isActive('bold')}><BoldIcon size="sm" /></button>
+        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleItalic().run()} title="Italic (Ctrl+I)" aria-label="Italic" aria-pressed={editor.isActive('italic')}><ItalicIcon size="sm" /></button>
+        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleUnderline().run()} title="Underline (Ctrl+U)" aria-label="Underline" aria-pressed={editor.isActive('underline')}><UnderlineIcon size="sm" /></button>
         <span className="highlight-colors" role="group" aria-label="Highlight colours">
-          <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleHighlight().run()} title="Remove highlight" aria-label="Remove highlight">🖍</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleHighlight().run()} title="Remove highlight" aria-label="Remove highlight"><HighlightClearIcon size="sm" /></button>
           <button className="hl-btn hl-yellow" onClick={() => editor.chain().focus().toggleHighlight({ color: '#fef08a' }).run()} title="Yellow highlight" aria-label="Yellow highlight" />
           <button className="hl-btn hl-green" onClick={() => editor.chain().focus().toggleHighlight({ color: '#bbf7d0' }).run()} title="Green highlight" aria-label="Green highlight" />
           <button className="hl-btn hl-blue" onClick={() => editor.chain().focus().toggleHighlight({ color: '#bfdbfe' }).run()} title="Blue highlight" aria-label="Blue highlight" />
@@ -590,12 +590,12 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
           <button className="hl-btn hl-purple" onClick={() => editor.chain().focus().toggleHighlight({ color: '#d8b4fe' }).run()} title="Purple highlight" aria-label="Purple highlight" />
         </span>
         <span role="separator" aria-orientation="vertical" style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
-        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleBulletList().run()} title="Bullet list" aria-label="Bullet list" aria-pressed={editor.isActive('bulletList')}>• List</button>
-        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleOrderedList().run()} title="Ordered list" aria-label="Ordered list" aria-pressed={editor.isActive('orderedList')}>1. List</button>
-        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleBlockquote().run()} title="Callout/quote" aria-label="Callout or quote block" aria-pressed={editor.isActive('blockquote')}>❝ Quote</button>
-        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleCodeBlock().run()} title="Code block" aria-label="Code block" aria-pressed={editor.isActive('codeBlock')}>{'</>'} Code</button>
-        <button className="btn btn-ghost btn-sm" onClick={() => { setEquationLatex(''); setShowEquationInput(true); }} title="Insert equation (LaTeX)" aria-label="Insert equation using LaTeX">∑ Equation</button>
-        <button className="btn btn-ghost btn-sm" onClick={() => { setImageUrl(''); setImageCaption(''); setShowImageInput(true); }} title="Insert image" aria-label="Insert image">🖼 Image</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleBulletList().run()} title="Bullet list (Ctrl+Shift+8)" aria-label="Bullet list" aria-pressed={editor.isActive('bulletList')}><BulletListIcon size="sm" /></button>
+        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleOrderedList().run()} title="Ordered list (Ctrl+Shift+7)" aria-label="Ordered list" aria-pressed={editor.isActive('orderedList')}><OrderedListIcon size="sm" /></button>
+        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleBlockquote().run()} title="Callout/quote" aria-label="Callout or quote block" aria-pressed={editor.isActive('blockquote')}><QuoteIcon size="sm" /></button>
+        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleCodeBlock().run()} title="Code block (Ctrl+Alt+C)" aria-label="Code block" aria-pressed={editor.isActive('codeBlock')}><CodeIcon size="sm" /></button>
+        <button className="btn btn-ghost btn-sm" onClick={() => { setEquationLatex(''); setShowEquationInput(true); }} title="Insert equation (LaTeX)" aria-label="Insert equation using LaTeX"><EquationIcon size="sm" /></button>
+        <button className="btn btn-ghost btn-sm" onClick={() => { setImageUrl(''); setImageCaption(''); setShowImageInput(true); }} title="Insert image" aria-label="Insert image"><ImageIcon size="sm" /></button>
         <button
           className="btn btn-ghost btn-sm"
           onClick={() => {
@@ -620,9 +620,9 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
           title="Insert or remove link"
           aria-label="Insert or remove hyperlink"
           aria-pressed={editor?.isActive('link') ?? false}
-        >{editor?.isActive("link") ? <><UnlinkIcon size="sm" /> Unlink</> : <><LinkIcon size="sm" /> Link</>}</button>
+        >{editor?.isActive("link") ? <><UnlinkIcon size="sm" /> <span style={{ marginLeft: '0.25rem' }}>Unlink</span></> : <><LinkIcon size="sm" /> <span style={{ marginLeft: '0.25rem' }}>Link</span></>}</button>
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
-        <button className="btn btn-ghost btn-sm" onClick={() => setShowCitationPicker(true)} title="Insert citation" aria-label="Insert citation"><CiteIcon size="sm" /> Cite</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => setShowCitationPicker(true)} title="Insert citation" aria-label="Insert citation"><CiteIcon size="sm" /> <span style={{ marginLeft: '0.25rem' }}>Cite</span></button>
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
         <button
           className="btn btn-ghost btn-sm"
@@ -630,14 +630,14 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
           disabled={!editor.can().undo()}
           title="Undo (Ctrl+Z)"
           aria-label="Undo"
-        >↶ Undo</button>
+        ><UndoIcon size="sm" /></button>
         <button
           className="btn btn-ghost btn-sm"
           onClick={() => editor.chain().focus().redo().run()}
           disabled={!editor.can().redo()}
           title="Redo (Ctrl+Shift+Z)"
           aria-label="Redo"
-        >↷ Redo</button>
+        ><RedoIcon size="sm" /></button>
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
         <button
           className="btn btn-ghost btn-sm"
@@ -645,10 +645,10 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
           disabled={saveStatus === 'saving' || saveStatus === 'saved'}
           title="Save now (Ctrl+S)"
           aria-label="Save notes"
-        >💾 {saveStatus === 'saving' ? 'Saving…' : 'Save'}</button>
+        ><SaveIcon size="sm" /> <span style={{ marginLeft: '0.25rem' }}>{saveStatus === 'saving' ? 'Saving…' : 'Save'}</span></button>
         <SaveStatusIndicator status={saveStatus} lastSavedAt={lastSavedAt} />
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
-        <button className="btn btn-ghost btn-sm" onClick={() => setShowShortcuts(true)} title="Keyboard shortcuts" aria-label="Show keyboard shortcuts">⌨</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => setShowShortcuts(true)} title="Keyboard shortcuts" aria-label="Show keyboard shortcuts"><KeyboardIcon size="sm" /></button>
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
         {activeParagraphIndex !== null && (
           <AddAnnotationButton
@@ -910,7 +910,9 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
                     </div>
                   ) : (
                     <div>
-                      <p style={{ fontSize: '2rem', marginBottom: '0.5rem', opacity: 0.5 }}>🖼</p>
+                      <div style={{ marginBottom: '0.5rem', opacity: 0.5, display: 'flex', justifyContent: 'center' }}>
+                        <ImageIcon size="2xl" />
+                      </div>
                       <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>
                         Click to select an image, or drag & drop one here
                       </p>
