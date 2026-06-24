@@ -131,16 +131,6 @@ export const literatureAiApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  visionExtract: (data: { pages: string[]; prompt: string; geminiModel?: string; userApiKey?: string; temperature?: number; maxTokens?: number }) =>
-    litRequest<{ success: boolean; extractedData: any; error?: string }>('/literature/ai/vision-extract', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-  chat: (data: { paperId?: string; paperIds?: string[]; messages: Array<{role: string; content: string}>; geminiApiKey?: string; geminiModel?: string }) =>
-    litRequest<{ message: { role: string; content: string }; sources?: string[] }>('/literature/ai/chat', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
 };
 
 // ===== Stage Two: Zotero =====
