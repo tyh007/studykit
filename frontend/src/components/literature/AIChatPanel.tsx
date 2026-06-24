@@ -68,14 +68,21 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
     const saved = typeof window !== 'undefined' ? localStorage.getItem('lit-chat-height') : null;
     return saved ? parseInt(saved) : 250;
   });
-  const chatDragRef = useRef<{ startY: number; startH: number } | null>(null);
+  // Y position of the resize line while the user is actively dragging.
+  // `null` when not dragging. Rendered as an absolute-positioned bar so the
+  // user can clearly see the line tracking the mouse.
+  const [dragY, setDragY] = useState<number | null>(null);
+  const chatDragRef = useRef<{ startY: number; startH: number; panelTopAtStart: number } | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
   const handleChatResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    chatDragRef.current = { startY: e.clientY, startH: panelHeight };
+    const panelTop = panelRef.current?.getBoundingClientRect().top ?? 0;
+    chatDragRef.current = { startY: e.clientY, startH: panelHeight, panelTopAtStart: panelTop };
     document.body.style.cursor = 'row-resize';
     document.body.style.userSelect = 'none';
+    setDragY(panelTop);
     const handleMouseMove = (ev: MouseEvent) => {
       if (!chatDragRef.current) return;
       const dy = ev.clientY - chatDragRef.current.startY;
@@ -84,6 +91,10 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
       const newH = chatDragRef.current.startH - dy;
       const clamped = Math.max(120, Math.min(500, newH));
       setPanelHeight(clamped);
+      // Visual tracking line: the line moves with the mouse. The panel
+      // top in document space is `startTop - dy` (drag up = move up).
+      const trackedTop = chatDragRef.current.panelTopAtStart - dy;
+      setDragY(trackedTop);
       localStorage.setItem('lit-chat-height', String(clamped));
     };
     const handleMouseUp = () => {
@@ -93,6 +104,7 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
       document.removeEventListener('mouseleave', handleMouseUp);
+      setDragY(null);
     };
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
@@ -212,19 +224,23 @@ EXTRACTED DATA: ${JSON.stringify(paper.extracted_data || {})}`
   }
 
   return (
-    <div style={{
-      borderTop: '1px solid var(--color-border)',
-      display: 'flex',
-      flexDirection: 'column',
-      flexShrink: 0,
-      height: panelHeight + 'px',
-      background: 'var(--color-bg)',
-      position: 'relative',
-    }}>
-      {/* Resize handle — overlaid on the top border so the visible 1px line
-          is grabbable. `position: absolute` keeps it from being clipped by
-          the parent's `overflow: hidden`, and `touchAction: 'none'` keeps
-          trackpad/touch from interpreting vertical drags as scroll. */}
+    <div
+      ref={panelRef}
+      style={{
+        borderTop: '1px solid var(--color-border)',
+        display: 'flex',
+        flexDirection: 'column',
+        flexShrink: 0,
+        height: panelHeight + 'px',
+        background: 'var(--color-bg)',
+        position: 'relative',
+      }}
+    >
+      {/* Resize handle — 16px tall hit area sitting on the top border so
+          the visible 1px line itself is grabbable. `position: absolute`
+          lifts it out of the parent's flex flow (no height impact).
+          `touchAction: 'none'` keeps trackpad/touch from interpreting
+          vertical drags as scroll. */}
       <div
         onMouseDown={handleChatResizeStart}
         title="Drag up or down to resize the AI assistant"
@@ -232,23 +248,62 @@ EXTRACTED DATA: ${JSON.stringify(paper.extracted_data || {})}`
           position: 'absolute',
           left: 0,
           right: 0,
-          top: -4,
-          height: 8,
+          top: -8,
+          height: 16,
           cursor: 'row-resize',
-          zIndex: 2,
+          zIndex: 3,
           touchAction: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
       >
+        {/* Static grabbable affordance — a 2px line with a 6-dot grip
+            pattern in the middle, like classic window resize handles. */}
         <div style={{
           position: 'absolute',
           left: 0,
           right: 0,
-          top: 3,
+          top: 7,
           height: 2,
           background: 'var(--color-border)',
           borderRadius: 1,
         }} />
+        <div style={{
+          position: 'relative',
+          display: 'flex',
+          gap: 3,
+          padding: '0 6px',
+        }} aria-hidden="true">
+          {[0, 1, 2].map(i => (
+            <span key={i} style={{
+              display: 'inline-block',
+              width: 3,
+              height: 3,
+              borderRadius: '50%',
+              background: 'var(--color-text-muted)',
+              opacity: 0.6,
+            }} />
+          ))}
+        </div>
       </div>
+      {/* Active-drag overlay — a full-width highlighted line that snaps to
+          the mouse Y while the user is dragging. Rendered at root level
+          (not inside the panel) so it can extend above the panel into the
+          workspace area. Positioned via a portal-free fixed div. */}
+      {dragY !== null && (
+        <div style={{
+          position: 'fixed',
+          left: 0,
+          right: 0,
+          top: dragY - 1,
+          height: 2,
+          background: 'var(--color-primary)',
+          boxShadow: '0 0 0 1px var(--color-bg), 0 0 0 2px var(--color-primary)',
+          pointerEvents: 'none',
+          zIndex: 9999,
+        }} aria-hidden="true" />
+      )}
       {/* Header */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
