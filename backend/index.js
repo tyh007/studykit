@@ -29,6 +29,12 @@ const PORT = process.env.PORT || 3001;
 
 // ===== Security Middleware =====
 
+// The production API is served behind one trusted reverse proxy (nginx/platform edge).
+// This lets express-rate-limit identify the original client from X-Forwarded-For.
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // Helmet sets various HTTP security headers
 app.use(helmet({
   contentSecurityPolicy: false, // CSP is handled by nginx in production
