@@ -72,12 +72,15 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
 
   const handleChatResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     chatDragRef.current = { startY: e.clientY, startH: panelHeight };
     document.body.style.cursor = 'row-resize';
     document.body.style.userSelect = 'none';
     const handleMouseMove = (ev: MouseEvent) => {
       if (!chatDragRef.current) return;
       const dy = ev.clientY - chatDragRef.current.startY;
+      // Handle sits on the TOP edge of a bottom-anchored panel — drag UP
+      // (negative dy) must GROW the panel, so subtract dy from startH.
       const newH = chatDragRef.current.startH - dy;
       const clamped = Math.max(120, Math.min(500, newH));
       setPanelHeight(clamped);
@@ -89,9 +92,13 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
       document.body.style.userSelect = '';
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mouseleave', handleMouseUp);
     };
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+    // If the cursor leaves the window mid-drag, end the drag so we don't
+    // get a stuck row-resize cursor.
+    document.addEventListener('mouseleave', handleMouseUp);
   }, [panelHeight]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -212,12 +219,36 @@ EXTRACTED DATA: ${JSON.stringify(paper.extracted_data || {})}`
       flexShrink: 0,
       height: panelHeight + 'px',
       background: 'var(--color-bg)',
+      position: 'relative',
     }}>
-      {/* Resize handle */}
+      {/* Resize handle — overlaid on the top border so the visible 1px line
+          is grabbable. `position: absolute` keeps it from being clipped by
+          the parent's `overflow: hidden`, and `touchAction: 'none'` keeps
+          trackpad/touch from interpreting vertical drags as scroll. */}
       <div
         onMouseDown={handleChatResizeStart}
-        style={{ height: 5, cursor: 'row-resize', background: 'var(--color-border-light)', flexShrink: 0 }}
-      />
+        title="Drag up or down to resize the AI assistant"
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          top: -4,
+          height: 8,
+          cursor: 'row-resize',
+          zIndex: 2,
+          touchAction: 'none',
+        }}
+      >
+        <div style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          top: 3,
+          height: 2,
+          background: 'var(--color-border)',
+          borderRadius: 1,
+        }} />
+      </div>
       {/* Header */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
