@@ -75,43 +75,66 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
   const chatDragRef = useRef<{ startY: number; startH: number; panelTopAtStart: number } | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
-  const handleChatResizeStart = useCallback((e: React.MouseEvent) => {
+  const getMaxPanelHeight = useCallback(() => {
+    const parentHeight = panelRef.current?.parentElement?.clientHeight || window.innerHeight;
+    return Math.max(120, Math.min(500, parentHeight - 150));
+  }, []);
+
+  useEffect(() => {
+    const parent = panelRef.current?.parentElement;
+    if (!parent) return;
+
+    const keepPanelInBounds = () => {
+      setPanelHeight(current => Math.max(120, Math.min(getMaxPanelHeight(), current)));
+    };
+    keepPanelInBounds();
+
+    const observer = new ResizeObserver(keepPanelInBounds);
+    observer.observe(parent);
+    return () => observer.disconnect();
+  }, [getMaxPanelHeight, expanded]);
+
+  const handleChatResizeStart = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // The handle may disappear during navigation; document listeners still
+      // provide a safe fallback for the active drag.
+    }
     const panelTop = panelRef.current?.getBoundingClientRect().top ?? 0;
     chatDragRef.current = { startY: e.clientY, startH: panelHeight, panelTopAtStart: panelTop };
     document.body.style.cursor = 'row-resize';
     document.body.style.userSelect = 'none';
     setDragY(panelTop);
-    const handleMouseMove = (ev: MouseEvent) => {
+    const handlePointerMove = (ev: PointerEvent) => {
       if (!chatDragRef.current) return;
       const dy = ev.clientY - chatDragRef.current.startY;
       // Handle sits on the TOP edge of a bottom-anchored panel — drag UP
       // (negative dy) must GROW the panel, so subtract dy from startH.
       const newH = chatDragRef.current.startH - dy;
-      const clamped = Math.max(120, Math.min(500, newH));
+      const clamped = Math.max(120, Math.min(getMaxPanelHeight(), newH));
       setPanelHeight(clamped);
       // Visual tracking line: the line moves with the mouse. The panel
       // top in document space is `startTop - dy` (drag up = move up).
-      const trackedTop = chatDragRef.current.panelTopAtStart - dy;
+      const trackedTop = chatDragRef.current.panelTopAtStart + dy;
       setDragY(trackedTop);
       localStorage.setItem('lit-chat-height', String(clamped));
     };
-    const handleMouseUp = () => {
+    const handlePointerUp = () => {
       chatDragRef.current = null;
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.removeEventListener('mouseleave', handleMouseUp);
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerUp);
+      document.removeEventListener('pointercancel', handlePointerUp);
       setDragY(null);
     };
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    // If the cursor leaves the window mid-drag, end the drag so we don't
-    // get a stuck row-resize cursor.
-    document.addEventListener('mouseleave', handleMouseUp);
-  }, [panelHeight]);
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerup', handlePointerUp);
+    document.addEventListener('pointercancel', handlePointerUp);
+  }, [getMaxPanelHeight, panelHeight]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -226,15 +249,8 @@ EXTRACTED DATA: ${JSON.stringify(paper.extracted_data || {})}`
   return (
     <div
       ref={panelRef}
-      style={{
-        borderTop: '1px solid var(--color-border)',
-        display: 'flex',
-        flexDirection: 'column',
-        flexShrink: 0,
-        height: panelHeight + 'px',
-        background: 'var(--color-bg)',
-        position: 'relative',
-      }}
+      className="ai-chat-panel"
+      style={{ height: panelHeight + 'px' }}
     >
       {/* Resize handle — 16px tall hit area sitting on the top border so
           the visible 1px line itself is grabbable. `position: absolute`
@@ -242,8 +258,14 @@ EXTRACTED DATA: ${JSON.stringify(paper.extracted_data || {})}`
           `touchAction: 'none'` keeps trackpad/touch from interpreting
           vertical drags as scroll. */}
       <div
-        onMouseDown={handleChatResizeStart}
+        onPointerDown={handleChatResizeStart}
         title="Drag up or down to resize the AI assistant"
+        role="separator"
+        aria-label="Resize AI assistant"
+        aria-orientation="horizontal"
+        aria-valuemin={120}
+        aria-valuemax={Math.round(getMaxPanelHeight())}
+        aria-valuenow={Math.round(panelHeight)}
         style={{
           position: 'absolute',
           left: 0,
@@ -316,7 +338,7 @@ EXTRACTED DATA: ${JSON.stringify(paper.extracted_data || {})}`
           <select
             value={profileId}
             onChange={event => setProfileId(event.target.value)}
-            style={{ maxWidth: 210, minWidth: 120, fontSize: '0.72rem', padding: '0.15rem 0.35rem' }}
+            className="form-select ai-profile-select"
             title="仅切换本次对话使用的 AI 配置"
           >
             {profiles.length === 0 && <option value="">未配置 AI</option>}

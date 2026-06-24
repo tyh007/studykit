@@ -362,15 +362,9 @@ function StudyKitApp() {
         <main id="main-content" className={`main-content ${!selectedLecture ? (sidebarMode === 'literature' && selectedLitProjectId ? 'literature-active' : 'empty') : ''}`}>
           {!selectedLecture ? (
             sidebarMode === 'literature' && selectedLitProjectId ? (
-              <div>
+              <div className="literature-shell">
                 {/* Literature tab bar */}
-                <div style={{
-                  display: 'flex',
-                  borderBottom: '2px solid var(--color-border)',
-                  padding: '0 1rem',
-                  background: 'var(--color-bg)',
-                  gap: 0,
-                }}>
+                <div className="literature-top-tabs">
                   {(['papers', 'readingLists', 'graph'] as const).map((tab) => (
                     <button
                       key={tab}
@@ -409,7 +403,7 @@ function StudyKitApp() {
                     {activeLiteratureTab === 'papers' && <SummaryTable projectId={selectedLitProjectId} />}
                     {activeLiteratureTab === 'readingLists' && <ReadingListsView />}
                     {activeLiteratureTab === 'graph' && (
-                      <div style={{ padding: '1rem', overflow: 'auto' }}>
+                      <div className="literature-view-scroll">
                         <PaperRelationsGraph
                           nodes={graphData.nodes}
                           edges={graphData.edges}
