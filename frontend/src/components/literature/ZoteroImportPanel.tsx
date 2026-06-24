@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { CloseIcon } from '../ui/Icons';
 import { zoteroApi, readingListsApi, literatureProjectsApi, literaturePapersApi } from '../../lib/literature-api';
-import { createAIExtractionService } from '../../lib/literature/ai-extraction';
 import { readAIProviderConfig } from '../../lib/literature/ai-provider-config';
+import { extractPapersBatch } from '../../lib/literature/extract-batch';
 
 export default function ZoteroImportPanel() {
   const {
@@ -21,6 +21,7 @@ export default function ZoteroImportPanel() {
   const [error, setError] = useState<string | null>(null);
   const [importingItems, setImportingItems] = useState<Set<string>>(new Set());
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
+  const [importProgress, setImportProgress] = useState<string | null>(null);
   const [extractingPapers, setExtractingPapers] = useState(false);
 
   useEffect(() => {
@@ -115,6 +116,7 @@ export default function ZoteroImportPanel() {
     setImportingItems((prev) => new Set(prev).add(collectionId));
     setError(null);
     setImportSuccess(null);
+    setImportProgress(null);
     try {
       // Step 1: Import items from Zotero
       const result = await zoteroApi.importCollectionItems({
@@ -130,26 +132,24 @@ export default function ZoteroImportPanel() {
         selectLitProject(usedProjectId);
       }
 
-      // Step 2: Get the papers that were imported and run extraction
+      // Step 2: Get the papers that were imported and run extraction.
       const targetProjectId = selectedLitProjectId || usedProjectId;
       if (targetProjectId) {
         const papers = await literaturePapersApi.list(targetProjectId);
         setLitPapers(papers);
         setActiveLiteratureTab('papers');
 
-        // Extract unextracted papers
         const unextracted = papers.filter((p: any) => !p.extracted_data && p.full_text);
         if (unextracted.length > 0) {
           setExtractingPapers(true);
-          const service = createAIExtractionService();
-          for (const paper of unextracted) {
-            try {
-              const { extractedData } = await service.extractWithFallback(paper.full_text!, 'brief');
-              await literaturePapersApi.update(paper.id, { extracted_data: extractedData, processing_status: 'completed' });
-            } catch (err) {
-              console.error('Extraction failed for', paper.title, err);
-            }
-          }
+          await extractPapersBatch(unextracted, {
+            mode: 'auto',
+            onProgress: ({ index, total }) => {
+              setImportProgress(`Extracting ${index + 1}/${total}…`);
+            },
+          });
+          setExtractingPapers(false);
+          setImportProgress(null);
           // Reload papers after extraction
           const updatedPapers = await literaturePapersApi.list(targetProjectId);
           setLitPapers(updatedPapers);
@@ -281,7 +281,7 @@ export default function ZoteroImportPanel() {
           {/* Show success message */}
           {extractingPapers && (
             <div style={{ fontSize: '0.7rem', color: 'var(--color-primary)', marginBottom: '0.25rem', padding: '0.125rem 0', fontStyle: 'italic' }}>
-              Extracting AI summaries...
+              {importProgress || 'Extracting AI summaries...'}
             </div>
           )}
           {importSuccess && (

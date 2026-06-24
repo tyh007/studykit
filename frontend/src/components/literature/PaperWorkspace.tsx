@@ -3,7 +3,9 @@ import { literaturePapersApi, paperNotesApi, paperRelationsApi } from '../../lib
 import { createAIExtractionService } from '../../lib/literature/ai-extraction';
 import { PromptBuilder } from '../../lib/literature/prompt-builder';
 import { StarIcon, CloseIcon } from '../ui/Icons';
+import { safeReadingStatus, clampImportance, type ReadingStatus } from '../../lib/literature/type-guards';
 import { readAIProviderConfig } from '../../lib/literature/ai-provider-config';
+import { useDragResize } from '../../hooks/useDragResize';
 import LiteraturePDFViewer from './LiteraturePDFViewer';
 import PaperAnnotationLayer from './PaperAnnotationLayer';
 import AIChatPanel from './AIChatPanel';
@@ -60,34 +62,20 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
   const [graphExpanded, setGraphExpanded] = useState(false);
   const [splitPercent, setSplitPercent] = useState(55);
   const { selectLitPaper } = useStore();
-  const dragSplitRef = useRef<{ startX: number; startPercent: number } | null>(null);
 
-  const handleSplitDragStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    const container = (e.target as HTMLElement).parentElement;
-    if (!container) return;
-    const containerWidth = container.getBoundingClientRect().width;
-    if (containerWidth === 0) return;
-    dragSplitRef.current = { startX: e.clientX, startPercent: splitPercent };
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    const handleMouseMove = (ev: MouseEvent) => {
-      if (!dragSplitRef.current) return;
-      const dx = ev.clientX - dragSplitRef.current.startX;
-      const cw = container.getBoundingClientRect().width;
-      const pct = dragSplitRef.current.startPercent + (dx / cw) * 100;
-      setSplitPercent(Math.max(25, Math.min(75, pct)));
-    };
-    const handleMouseUp = () => {
-      dragSplitRef.current = null;
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }, [splitPercent]);
+  // Drag-resize the PDF / side-panel split. Container ref is attached to
+  // the parent flex div below so percent-of-container math stays correct
+  // if the workspace is resized mid-drag.
+  const splitContainerRef = useRef<HTMLDivElement>(null);
+  const { onPointerDown: onSplitDown, separatorProps: splitProps } = useDragResize({
+    axis: 'x',
+    startValue: splitPercent,
+    containerRef: splitContainerRef,
+    min: 25,
+    max: 75,
+    asPercentOfContainer: true,
+    onChange: setSplitPercent,
+  });
 
   // Notes
   const [notes, setNotes] = useState<PaperNote[]>([]);
@@ -97,13 +85,18 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
   const [editNoteContent, setEditNoteContent] = useState('');
 
   // Reading status & importance
-  const [status, setStatus] = useState<'unread' | 'reading' | 'read' | 'reviewed'>(
-    (paper.reading_status as any) || 'unread'
-  );
-  const [importance, setImportance] = useState(paper.importance || 0);
+  const [status, setStatus] = useState<ReadingStatus>(safeReadingStatus(paper.reading_status));
+  const [importance, setImportance] = useState<0 | 1 | 2 | 3 | 4 | 5>(clampImportance(paper.importance));
 
-  // Initialize editable data from paper
+  // Initialize editable data from paper — ONCE per paper id. The previous
+  // implementation had `paper.extracted_data` in the dep list, so any
+  // refetch from the parent (e.g. after an AI extraction) would clobber
+  // the user's in-progress textarea edits. Now we only re-seed when the
+  // paper id changes.
+  const lastInitializedPaperIdRef = useRef<string | null>(null);
   useEffect(() => {
+    if (lastInitializedPaperIdRef.current === paper.id) return;
+    lastInitializedPaperIdRef.current = paper.id;
     if (paper.extracted_data) {
       const data: Record<string, string> = {};
       const fields = ['background', 'theory', 'methodology', 'measures', 'results', 'implications', 'limitations'];
@@ -115,9 +108,70 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
       setEditableData({});
     }
     setDirty(false);
-    setStatus((paper.reading_status as any) || 'unread');
-    setImportance(paper.importance || 0);
+    setStatus(safeReadingStatus(paper.reading_status));
+    setImportance(clampImportance(paper.importance));
   }, [paper.id, paper.extracted_data, paper.reading_status, paper.importance]);
+
+  // Debounced combined save. The previous implementation issued a separate
+  // PATCH for every status / importance toggle — clicking stars 4 times
+  // fired 4 round-trips, and the patches raced each other. Now we coalesce
+  // extracted_data + status + importance into one PATCH every ~400ms.
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestRef = useRef<{
+    editableData: Record<string, string>;
+    status: typeof status;
+    importance: number;
+  }>({ editableData: {}, status: 'unread' as typeof status, importance: 0 });
+
+  const performSave = useCallback(async () => {
+    const { editableData: ed, status: s, importance: i } = latestRef.current;
+    const updates: Record<string, any> = {};
+    if (Object.keys(ed).length > 0) {
+      updates.extracted_data = { ...paper.extracted_data, ...ed };
+    }
+    if (s !== paper.reading_status) updates.reading_status = s;
+    if (i !== (paper.importance || 0)) updates.importance = i;
+    if (Object.keys(updates).length === 0) return;
+    setSaving(true);
+    try {
+      await literaturePapersApi.update(paper.id, updates);
+      setDirty(false);
+      onUpdated();
+    } catch (err) {
+      console.error('Failed to save:', err);
+    } finally {
+      setSaving(false);
+    }
+  }, [paper.id, paper.extracted_data, paper.reading_status, paper.importance, onUpdated]);
+
+  const persist = useCallback(
+    (next: Partial<{ editableData: Record<string, string>; status: typeof status; importance: number }>) => {
+      latestRef.current = { ...latestRef.current, ...next };
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        saveTimerRef.current = null;
+        performSave();
+      }, 400);
+    },
+    [performSave],
+  );
+
+  // Save all changes immediately (bypasses the 400ms debounce). Used by
+  // the "Save Changes" button.
+  const handleSave = () => {
+    latestRef.current = { editableData, status, importance };
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = null;
+    performSave();
+  };
+
+  // Cancel any pending debounced save when the paper changes or the
+  // component unmounts, so we don't PATCH stale state.
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [paper.id]);
 
   // Load relations
   const loadRelations = useCallback(async () => {
@@ -154,61 +208,26 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
     loadNotes();
   }, [loadNotes]);
 
-  // Update field value
+  // Update field value — queue a debounced save with the new map.
   const handleFieldChange = (field: string, value: string) => {
-    setEditableData(prev => ({ ...prev, [field]: value }));
+    setEditableData((prev) => {
+      const next = { ...prev, [field]: value };
+      persist({ editableData: next });
+      return next;
+    });
     setDirty(true);
   };
 
-  // Save all changes (extracted_data + status + importance)
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const updates: Record<string, any> = {};
-
-      // Only save extracted_data if it was modified
-      if (dirty && Object.keys(editableData).length > 0) {
-        updates.extracted_data = {
-          ...paper.extracted_data,
-          ...editableData,
-        };
-      }
-
-      // Always sync status and importance (they might have changed)
-      if (status !== paper.reading_status) updates.reading_status = status;
-      if (importance !== (paper.importance || 0)) updates.importance = importance;
-
-      if (Object.keys(updates).length > 0) {
-        await literaturePapersApi.update(paper.id, updates);
-        setDirty(false);
-        onUpdated();
-      }
-    } catch (err) {
-      console.error('Failed to save:', err);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Auto-save status and importance changes immediately
-  const handleStatusChange = async (newStatus: 'unread' | 'reading' | 'read' | 'reviewed') => {
+  // Status / importance changes go through the same debounced path so a
+  // burst of clicks only fires one PATCH.
+  const handleStatusChange = (newStatus: ReadingStatus) => {
     setStatus(newStatus);
-    try {
-      await literaturePapersApi.update(paper.id, { reading_status: newStatus });
-      onUpdated();
-    } catch (err) {
-      console.error('Failed to update status:', err);
-    }
+    persist({ status: newStatus });
   };
 
-  const handleImportanceChange = async (newImportance: number) => {
+  const handleImportanceChange = (newImportance: 0 | 1 | 2 | 3 | 4 | 5) => {
     setImportance(newImportance);
-    try {
-      await literaturePapersApi.update(paper.id, { importance: newImportance });
-      onUpdated();
-    } catch (err) {
-      console.error('Failed to update importance:', err);
-    }
+    persist({ importance: newImportance });
   };
 
   // Re-extract a single field
@@ -343,7 +362,7 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
       </div>
 
       {/* Main content: split pane */}
-      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      <div ref={splitContainerRef} style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         {/* Left: PDF Viewer */}
         <div style={{ width: splitPercent + '%', minWidth: 0, overflow: 'auto' }}>
           {paper.storage_key ? (
@@ -370,7 +389,7 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
         </div>
 
         {/* Right: Tabs */}
-              <div onMouseDown={handleSplitDragStart} style={{ width: 6, cursor: 'col-resize', background: 'var(--color-bg-secondary)', flexShrink: 0, position: 'relative', zIndex: 5 }} />
+              <div {...splitProps} onPointerDown={onSplitDown} aria-label="Resize PDF and side panel" style={{ width: 6, cursor: 'col-resize', background: 'var(--color-bg-secondary)', flexShrink: 0, position: 'relative', zIndex: 5 }} />
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {/* Tab bar */}
           <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>

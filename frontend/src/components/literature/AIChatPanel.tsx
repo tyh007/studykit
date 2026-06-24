@@ -1,38 +1,59 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { literatureAiApi } from '../../lib/literature-api';
 import { CloseIcon } from '../ui/Icons';
 import { readAIProviderConfig } from '../../lib/literature/ai-provider-config';
 import { readCustomAISettings } from '../../lib/literature/custom-ai-settings';
 import { CustomAIClient } from '../../lib/literature/custom-ai-client';
+import { useDragResize } from '../../hooks/useDragResize';
 import ReactMarkdown from 'react-markdown';
 import type { LiteraturePaper } from '../../types';
 
-// Parse AI response to separate thinking process from final answer
-function parseAIContent(text: string): { thinking: string | null; response: string } {
-  const marker = "Here's a thinking process:";
-  const idx = text.indexOf(marker);
-  if (idx === -1) return { thinking: null, response: text };
-
+// Parse AI response to separate thinking process from final answer.
+// Exported for unit tests (see AIChatPanel.test.ts).
+export function parseAIContent(text: string): { thinking: string | null; response: string } {
+  // The marker must be on its own line — otherwise the model is just
+  // mentioning the phrase in prose, and we should not split the response.
   const lines = text.split('\n');
-  let markerLine = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes("Here's a thinking process:")) { markerLine = i; break; }
-  }
+  const markerLine = lines.findIndex((l) => l.trim() === "Here's a thinking process:");
   if (markerLine === -1) return { thinking: null, response: text };
 
-  // Find the LAST numbered step (1., 2., etc.) after the marker
+  // Find the LAST numbered step after the marker. The step must have a
+  // number, a dot, and at least one non-space character (so that "1." at
+  // end-of-line doesn't qualify). Without this, a model that mentions
+  // "Step 1." once and then prose would incorrectly split the response.
   let lastNumLine = -1;
   for (let i = markerLine + 1; i < lines.length; i++) {
-    if (/^\s*\d+\./.test(lines[i])) { lastNumLine = i; }
+    if (/^\s*\d+\.\s+\S/.test(lines[i])) lastNumLine = i;
   }
+  if (lastNumLine === -1) return { thinking: null, response: text };
 
-  if (lastNumLine !== -1) {
-    const thinking = lines.slice(0, lastNumLine + 1).join('\n').trim();
-    const rest = lines.slice(lastNumLine + 1).map(l => l.trim()).filter(Boolean).join('\n').trim();
-    return { thinking, response: rest || text };
-  }
-  return { thinking: null, response: text };
+  const thinking = lines.slice(0, lastNumLine + 1).join('\n').trim();
+  const response = lines
+    .slice(lastNumLine + 1)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+  return { thinking, response: response || text };
 }
+
+// Loopback check used by the localhost warning (P3 #2/#3).
+function isLoopbackUrl(url: string): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1|::1)(:\d+)?\//.test(url);
+}
+
+// react-markdown's default <a> renderer doesn't add rel="noopener noreferrer",
+// so external links from LLM output would have reverse-tabnabbing risk.
+// Wrap the link to always emit both attributes.
+const CustomLink: React.ComponentProps<typeof ReactMarkdown>['components']['a'] = ({
+  href,
+  children,
+  ...rest
+}) => (
+  <a href={href} target="_blank" rel="noopener noreferrer" {...rest}>
+    {children}
+  </a>
+);
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -66,31 +87,17 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
     const saved = typeof window !== 'undefined' ? localStorage.getItem('lit-chat-height') : null;
     return saved ? parseInt(saved) : 250;
   });
-  const chatDragRef = useRef<{ startY: number; startH: number } | null>(null);
 
-  const handleChatResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    chatDragRef.current = { startY: e.clientY, startH: panelHeight };
-    document.body.style.cursor = 'row-resize';
-    document.body.style.userSelect = 'none';
-    const handleMouseMove = (ev: MouseEvent) => {
-      if (!chatDragRef.current) return;
-      const dy = ev.clientY - chatDragRef.current.startY;
-      const newH = chatDragRef.current.startH - dy;
-      const clamped = Math.max(120, Math.min(500, newH));
-      setPanelHeight(clamped);
-      localStorage.setItem('lit-chat-height', String(clamped));
-    };
-    const handleMouseUp = () => {
-      chatDragRef.current = null;
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }, [panelHeight]);
+  // Drag-resize the AI chat panel vertically. Persists the committed height
+  // to localStorage on pointerup only (the old code wrote on every move).
+  const { onPointerDown: onChatResizeDown, separatorProps: chatResizeProps } = useDragResize({
+    axis: 'y',
+    startValue: panelHeight,
+    min: 120,
+    max: 500,
+    onChange: setPanelHeight,
+    persistKey: 'lit-chat-height',
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -116,6 +123,14 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
         // Use CustomAIClient directly (matches user's MLX setup)
         const customSettings = readCustomAISettings();
         if (!customSettings.baseUrl) throw new Error('Custom API URL not configured in AI Settings');
+        // Warn once per non-loopback baseUrl so the user notices credentials
+        // and paper content are leaving their machine (P3 #2/#3).
+        if (!isLoopbackUrl(customSettings.baseUrl)) {
+          console.warn(
+            `[AIChatPanel] Connecting to non-loopback LLM at ${customSettings.baseUrl}. ` +
+              'Credentials and paper content will be sent to this host.',
+          );
+        }
         const client = new CustomAIClient(customSettings.baseUrl, customSettings.model, customSettings.apiKey);
         const result = await client.chat({
           model: customSettings.model || 'default',
@@ -182,7 +197,9 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
     }}>
       {/* Resize handle */}
       <div
-        onMouseDown={handleChatResizeStart}
+        {...chatResizeProps}
+        onPointerDown={onChatResizeDown}
+        aria-label="Resize AI assistant"
         style={{ height: 5, cursor: 'row-resize', background: 'var(--color-border-light)', flexShrink: 0 }}
       />
       {/* Header */}
@@ -243,12 +260,12 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
                           {parsed.thinking}
                         </div>
                       </details>
-                      <div style={{ lineHeight: 1.5 }}><ReactMarkdown>{parsed.response}</ReactMarkdown></div>
+                      <div style={{ lineHeight: 1.5 }}><ReactMarkdown components={{ a: CustomLink }}>{parsed.response}</ReactMarkdown></div>
                     </>
                   );
                 }
                 return msg.content;
-              })() : <ReactMarkdown>{msg.content}</ReactMarkdown>}
+              })() : <ReactMarkdown components={{ a: CustomLink }}>{msg.content}</ReactMarkdown>}
             </div>
           </div>
         ))}

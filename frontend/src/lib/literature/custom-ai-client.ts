@@ -172,7 +172,14 @@ export class CustomAIClient {
     if (cleaned.startsWith('```')) {
       cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '')
     }
-    // Scan forward to find every valid JSON object, return the first one that parses
+    // Scan forward to find every valid JSON object, return the first one that parses.
+    //
+    // Cap the number of `JSON.parse` attempts. Pathological LLM output
+    // (lots of unmatched `{` `}` inside prose) can otherwise spend a long
+    // time scanning substrings; 20 is well above any realistic
+    // legitimate case and keeps the worst case bounded.
+    const MAX_CANDIDATES = 20
+    let candidates = 0
     let depth = 0
     let start = -1
     for (let i = 0; i < cleaned.length; i++) {
@@ -189,6 +196,7 @@ export class CustomAIClient {
           } catch {
             // This wasn't a valid JSON object, keep scanning
             start = -1
+            if (++candidates >= MAX_CANDIDATES) return cleaned
           }
         }
       }

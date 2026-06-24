@@ -7,9 +7,7 @@ import { StarIcon, LiteratureIcon, ReadingListIcon, GraphIcon } from '../ui/Icon
 import AIStatusIndicator from './AIStatusIndicator';
 import AISettingsPanel from './AISettingsPanel';
 import ColumnConfigDialog, { getVisibleColumnKeys, saveColumnConfig, type ColumnConfigItem } from './ColumnConfigDialog';
-import { createAIExtractionService } from '../../lib/literature/ai-extraction';
-import { smartExtract } from '../../lib/literature/multimodal-extraction';
-import { readAIProviderConfig } from '../../lib/literature/ai-provider-config';
+import { extractPapersBatch } from '../../lib/literature/extract-batch';
 import type { LiteraturePaper, ExtractedData } from '../../types';
 
 const FIELD_LABELS: Record<string, string> = {
@@ -80,6 +78,8 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
   const [showExtractMenu, setShowExtractMenu] = useState(false);
   const [extractingBatch, setExtractingBatch] = useState(false);
   const [extractingSingle, setExtractingSingle] = useState<Set<string>>(new Set());
+  const [extractingLabel, setExtractingLabel] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const [filterReadingListId, setFilterReadingListId] = useState<string | null>(null);
   const [filterCitationIds, setFilterCitationIds] = useState<Set<string>>(new Set());
   const tableRef = useRef<HTMLDivElement>(null);
@@ -89,6 +89,14 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
   useEffect(() => {
     localStorage.setItem('lit-column-widths', JSON.stringify(columnWidths));
   }, [columnWidths]);
+
+  // Cancel any in-flight batch extraction on unmount so we don't leak
+  // PATCH requests or fire setState after the component is gone.
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(ROW_HEIGHT_STORAGE_KEY, JSON.stringify(rowHeights));
@@ -167,72 +175,43 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
     if (targetPapers.length === 0) return;
 
     setExtractingBatch(true);
-    const service = createAIExtractionService();
-    const aiConfig = readAIProviderConfig();
-
-    for (const paper of targetPapers) {
-      try {
-        // Try text extraction first if text exists and mode allows it
-        const useVision = extractMode === 'vision' || (extractMode === 'auto' && (!paper.full_text || paper.full_text.length < 200));
-
-        if (useVision && paper.storage_key) {
-          // Vision mode: render pages as images
-          const pdfUrl = `/uploads/${paper.storage_key}`;
-          const extractedData = await smartExtract(pdfUrl, paper.full_text, undefined, aiConfig);
-          if (extractedData) {
-            await literaturePapersApi.update(paper.id, { extracted_data: extractedData, processing_status: 'completed' });
-            continue;
-          }
+    setExtractingLabel(`0/${targetPapers.length}`);
+    abortRef.current = new AbortController();
+    await extractPapersBatch(targetPapers, {
+      mode: extractMode,
+      signal: abortRef.current.signal,
+      onProgress: ({ paperId, index, total, status, errorMessage }) => {
+        setExtractingLabel(`${index + 1}/${total}`);
+        if (status === 'error') {
+          console.error(`AI extraction failed for ${paperId}:`, errorMessage);
         }
-
-        // Fall back to text extraction
-        if (paper.full_text) {
-          const { extractedData } = await service.extractWithFallback(
-            paper.full_text,
-            'brief',
-          );
-          await literaturePapersApi.update(paper.id, { extracted_data: extractedData, processing_status: 'completed' });
-        }
-      } catch (err) {
-        console.error(`AI extraction failed for ${paper.title}:`, err);
-        await literaturePapersApi.update(paper.id, { error_message: err instanceof Error ? err.message : 'Extraction failed' });
-      }
-    }
-
+      },
+    });
     setExtractingBatch(false);
+    setExtractingLabel(null);
+    abortRef.current = null;
     loadPapers();
   };
 
   const handleSingleExtract = async (paperId: string) => {
-    setExtractingSingle(prev => new Set(prev).add(paperId));
-    const paper = litPapers.find(p => p.id === paperId);
+    setExtractingSingle((prev) => new Set(prev).add(paperId));
+    const paper = litPapers.find((p) => p.id === paperId);
     if (!paper) return;
 
-    try {
-      const aiConfig = readAIProviderConfig();
-      const useVision = extractMode === 'vision' || (extractMode === 'auto' && (!paper.full_text || paper.full_text.length < 200));
-
-      if (useVision && paper.storage_key) {
-        const pdfUrl = `/uploads/${paper.storage_key}`;
-        const extractedData = await smartExtract(pdfUrl, paper.full_text, undefined, aiConfig);
-        if (extractedData) {
-          await literaturePapersApi.update(paper.id, { extracted_data: extractedData, processing_status: 'completed' });
+    await extractPapersBatch([paper], {
+      mode: extractMode,
+      onProgress: ({ status, errorMessage }) => {
+        if (status === 'error') {
+          console.error(`AI extraction failed for ${paperId}:`, errorMessage);
         }
-      } else if (paper.full_text) {
-        const service = createAIExtractionService();
-        const { extractedData } = await service.extractWithFallback(
-          paper.full_text,
-          'brief',
-        );
-        await literaturePapersApi.update(paper.id, { extracted_data: extractedData, processing_status: 'completed' });
-      }
-      loadPapers();
-    } catch (err) {
-      console.error(`AI extraction failed for ${paperId}:`, err);
-      await literaturePapersApi.update(paper.id, { error_message: err instanceof Error ? err.message : 'Extraction failed' }).catch(() => {});
-    } finally {
-      setExtractingSingle(prev => { const n = new Set(prev); n.delete(paperId); return n; });
-    }
+      },
+    });
+    loadPapers();
+    setExtractingSingle((prev) => {
+      const n = new Set(prev);
+      n.delete(paperId);
+      return n;
+    });
   };
 
   const filteredPapers = litPapers.filter(p => {
@@ -246,52 +225,74 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
 
   const customFieldColumns = litCustomFields.map(f => ({ id: f.id, name: f.name }));
 
-  // Column resize handlers
-  const startColResize = useCallback((col: string, e: React.MouseEvent) => {
-    e.preventDefault();
-    dragRef.current = { col, startX: e.clientX, startW: columnWidths[col] || 160 };
-    const handleMouseMove = (ev: MouseEvent) => {
-      if (!dragRef.current) return;
-      const dx = ev.clientX - dragRef.current.startX;
-      const newW = Math.max(40, dragRef.current.startW + dx);
-      setColumnWidths(prev => ({ ...prev, [dragRef.current!.col]: newW }));
-    };
-    const handleMouseUp = () => {
-      dragRef.current = null;
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  }, [columnWidths]);
+  // Column + row resize. These stay inline because the resize key is
+  // dynamic (column name / paperId) and useDragResize takes a stable
+  // startValue. The handler still uses pointer events for parity with the
+  // rest of the app and cleans up on unmount.
+  const dragRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
+  const rowDragRef = useRef<{ paperId: string; startY: number; startH: number } | null>(null);
 
-  // Row resize handlers
-  const startRowResize = useCallback((paperId: string, e: React.MouseEvent) => {
-    e.preventDefault();
-    const currentH = rowHeights[paperId] || 0;
-    rowDragRef.current = { paperId, startY: e.clientY, startH: currentH };
-    const handleMouseMove = (ev: MouseEvent) => {
-      if (!rowDragRef.current) return;
-      const dy = ev.clientY - rowDragRef.current.startY;
-      const newH = Math.max(80, rowDragRef.current.startH + dy);
-      setRowHeights(prev => ({ ...prev, [rowDragRef.current!.paperId]: newH }));
-    };
-    const handleMouseUp = () => {
-      rowDragRef.current = null;
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+  useEffect(() => {
+    return () => {
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    document.body.style.cursor = 'row-resize';
-    document.body.style.userSelect = 'none';
-  }, [rowHeights]);
+  }, []);
+
+  const startColResize = useCallback(
+    (col: string, e: React.PointerEvent) => {
+      e.preventDefault();
+      dragRef.current = { col, startX: e.clientX, startW: columnWidths[col] || 160 };
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      const handlePointerMove = (ev: PointerEvent) => {
+        if (!dragRef.current) return;
+        const dx = ev.clientX - dragRef.current.startX;
+        const newW = Math.max(40, dragRef.current.startW + dx);
+        setColumnWidths((prev) => ({ ...prev, [dragRef.current!.col]: newW }));
+      };
+      const handlePointerUp = () => {
+        dragRef.current = null;
+        document.removeEventListener('pointermove', handlePointerMove);
+        document.removeEventListener('pointerup', handlePointerUp);
+        document.removeEventListener('pointercancel', handlePointerUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+      document.addEventListener('pointermove', handlePointerMove);
+      document.addEventListener('pointerup', handlePointerUp);
+      document.addEventListener('pointercancel', handlePointerUp);
+    },
+    [columnWidths],
+  );
+
+  const startRowResize = useCallback(
+    (paperId: string, e: React.PointerEvent) => {
+      e.preventDefault();
+      const currentH = rowHeights[paperId] || 0;
+      rowDragRef.current = { paperId, startY: e.clientY, startH: currentH };
+      document.body.style.cursor = 'row-resize';
+      document.body.style.userSelect = 'none';
+      const handlePointerMove = (ev: PointerEvent) => {
+        if (!rowDragRef.current) return;
+        const dy = ev.clientY - rowDragRef.current.startY;
+        const newH = Math.max(80, rowDragRef.current.startH + dy);
+        setRowHeights((prev) => ({ ...prev, [rowDragRef.current!.paperId]: newH }));
+      };
+      const handlePointerUp = () => {
+        rowDragRef.current = null;
+        document.removeEventListener('pointermove', handlePointerMove);
+        document.removeEventListener('pointerup', handlePointerUp);
+        document.removeEventListener('pointercancel', handlePointerUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+      document.addEventListener('pointermove', handlePointerMove);
+      document.addEventListener('pointerup', handlePointerUp);
+      document.addEventListener('pointercancel', handlePointerUp);
+    },
+    [rowHeights],
+  );
 
   const toggleExpandCell = (cellKey: string) => {
     setExpandedCells(prev => {
@@ -366,7 +367,7 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
               title="Run AI extraction on selected papers, or all unextracted papers if none selected"
               style={{ fontSize: '0.78rem' }}
             >
-              {extractingBatch ? 'Extracting...' : `AI ${extractMode === 'vision' ? '👁' : extractMode === 'auto' ? '⚡' : '📝'}`}
+              {extractingBatch ? `Extracting ${extractingLabel ?? '…'}` : `AI ${extractMode === 'vision' ? '👁' : extractMode === 'auto' ? '⚡' : '📝'}`}
             </button>
             {showExtractMenu && (
               <div style={{
@@ -435,38 +436,38 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
                 <th style={{ width: columnWidths.checkbox, cursor: 'pointer' }}>
                   <input type="checkbox" checked={selectedIds.size === filteredPapers.length && filteredPapers.length > 0}
                     onChange={selectAll} />
-                  <div className="resize-handle" onMouseDown={(e) => startColResize('checkbox', e)} />
+                  <div className="resize-handle" onPointerDown={(e) => startColResize('checkbox', e)} />
                 </th>
                 <th style={{ width: columnWidths.title }}>
                   Title
-                  <div className="resize-handle" onMouseDown={(e) => startColResize('title', e)} />
+                  <div className="resize-handle" onPointerDown={(e) => startColResize('title', e)} />
                 </th>
                 <th style={{ width: columnWidths.authors }}>
                   Authors
-                  <div className="resize-handle" onMouseDown={(e) => startColResize('authors', e)} />
+                  <div className="resize-handle" onPointerDown={(e) => startColResize('authors', e)} />
                 </th>
                 <th style={{ width: columnWidths.year }}>
                   Year
-                  <div className="resize-handle" onMouseDown={(e) => startColResize('year', e)} />
+                  <div className="resize-handle" onPointerDown={(e) => startColResize('year', e)} />
                 </th>
                 <th style={{ width: columnWidths.status }}>
                   Status
-                  <div className="resize-handle" onMouseDown={(e) => startColResize('status', e)} />
+                  <div className="resize-handle" onPointerDown={(e) => startColResize('status', e)} />
                 </th>
                 <th style={{ width: columnWidths.importance }}>
                   Importance
-                  <div className="resize-handle" onMouseDown={(e) => startColResize('importance', e)} />
+                  <div className="resize-handle" onPointerDown={(e) => startColResize('importance', e)} />
                 </th>
                 {visibleColumns.filter(f => !f.startsWith('custom_')).map(field => (
                   <th key={field} style={{ width: columnWidths[field] || 160 }}>
                     {FIELD_LABELS[field] || field}
-                    <div className="resize-handle" onMouseDown={(e) => startColResize(field, e)} />
+                    <div className="resize-handle" onPointerDown={(e) => startColResize(field, e)} />
                   </th>
                 ))}
                 {customFieldColumns.filter(col => visibleColumns.includes(col.id)).map(col => (
                   <th key={col.id} style={{ width: 160 }}>
                     {col.name}
-                    <div className="resize-handle" onMouseDown={(e) => startColResize(col.id, e)} />
+                    <div className="resize-handle" onPointerDown={(e) => startColResize(col.id, e)} />
                   </th>
                 ))}
               </tr>
