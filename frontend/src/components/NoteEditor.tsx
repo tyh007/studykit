@@ -36,6 +36,16 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
   const isSavingRef = useRef(false);
   const lastSavedJsonRef = useRef<string>('');
 
+  // Save status: 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
+  // 'dirty'  = has unsaved local edits, no save in flight
+  // 'saving' = a save is currently in flight
+  // 'saved'  = last save succeeded, content is in sync
+  // 'error'  = last save attempt failed
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'dirty' | 'saving' | 'saved' | 'error'>('idle');
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  // Tick every 30s so "Saved Xs ago" stays fresh
+  const [, setStatusTick] = useState(0);
+
   // Annotation anchoring (uses stable paragraph index, not block ID)
   const [activeParagraphIndex, setActiveParagraphIndex] = useState<number | null>(null);
   const [activeParagraphPreview, setActiveParagraphPreview] = useState('');
@@ -65,6 +75,13 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
   const [linkUrl, setLinkUrl] = useState('');
   const [linkText, setLinkText] = useState('');
   const [resultMessage, setResultMessage] = useState<string | null>(null);
+
+  // Hold the latest editor + lectureId/moduleId in refs so global listeners
+  // (visibilitychange, beforeunload) can flush even if the component is
+  // unmounted. This is what fixes "write -> switch lecture -> come back = lost".
+  const editorRef = useRef<any>(null);
+  const lectureIdRef = useRef<string>('');
+  const moduleIdRef = useRef<string | null>('');
 
   const editor = useEditor({
     extensions: [
@@ -123,16 +140,29 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
       },
     },
     onUpdate: ({ editor }) => {
+      editorRef.current = editor;
+      if (suppressNextUpdateRef.current) {
+        suppressNextUpdateRef.current = false;
+        return;
+      }
+      setSaveStatus('dirty');
       debouncedSave(editor);
     },
   });
 
   const debouncedSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const usedCitationIdsRef = useRef<string[]>([]);
+  // When set, the next onUpdate is ignored — used to suppress autosave
+  // immediately after setContent() during note loading.
+  const suppressNextUpdateRef = useRef(false);
 
+  // debouncedSave is defined as a ref to avoid circular-dependency issues
+  // with saveBlocks (declared further down). We assign it inside a useEffect
+  // so it always calls the latest saveBlocks.
+  const debouncedSaveRef2 = useRef<(editor: any) => void>(() => {});
   const debouncedSave = useCallback((editor: any) => {
     if (debouncedSaveRef.current) clearTimeout(debouncedSaveRef.current);
-    debouncedSaveRef.current = setTimeout(() => saveBlocks(editor), 800);
+    debouncedSaveRef.current = setTimeout(() => debouncedSaveRef2.current(editor), 1500);
   }, []);
 
   // Track cursor position to determine which paragraph the user is in
@@ -238,12 +268,17 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
 
         if (blocks.length > 0) {
           const doc = blocksToProseMirror(blocks);
+          suppressNextUpdateRef.current = true;
           editor.commands.setContent(doc);
           lastSavedJsonRef.current = JSON.stringify(doc);
         } else {
+          suppressNextUpdateRef.current = true;
           editor.commands.setContent('');
           lastSavedJsonRef.current = '';
         }
+        // After loading, the editor content matches the persisted state.
+        setSaveStatus('saved');
+        setLastSavedAt(Date.now());
       } catch (err) {
         console.error('Failed to load notes:', err);
       }
@@ -281,35 +316,43 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
     return () => window.removeEventListener('studykit:annotation:changed', reload);
   }, [lectureId]);
 
-  // Save ALL blocks for the lecture (replace all non-cue/non-summary/non-annotation blocks)
-  const saveBlocks = useCallback(async (editor: any) => {
-    if (!lectureId || !selectedModuleId || isSavingRef.current) return;
-    if (!editor) return;
+  // Save ALL blocks for the lecture (replace all non-cue/non-summary/non-annotation blocks).
+  // Reads lectureId/moduleId from refs so it can be called from global listeners
+  // (visibilitychange, beforeunload) where the closure-captured values are stale.
+  const saveBlocks = useCallback(async (editorOverride?: any) => {
+    const ed = editorOverride || editorRef.current;
+    const lid = lectureIdRef.current;
+    const mid = moduleIdRef.current;
+    if (!ed || !lid || !mid) return;
+    if (isSavingRef.current) return;
 
-    const json = editor.getJSON();
+    const json = ed.getJSON();
     const jsonStr = JSON.stringify(json);
     if (jsonStr === lastSavedJsonRef.current) return;
 
     isSavingRef.current = true;
+    setSaveStatus('saving');
     useStore.getState().setSyncStatus('pending');
 
     try {
-      // Soft-delete all existing non-cue/non-summary/non-annotation blocks
+      // Diff-based save: figure out which existing blocks survive, which are
+      // gone, and which are new. This avoids the destructive "soft-delete
+      // everything then reinsert" path that races with concurrent saves.
       const existingBlocks = await db.noteBlocks
         .where('lecture_id')
-        .equals(lectureId)
+        .equals(lid)
         .filter((b) => !b.deleted_at && b.block_type !== 'cue' && b.block_type !== 'summary' && b.block_type !== 'annotation')
         .toArray();
-
-      const now = new Date().toISOString();
-      for (const block of existingBlocks) {
-        await db.noteBlocks.update(block.id, { deleted_at: now });
+      const existingByJson = new Map<string, NoteBlock>();
+      for (const b of existingBlocks) {
+        // Key by content signature so identical content from a previous save
+        // is reused instead of being churned.
+        const sig = `${b.block_type}::${JSON.stringify(b.content_json)}::${b.sort_order}`;
+        existingByJson.set(sig, b);
       }
 
-      // Create new blocks (without page association - notes are continuous)
-      const newBlocks = proseMirrorToBlocks(
-        json, lectureId, selectedModuleId, deviceId, now
-      );
+      const now = new Date().toISOString();
+      const newBlocks = proseMirrorToBlocks(json, lid, mid, deviceId, now);
 
       // Attach citation references from current session
       if (usedCitationIdsRef.current.length > 0) {
@@ -321,15 +364,39 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
         }
       }
 
+      // Compute survivors vs. dropped. A block survives if its content signature
+      // matches an existing block — we keep its id so external references
+      // (annotations, citations linked by block id) stay valid.
+      const newSigs = new Set<string>();
+      const survivingIds = new Set<string>();
       for (const block of newBlocks) {
-        try {
-          await db.noteBlocks.put(block);
-        } catch (e) {
-          // ignore single-block write errors
+        const sig = `${block.block_type}::${JSON.stringify(block.content_json)}::${block.sort_order}`;
+        newSigs.add(sig);
+        const match = existingByJson.get(sig);
+        if (match) {
+          block.id = match.id;        // reuse id
+          block.created_at = match.created_at;
+          block.version = (match.version || 1) + 1;
+          block.updated_at = now;
+          survivingIds.add(match.id);
         }
       }
 
-      // Also save to backend PostgreSQL for persistence
+      // Soft-delete blocks that didn't survive
+      for (const b of existingBlocks) {
+        if (!survivingIds.has(b.id)) {
+          try { await db.noteBlocks.update(b.id, { deleted_at: now }); } catch {}
+        }
+      }
+
+      // Upsert all new blocks (idempotent)
+      for (const block of newBlocks) {
+        try { await db.noteBlocks.put(block); } catch {}
+      }
+
+      // Also save to backend PostgreSQL for persistence.
+      // Use `keepalive: true` so the request survives page unload —
+      // this is what fixes "browser tab closed mid-save = data lost".
       try {
         const token = getAuthToken();
         if (token) {
@@ -350,6 +417,7 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
               created_by_device_id: b.created_by_device_id,
               version: b.version || 1,
             }))),
+            keepalive: true,
           });
         }
       } catch (err) {
@@ -359,21 +427,100 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
 
       setNoteBlocks(newBlocks);
       lastSavedJsonRef.current = jsonStr;
+      setSaveStatus('saved');
+      setLastSavedAt(Date.now());
       useStore.getState().setSyncStatus('synced');
       window.dispatchEvent(new CustomEvent('studykit:notes:saved'));
     } catch (err) {
       console.error('Save failed:', err);
+      setSaveStatus('error');
       useStore.getState().setSyncStatus('error');
     } finally {
       isSavingRef.current = false;
     }
-  }, [lectureId, selectedModuleId, deviceId]);
+  }, [deviceId]);
 
-  // Cleanup
+  // Keep refs in sync with current props — used by global flush paths
+  useEffect(() => {
+    lectureIdRef.current = lectureId;
+    moduleIdRef.current = selectedModuleId;
+  }, [lectureId, selectedModuleId]);
+
+  useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
+
+  // Wire the latest saveBlocks into the debounced dispatcher
+  useEffect(() => {
+    debouncedSaveRef2.current = (ed: any) => { void saveBlocks(ed); };
+  }, [saveBlocks]);
+
+  // Manual save: clears the debounce timer first so we don't double-save
+  const saveNow = useCallback(async () => {
+    if (debouncedSaveRef.current) {
+      clearTimeout(debouncedSaveRef.current);
+      debouncedSaveRef.current = null;
+    }
+    await saveBlocks();
+  }, [saveBlocks]);
+
+  // Ctrl/Cmd + S = manual save
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        saveNow();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [saveNow]);
+
+  // Immediate flush on lecture change / unmount. This is the fix for
+  // "write -> switch page -> come back = notes reverted".
   useEffect(() => {
     return () => {
-      if (debouncedSaveRef.current) clearTimeout(debouncedSaveRef.current);
+      if (debouncedSaveRef.current) {
+        clearTimeout(debouncedSaveRef.current);
+        debouncedSaveRef.current = null;
+      }
+      // Fire-and-forget: must NOT be awaited, otherwise React warns about
+      // state updates on an unmounted component. saveBlocks is idempotent.
+      void saveBlocks();
     };
+  }, [lectureId, saveBlocks]);
+
+  // Immediate flush when the tab is hidden or the page is being unloaded
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        if (debouncedSaveRef.current) {
+          clearTimeout(debouncedSaveRef.current);
+          debouncedSaveRef.current = null;
+        }
+        void saveBlocks();
+      }
+    };
+    const onBeforeUnload = () => {
+      // keepalive:true on the fetch means the server call survives navigation
+      if (debouncedSaveRef.current) {
+        clearTimeout(debouncedSaveRef.current);
+        debouncedSaveRef.current = null;
+      }
+      void saveBlocks();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+    };
+  }, [saveBlocks]);
+
+  // Tick the "Saved Xs ago" display every 30s
+  useEffect(() => {
+    const id = setInterval(() => setStatusTick((n) => n + 1), 30000);
+    return () => clearInterval(id);
   }, []);
 
   // Handles image file upload via API and inserts into editor
@@ -450,6 +597,30 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
         >{editor?.isActive("link") ? <><UnlinkIcon size="sm" /> Unlink</> : <><LinkIcon size="sm" /> Link</>}</button>
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
         <button className="btn btn-ghost btn-sm" onClick={() => setShowCitationPicker(true)} title="Insert citation" aria-label="Insert citation"><CiteIcon size="sm" /> Cite</button>
+        <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => editor.chain().focus().undo().run()}
+          disabled={!editor.can().undo()}
+          title="Undo (Ctrl+Z)"
+          aria-label="Undo"
+        >↶ Undo</button>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => editor.chain().focus().redo().run()}
+          disabled={!editor.can().redo()}
+          title="Redo (Ctrl+Shift+Z)"
+          aria-label="Redo"
+        >↷ Redo</button>
+        <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={saveNow}
+          disabled={saveStatus === 'saving' || saveStatus === 'saved'}
+          title="Save now (Ctrl+S)"
+          aria-label="Save notes"
+        >💾 {saveStatus === 'saving' ? 'Saving…' : 'Save'}</button>
+        <SaveStatusIndicator status={saveStatus} lastSavedAt={lastSavedAt} />
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
         <button className="btn btn-ghost btn-sm" onClick={() => setShowShortcuts(true)} title="Keyboard shortcuts" aria-label="Show keyboard shortcuts">⌨</button>
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
@@ -839,7 +1010,8 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
               <span>Code block</span><span className="shortcut-key">⌘⌥C / Ctrl+Alt+C</span>
               <span>Undo</span><span className="shortcut-key">⌘Z / Ctrl+Z</span>
               <span>Redo</span><span className="shortcut-key">⌘⇧Z / Ctrl+Shift+Z</span>
-              <span>Save (local)</span><span className="shortcut-key">Auto-saves every 800ms</span>
+              <span>Save now</span><span className="shortcut-key">⌘S / Ctrl+S</span>
+              <span>Auto-save</span><span className="shortcut-key">every 1.5s, flushes on tab switch &amp; page close</span>
             </div>
             <div className="flex gap-2" style={{ justifyContent: 'flex-end', marginTop: '1rem' }}>
               <button className="btn" onClick={() => setShowShortcuts(false)}>Close</button>
@@ -1023,4 +1195,88 @@ function extractPlainText(node: ProsemirrorNode): string {
   if (node.text) return node.text;
   if (!node.content) return '';
   return node.content.map(extractPlainText).join(' ');
+}
+
+// ===== Save status indicator =====
+
+function SaveStatusIndicator({
+  status,
+  lastSavedAt,
+}: {
+  status: 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
+  lastSavedAt: number | null;
+}) {
+  const [, force] = useState(0);
+  // Re-render every 30s so "Saved 2 min ago" stays current
+  useEffect(() => {
+    const id = setInterval(() => force((n) => n + 1), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (status === 'idle' || !lastSavedAt) {
+    return (
+      <span
+        className="text-xs"
+        style={{ color: 'var(--color-text-muted)', marginLeft: '0.25rem', fontStyle: 'italic' }}
+        aria-live="polite"
+      >
+        ●&nbsp;Not saved yet
+      </span>
+    );
+  }
+
+  if (status === 'saving') {
+    return (
+      <span
+        className="text-xs"
+        style={{ color: 'var(--color-warning)', marginLeft: '0.25rem', fontStyle: 'italic' }}
+        aria-live="polite"
+      >
+        ●&nbsp;Saving…
+      </span>
+    );
+  }
+
+  if (status === 'dirty') {
+    return (
+      <span
+        className="text-xs"
+        style={{ color: 'var(--color-warning)', marginLeft: '0.25rem', fontStyle: 'italic' }}
+        aria-live="polite"
+      >
+        ●&nbsp;Unsaved changes
+      </span>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <span
+        className="text-xs"
+        style={{ color: 'var(--color-error)', marginLeft: '0.25rem', fontStyle: 'italic' }}
+        title="Last save failed. Click Save to retry."
+        aria-live="polite"
+      >
+        ●&nbsp;Save failed
+      </span>
+    );
+  }
+
+  // status === 'saved'
+  const ago = Math.max(0, Math.floor((Date.now() - lastSavedAt) / 1000));
+  const label =
+    ago < 5
+      ? 'Saved just now'
+      : ago < 60
+        ? `Saved ${ago}s ago`
+        : `Saved ${Math.floor(ago / 60)} min ago`;
+  return (
+    <span
+      className="text-xs"
+      style={{ color: 'var(--color-text-muted)', marginLeft: '0.25rem', fontStyle: 'italic' }}
+      aria-live="polite"
+    >
+      ●&nbsp;{label}
+    </span>
+  );
 }
