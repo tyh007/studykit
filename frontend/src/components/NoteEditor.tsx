@@ -200,50 +200,39 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
 
     const loadNotes = async () => {
       try {
-        // First try to load from server (PostgreSQL)
-        let blocks: NoteBlock[] = [];
-        try {
-          const token = getAuthToken();
-          if (token) {
-            const response = await fetch(`/api/note-blocks?lecture_id=${lectureId}`, {
-              headers: { 'Authorization': `Bearer ${token}` },
-            });
-            if (response.ok) {
-              const serverBlocks = await response.json();
-              if (serverBlocks && serverBlocks.length > 0) {
-                blocks = serverBlocks;
-                // Sync server blocks to local Dexie for offline access
-                const existingLocal = await db.noteBlocks
-                  .where('lecture_id')
-                  .equals(lectureId)
-                  .filter((b: any) => !b.deleted_at)
-                  .toArray();
-                // Clear old local blocks for this lecture
-                for (const b of existingLocal) {
-                  await db.noteBlocks.update(b.id, { deleted_at: new Date().toISOString() });
-                }
-                // Save server blocks locally
-                for (const block of blocks) {
-                  try {
-                    await db.noteBlocks.put(block as any);
-                  } catch (e) {
-                    // ignore single-block write errors
-                  }
-                }
-              }
-            }
-          }
-        } catch (err) {
-          console.warn('Failed to load from server, falling back to local:', err);
-        }
-
-        // If no server data, load from local Dexie
-        if (blocks.length === 0) {
-          blocks = await db.noteBlocks
+        // Local-first: prefer local Dexie (the source of truth for this
+        // device) over the server. The server is only used to seed an empty
+        // local DB on first visit or after a full data wipe. This avoids
+        // a race where a fire-and-forget keepalive save (from a recent
+        // lecture switch) hasn't reached the server yet, and the server
+        // returns stale content.
+        let blocks: NoteBlock[] = await db.noteBlocks
           .where('lecture_id')
           .equals(lectureId)
           .filter((b) => !b.deleted_at && b.block_type !== 'cue' && b.block_type !== 'summary' && b.block_type !== 'annotation')
           .sortBy('sort_order');
+
+        // If local is empty, try the server to seed the DB.
+        if (blocks.length === 0) {
+          try {
+            const token = getAuthToken();
+            if (token) {
+              const response = await fetch(`/api/note-blocks?lecture_id=${lectureId}`, {
+                headers: { 'Authorization': `Bearer ${token}` },
+              });
+              if (response.ok) {
+                const serverBlocks: NoteBlock[] = await response.json();
+                if (serverBlocks && serverBlocks.length > 0) {
+                  blocks = serverBlocks;
+                  for (const block of blocks) {
+                    try { await db.noteBlocks.put(block as any); } catch {}
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            console.warn('Failed to seed from server (staying local-only):', err);
+          }
         }
 
         if (cancelled) return;
@@ -399,14 +388,15 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
       }
 
       // Push to backend. Two paths:
-      //   - silent (page unloading): the browser aborts in-flight fetches
-      //     before they complete, surfacing as "Failed to fetch". sendBeacon
-      //     would be the standard fix, but the backend auth middleware only
-      //     reads the Authorization header, which sendBeacon cannot set. So
-      //     on the silent path we skip the server call entirely. Local Dexie
-      //     has the latest state and the next session's loadNotes will
-      //     resync from there.
-      //   - normal: regular fetch with full error reporting.
+      //   - silent (page unloading / lecture change): fire the fetch in the
+      //     background WITHOUT awaiting. `await` is what surfaces "Failed to
+      //     fetch" during unload — the request is going out fine, but the
+      //     browser tears down the response channel before we can read it.
+      //     Dropping the await and adding `keepalive: true` lets the request
+      //     complete server-side even after the page is gone. If the payload
+      //     is too big for keepalive, the browser rejects synchronously and
+      //     we just rely on local Dexie (next session resyncs).
+      //   - normal: awaited fetch so we can surface real errors to the user.
       const payload = JSON.stringify(newBlocks.map(b => ({
         id: b.id,
         lecture_id: b.lecture_id,
@@ -419,10 +409,24 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
         version: b.version || 1,
       })));
 
-      if (!silent) {
-        try {
-          const token = getAuthToken();
-          if (token) {
+      const token = getAuthToken();
+      if (token) {
+        if (silent) {
+          // Fire-and-forget. The catch is just to keep the promise chain
+          // silent — we don't care about the response, only that the request
+          // was sent. If it fails (offline, payload too big), the local Dexie
+          // write is the source of truth.
+          fetch('/api/note-blocks', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: payload,
+            keepalive: true,
+          }).catch(() => { /* best-effort, ignore */ });
+        } else {
+          try {
             const res = await fetch('/api/note-blocks', {
               method: 'POST',
               headers: {
@@ -434,13 +438,12 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
             if (!res.ok) {
               console.warn(`Server save returned ${res.status} (will resync from local on next load)`);
             }
+          } catch (err: any) {
+            // Genuine network error (offline, DNS, etc.). Local Dexie has the
+            // data; next session resyncs. Use console.debug so it doesn't
+            // fill the console.
+            console.debug('Server save failed (will resync from local):', err?.message || err);
           }
-        } catch (err: any) {
-          // "Failed to fetch" usually means the request was aborted (e.g. the
-          // component unmounted before the response came back), NOT that the
-          // user is offline. Local Dexie has the data; next session will
-          // resync. Use console.debug so it doesn't fill the console.
-          console.debug('Server save failed (will resync from local):', err?.message || err);
         }
       }
 
