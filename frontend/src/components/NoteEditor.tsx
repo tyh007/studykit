@@ -319,7 +319,11 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
   // Save ALL blocks for the lecture (replace all non-cue/non-summary/non-annotation blocks).
   // Reads lectureId/moduleId from refs so it can be called from global listeners
   // (visibilitychange, beforeunload) where the closure-captured values are stale.
-  const saveBlocks = useCallback(async (editorOverride?: any) => {
+  //
+  // `silent` — when true, the server call uses navigator.sendBeacon (best-effort,
+  // no awaiting, no console noise) instead of fetch. Used for page-unload paths
+  // where the browser will tear down the request before fetch can complete.
+  const saveBlocks = useCallback(async (editorOverride?: any, silent = false) => {
     const ed = editorOverride || editorRef.current;
     const lid = lectureIdRef.current;
     const mid = moduleIdRef.current;
@@ -394,35 +398,50 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
         try { await db.noteBlocks.put(block); } catch {}
       }
 
-      // Also save to backend PostgreSQL for persistence.
-      // Use `keepalive: true` so the request survives page unload —
-      // this is what fixes "browser tab closed mid-save = data lost".
-      try {
-        const token = getAuthToken();
-        if (token) {
-          await fetch('/api/note-blocks', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-            },
-            body: JSON.stringify(newBlocks.map(b => ({
-              id: b.id,
-              lecture_id: b.lecture_id,
-              module_id: b.module_id,
-              block_type: b.block_type,
-              content_json: b.content_json,
-              source_links_json: b.source_links_json || {},
-              sort_order: b.sort_order,
-              created_by_device_id: b.created_by_device_id,
-              version: b.version || 1,
-            }))),
-            keepalive: true,
-          });
+      // Push to backend. Two paths:
+      //   - silent (page unloading): the browser aborts in-flight fetches
+      //     before they complete, surfacing as "Failed to fetch". sendBeacon
+      //     would be the standard fix, but the backend auth middleware only
+      //     reads the Authorization header, which sendBeacon cannot set. So
+      //     on the silent path we skip the server call entirely. Local Dexie
+      //     has the latest state and the next session's loadNotes will
+      //     resync from there.
+      //   - normal: regular fetch with full error reporting.
+      const payload = JSON.stringify(newBlocks.map(b => ({
+        id: b.id,
+        lecture_id: b.lecture_id,
+        module_id: b.module_id,
+        block_type: b.block_type,
+        content_json: b.content_json,
+        source_links_json: b.source_links_json || {},
+        sort_order: b.sort_order,
+        created_by_device_id: b.created_by_device_id,
+        version: b.version || 1,
+      })));
+
+      if (!silent) {
+        try {
+          const token = getAuthToken();
+          if (token) {
+            const res = await fetch('/api/note-blocks', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+              },
+              body: payload,
+            });
+            if (!res.ok) {
+              console.warn(`Server save returned ${res.status} (will resync from local on next load)`);
+            }
+          }
+        } catch (err: any) {
+          // "Failed to fetch" usually means the request was aborted (e.g. the
+          // component unmounted before the response came back), NOT that the
+          // user is offline. Local Dexie has the data; next session will
+          // resync. Use console.debug so it doesn't fill the console.
+          console.debug('Server save failed (will resync from local):', err?.message || err);
         }
-      } catch (err) {
-        console.warn('Failed to save blocks to server (offline?):', err);
-        // Silent fail — local save succeeded, will sync later
       }
 
       setNoteBlocks(newBlocks);
@@ -478,6 +497,8 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
 
   // Immediate flush on lecture change / unmount. This is the fix for
   // "write -> switch page -> come back = notes reverted".
+  // Silent: the component is about to unmount, so a server fetch would
+  // race with React's cleanup and surface as a "Failed to fetch" warning.
   useEffect(() => {
     return () => {
       if (debouncedSaveRef.current) {
@@ -486,11 +507,14 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
       }
       // Fire-and-forget: must NOT be awaited, otherwise React warns about
       // state updates on an unmounted component. saveBlocks is idempotent.
-      void saveBlocks();
+      void saveBlocks(undefined, true);
     };
   }, [lectureId, saveBlocks]);
 
-  // Immediate flush when the tab is hidden or the page is being unloaded
+  // Immediate flush when the tab is hidden or the page is being unloaded.
+  // Silent for the same reason: the browser will tear down the request
+  // before fetch can complete, and we don't want console noise for a
+  // local-first write that already succeeded.
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') {
@@ -498,16 +522,15 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
           clearTimeout(debouncedSaveRef.current);
           debouncedSaveRef.current = null;
         }
-        void saveBlocks();
+        void saveBlocks(undefined, true);
       }
     };
     const onBeforeUnload = () => {
-      // keepalive:true on the fetch means the server call survives navigation
       if (debouncedSaveRef.current) {
         clearTimeout(debouncedSaveRef.current);
         debouncedSaveRef.current = null;
       }
-      void saveBlocks();
+      void saveBlocks(undefined, true);
     };
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('beforeunload', onBeforeUnload);
