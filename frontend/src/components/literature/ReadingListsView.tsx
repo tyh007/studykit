@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { readingListsApi } from '../../lib/literature-api';
+import { readingListsApi, literaturePapersApi } from '../../lib/literature-api';
 import { useStore } from '../../store/useStore';
-import { extractPapersBatch } from '../../lib/literature/extract-batch';
+import { createAIExtractionService } from '../../lib/literature/ai-extraction';
 
 export default function ReadingListsView() {
-  const { readingLists, setReadingLists, litPapers } = useStore();
+  const { readingLists, setReadingLists } = useStore();
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [listDetail, setListDetail] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -34,20 +34,28 @@ export default function ReadingListsView() {
     if (!listDetail?.items || listDetail.items.length === 0) return;
     setExtractingAll(true);
     try {
-      // Find which papers belong to this reading list by citation_item_id,
-      // then keep only the ones we haven't extracted yet. litPapers comes
-      // from the store and is already scoped to the current project.
-      const citationIds = new Set<string>(
-        (listDetail.items as any[])
-          .map((item) => item.citation_item_id)
-          .filter((id): id is string => Boolean(id))
-      );
-      const targetPapers = litPapers.filter(
-        (p) => p.citation_item_id && citationIds.has(p.citation_item_id)
-      );
-      const unextracted = targetPapers.filter((p) => !p.extracted_data && p.full_text);
+      const projectIds = new Set<string>();
+      for (const item of listDetail.items) {
+        if (item.paper_id) projectIds.add(''); // Will find from API
+      }
+      // Get all papers
+      const papers = await literaturePapersApi.list('');
+      const targetPapers = papers.filter((p: any) => {
+        return listDetail.items.some((item: any) =>
+          item.citation_item_id === p.citation_item_id
+        );
+      });
+      const unextracted = targetPapers.filter((p: any) => !p.extracted_data && p.full_text);
       if (unextracted.length === 0) return;
-      await extractPapersBatch(unextracted, { mode: 'auto' });
+      const service = createAIExtractionService();
+      for (const paper of unextracted) {
+        try {
+          const { extractedData } = await service.extractWithFallback(paper.full_text!, 'brief');
+          await literaturePapersApi.update(paper.id, { extracted_data: extractedData, processing_status: 'completed' });
+        } catch (err) {
+          console.error('Extraction failed for', paper.title, err);
+        }
+      }
     } catch (err: any) {
       console.error('Extract All failed:', err);
     } finally {

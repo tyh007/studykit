@@ -1,59 +1,38 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { literatureAiApi } from '../../lib/literature-api';
 import { CloseIcon } from '../ui/Icons';
-import { readAIProviderConfig } from '../../lib/literature/ai-provider-config';
-import { readCustomAISettings } from '../../lib/literature/custom-ai-settings';
+import { OllamaClient } from '../../lib/literature/ollama-client';
 import { CustomAIClient } from '../../lib/literature/custom-ai-client';
-import { useDragResize } from '../../hooks/useDragResize';
+import { readLocalProfileCredential, type AIProfile } from '../../lib/literature/ai-profiles';
 import ReactMarkdown from 'react-markdown';
 import type { LiteraturePaper } from '../../types';
 
-// Parse AI response to separate thinking process from final answer.
-// Exported for unit tests (see AIChatPanel.test.ts).
-export function parseAIContent(text: string): { thinking: string | null; response: string } {
-  // The marker must be on its own line — otherwise the model is just
-  // mentioning the phrase in prose, and we should not split the response.
+// Parse AI response to separate thinking process from final answer
+function parseAIContent(text: string): { thinking: string | null; response: string } {
+  const marker = "Here's a thinking process:";
+  const idx = text.indexOf(marker);
+  if (idx === -1) return { thinking: null, response: text };
+
   const lines = text.split('\n');
-  const markerLine = lines.findIndex((l) => l.trim() === "Here's a thinking process:");
+  let markerLine = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes("Here's a thinking process:")) { markerLine = i; break; }
+  }
   if (markerLine === -1) return { thinking: null, response: text };
 
-  // Find the LAST numbered step after the marker. The step must have a
-  // number, a dot, and at least one non-space character (so that "1." at
-  // end-of-line doesn't qualify). Without this, a model that mentions
-  // "Step 1." once and then prose would incorrectly split the response.
+  // Find the LAST numbered step (1., 2., etc.) after the marker
   let lastNumLine = -1;
   for (let i = markerLine + 1; i < lines.length; i++) {
-    if (/^\s*\d+\.\s+\S/.test(lines[i])) lastNumLine = i;
+    if (/^\s*\d+\./.test(lines[i])) { lastNumLine = i; }
   }
-  if (lastNumLine === -1) return { thinking: null, response: text };
 
-  const thinking = lines.slice(0, lastNumLine + 1).join('\n').trim();
-  const response = lines
-    .slice(lastNumLine + 1)
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .join('\n')
-    .trim();
-  return { thinking, response: response || text };
+  if (lastNumLine !== -1) {
+    const thinking = lines.slice(0, lastNumLine + 1).join('\n').trim();
+    const rest = lines.slice(lastNumLine + 1).map(l => l.trim()).filter(Boolean).join('\n').trim();
+    return { thinking, response: rest || text };
+  }
+  return { thinking: null, response: text };
 }
-
-// Loopback check used by the localhost warning (P3 #2/#3).
-function isLoopbackUrl(url: string): boolean {
-  return /^https?:\/\/(localhost|127\.0\.0\.1|::1)(:\d+)?\//.test(url);
-}
-
-// react-markdown's default <a> renderer doesn't add rel="noopener noreferrer",
-// so external links from LLM output would have reverse-tabnabbing risk.
-// Wrap the link to always emit both attributes.
-const CustomLink: React.ComponentProps<typeof ReactMarkdown>['components']['a'] = ({
-  href,
-  children,
-  ...rest
-}) => (
-  <a href={href} target="_blank" rel="noopener noreferrer" {...rest}>
-    {children}
-  </a>
-);
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
@@ -82,31 +61,54 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
   });
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [profiles, setProfiles] = useState<AIProfile[]>([]);
+  const [profileId, setProfileId] = useState('');
   const [expanded, setExpanded] = useState(false);
   const [panelHeight, setPanelHeight] = useState(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('lit-chat-height') : null;
     return saved ? parseInt(saved) : 250;
   });
+  const chatDragRef = useRef<{ startY: number; startH: number } | null>(null);
 
-  // Drag-resize the AI chat panel vertically. The panel sits at the bottom of
-  // its parent flex container, so the handle is on the INNER (top) edge of
-  // the panel — dragging UP must GROW the panel, not shrink it. Persists the
-  // committed height to localStorage on pointerup only (the old code wrote on
-  // every move).
-  const { onPointerDown: onChatResizeDown, separatorProps: chatResizeProps } = useDragResize({
-    axis: 'y',
-    startValue: panelHeight,
-    min: 120,
-    max: 500,
-    direction: 'invert',
-    onChange: setPanelHeight,
-    persistKey: 'lit-chat-height',
-  });
+  const handleChatResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    chatDragRef.current = { startY: e.clientY, startH: panelHeight };
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+    const handleMouseMove = (ev: MouseEvent) => {
+      if (!chatDragRef.current) return;
+      const dy = ev.clientY - chatDragRef.current.startY;
+      const newH = chatDragRef.current.startH - dy;
+      const clamped = Math.max(120, Math.min(500, newH));
+      setPanelHeight(clamped);
+      localStorage.setItem('lit-chat-height', String(clamped));
+    };
+    const handleMouseUp = () => {
+      chatDragRef.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [panelHeight]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    literatureAiApi.profiles().then(result => {
+      const available = result.profiles.filter((profile: AIProfile) => profile.capabilities.text);
+      setProfiles(available);
+      setProfileId(result.defaults?.chatProfileId || available[0]?.id || '');
+    }).catch(() => {
+      setProfiles([]);
+      setProfileId('');
+    });
+  }, []);
 
   const handleSend = async () => {
     if (!input.trim() || loading) return;
@@ -117,42 +119,54 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
     setLoading(true);
 
     try {
-      const config = readAIProviderConfig();
       const chatMessages = [...messages, userMessage].map(m => ({
         role: m.role,
         content: m.content,
       }));
 
-      if (config.provider === 'custom') {
-        // Use CustomAIClient directly (matches user's MLX setup)
-        const customSettings = readCustomAISettings();
-        if (!customSettings.baseUrl) throw new Error('Custom API URL not configured in AI Settings');
-        // Warn once per non-loopback baseUrl so the user notices credentials
-        // and paper content are leaving their machine (P3 #2/#3).
-        if (!isLoopbackUrl(customSettings.baseUrl)) {
-          console.warn(
-            `[AIChatPanel] Connecting to non-loopback LLM at ${customSettings.baseUrl}. ` +
-              'Credentials and paper content will be sent to this host.',
-          );
-        }
-        const client = new CustomAIClient(customSettings.baseUrl, customSettings.model, customSettings.apiKey);
+      const profile = profiles.find(item => item.id === profileId);
+      if (!profile) throw new Error('请先在 Literature AI 配置中心设置论文问答模型');
+
+      if (profile.provider === 'ollama') {
+        const client = new OllamaClient(profile.baseUrl, profile.model);
+        const paperContext = paper
+          ? `You are analyzing this academic paper.
+TITLE: ${paper.title || 'Untitled'}
+AUTHORS: ${paper.authors || 'Unknown'}
+YEAR: ${paper.year || 'Unknown'}
+ABSTRACT: ${paper.abstract || 'Not available'}
+EXTRACTED DATA: ${JSON.stringify(paper.extracted_data || {})}
+Answer from this paper and say when information is unavailable.`
+          : 'You are a research assistant helping analyze academic literature.';
         const result = await client.chat({
-          model: customSettings.model || 'default',
-          messages: chatMessages,
-          temperature: 0.3,
-          max_tokens: 2048,
+          model: profile.model,
+          messages: [{ role: 'system', content: paperContext }, ...chatMessages],
           stream: false,
-        });
-        const reply = result.choices?.[0]?.message?.content || '';
-        setMessages(prev => [...prev, { role: 'assistant', content: reply || '(no response)' }]);
+          options: { temperature: 0.3, max_tokens: 4096 },
+        })
+        setMessages(prev => [...prev, { role: 'assistant', content: result.message?.content || '(no response)' }]);
+      } else if (profile.provider === 'custom' && profile.local) {
+        const client = new CustomAIClient(profile.baseUrl, profile.model, readLocalProfileCredential(profile.id));
+        const paperContext = paper
+          ? `You are analyzing this academic paper.
+TITLE: ${paper.title || 'Untitled'}
+ABSTRACT: ${paper.abstract || 'Not available'}
+EXTRACTED DATA: ${JSON.stringify(paper.extracted_data || {})}`
+          : 'You are a research assistant helping analyze academic literature.';
+        const result = await client.chat({
+          model: profile.model,
+          messages: [{ role: 'system', content: paperContext }, ...chatMessages],
+          temperature: 0.3,
+          max_tokens: 4096,
+          stream: false,
+        })
+        setMessages(prev => [...prev, { role: 'assistant', content: result.choices?.[0]?.message?.content || '(no response)' }]);
       } else {
-        // Fallback: backend Gemini chat
         const result = await literatureAiApi.chat({
           paperId: paper?.id,
           paperIds: paperIds || (paper?.id ? [paper.id] : undefined),
           messages: chatMessages,
-          geminiApiKey: config.geminiApiKey,
-          geminiModel: config.geminiModel || 'gemini-2.0-flash',
+          profileId: profile.id,
         });
         setMessages(prev => [...prev, { role: 'assistant', content: result.message.content }]);
       }
@@ -201,10 +215,8 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
     }}>
       {/* Resize handle */}
       <div
-        {...chatResizeProps}
-        onPointerDown={onChatResizeDown}
-        aria-label="Resize AI assistant"
-        style={{ height: 5, cursor: 'row-resize', background: 'var(--color-border-light)', flexShrink: 0, touchAction: 'none' }}
+        onMouseDown={handleChatResizeStart}
+        style={{ height: 5, cursor: 'row-resize', background: 'var(--color-border-light)', flexShrink: 0 }}
       />
       {/* Header */}
       <div style={{
@@ -213,7 +225,18 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
         borderBottom: '1px solid var(--color-border-light)',
         background: 'var(--color-bg-secondary)',
       }}>
-        <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>AI Assistant</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+          <span style={{ fontSize: '0.78rem', fontWeight: 600, whiteSpace: 'nowrap' }}>AI Assistant</span>
+          <select
+            value={profileId}
+            onChange={event => setProfileId(event.target.value)}
+            style={{ maxWidth: 210, minWidth: 120, fontSize: '0.72rem', padding: '0.15rem 0.35rem' }}
+            title="仅切换本次对话使用的 AI 配置"
+          >
+            {profiles.length === 0 && <option value="">未配置 AI</option>}
+            {profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name} · {profile.model || '未选模型'}</option>)}
+          </select>
+        </div>
         <button
           className="btn btn-ghost btn-sm"
           onClick={() => { setExpanded(false); onClose?.(); }}
@@ -243,6 +266,8 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
               fontSize: '0.8rem',
               lineHeight: 1.5,
               whiteSpace: 'pre-wrap',
+              maxHeight: msg.role === 'assistant' ? '30rem' : '20rem',
+              overflow: 'auto',
             }}>
               {msg.role === 'assistant' ? (() => {
                 const parsed = parseAIContent(msg.content);
@@ -251,7 +276,7 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
                     <>
                       <details style={{ marginBottom: '0.25rem' }}>
                         <summary style={{ cursor: 'pointer', fontSize: '0.72rem', color: 'var(--color-text-muted)', userSelect: 'none' }}>
-                          💭 Thinking
+                          💭 Thinking (click to expand)
                         </summary>
                         <div style={{
                           fontSize: '0.72rem', color: 'var(--color-text-muted)',
@@ -260,16 +285,18 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
                           marginTop: '0.125rem',
                           whiteSpace: 'pre-wrap',
                           lineHeight: 1.5,
+                          maxHeight: '12rem',
+                          overflow: 'auto',
                         }}>
                           {parsed.thinking}
                         </div>
                       </details>
-                      <div style={{ lineHeight: 1.5 }}><ReactMarkdown components={{ a: CustomLink }}>{parsed.response}</ReactMarkdown></div>
+                      <div style={{ lineHeight: 1.5, overflow: 'auto', maxHeight: '20rem' }}><ReactMarkdown>{parsed.response}</ReactMarkdown></div>
                     </>
                   );
                 }
-                return msg.content;
-              })() : <ReactMarkdown components={{ a: CustomLink }}>{msg.content}</ReactMarkdown>}
+                return <ReactMarkdown>{msg.content}</ReactMarkdown>;
+              })() : <ReactMarkdown>{msg.content}</ReactMarkdown>}
             </div>
           </div>
         ))}

@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
-import { CloseIcon } from '../ui/Icons';
+import { CloseIcon, ExportIcon, UploadIcon } from '../ui/Icons';
 import { zoteroApi, readingListsApi, literatureProjectsApi, literaturePapersApi } from '../../lib/literature-api';
-import { readAIProviderConfig } from '../../lib/literature/ai-provider-config';
-import { extractPapersBatch } from '../../lib/literature/extract-batch';
 
 export default function ZoteroImportPanel() {
   const {
@@ -21,8 +19,6 @@ export default function ZoteroImportPanel() {
   const [error, setError] = useState<string | null>(null);
   const [importingItems, setImportingItems] = useState<Set<string>>(new Set());
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
-  const [importProgress, setImportProgress] = useState<string | null>(null);
-  const [extractingPapers, setExtractingPapers] = useState(false);
 
   useEffect(() => {
     if (zoteroConnectionStatus === 'connected') {
@@ -95,69 +91,12 @@ export default function ZoteroImportPanel() {
         } catch { /* ignore if no papers yet */ }
       }
       // Show success and navigate to papers tab
-      const count = (result as any)?.importedCount || 0;
-      setImportSuccess(`Imported ${count} item(s)`);
-      if (!importSuccess) {
-        setActiveLiteratureTab('papers');
-        setTimeout(() => setImportSuccess(null), 4000);
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to import items');
-    } finally {
-      setImportingItems((prev) => {
-        const next = new Set(prev);
-        next.delete(collectionId);
-        return next;
-      });
-    }
-  };
-
-  const handleImportAndExtract = async (collectionId: string) => {
-    setImportingItems((prev) => new Set(prev).add(collectionId));
-    setError(null);
-    setImportSuccess(null);
-    setImportProgress(null);
-    try {
-      // Step 1: Import items from Zotero
-      const result = await zoteroApi.importCollectionItems({
-        readingListId: collectionId,
-        projectId: selectedLitProjectId || undefined,
-      });
-      const lists = await readingListsApi.list();
-      setReadingLists(lists);
-      const projects = await literatureProjectsApi.list();
-      setLitProjects(projects);
-      const usedProjectId = (result as any)?.projectId;
-      if (usedProjectId && !selectedLitProjectId) {
-        selectLitProject(usedProjectId);
-      }
-
-      // Step 2: Get the papers that were imported and run extraction.
-      const targetProjectId = selectedLitProjectId || usedProjectId;
-      if (targetProjectId) {
-        const papers = await literaturePapersApi.list(targetProjectId);
-        setLitPapers(papers);
-        setActiveLiteratureTab('papers');
-
-        const unextracted = papers.filter((p: any) => !p.extracted_data && p.full_text);
-        if (unextracted.length > 0) {
-          setExtractingPapers(true);
-          await extractPapersBatch(unextracted, {
-            mode: 'auto',
-            onProgress: ({ index, total }) => {
-              setImportProgress(`Extracting ${index + 1}/${total}…`);
-            },
-          });
-          setExtractingPapers(false);
-          setImportProgress(null);
-          // Reload papers after extraction
-          const updatedPapers = await literaturePapersApi.list(targetProjectId);
-          setLitPapers(updatedPapers);
-        }
-      }
-
-      const count = (result as any)?.importedCount || 0;
-      setImportSuccess(`Imported & extracted ${count} item(s)`);
+      const stats = result.stats;
+      const message = stats
+        ? `Synced ${result.importedCount} reference(s): ${stats.importedItems} new, ${stats.existingItems} existing, ${stats.papersCreated} paper record(s), ${stats.pdfsDownloaded} PDF(s).`
+        : `Synced ${result.importedCount || 0} reference(s).`;
+      setImportSuccess(message);
+      setActiveLiteratureTab('papers');
       setTimeout(() => setImportSuccess(null), 5000);
     } catch (err: any) {
       setError(err.message || 'Failed to import items');
@@ -167,7 +106,6 @@ export default function ZoteroImportPanel() {
         next.delete(collectionId);
         return next;
       });
-      setExtractingPapers(false);
     }
   };
 
@@ -190,7 +128,7 @@ export default function ZoteroImportPanel() {
           disabled={loading}
           style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', width: '100%', textAlign: 'left' }}
         >
-          {loading ? 'Loading...' : '📂 Import Zotero Collections'}
+          {loading ? 'Loading...' : <><UploadIcon size="sm" /> Import Zotero Collections</>}
         </button>
       ) : (
         <div>
@@ -279,11 +217,6 @@ export default function ZoteroImportPanel() {
             </div>
           )}
           {/* Show success message */}
-          {extractingPapers && (
-            <div style={{ fontSize: '0.7rem', color: 'var(--color-primary)', marginBottom: '0.25rem', padding: '0.125rem 0', fontStyle: 'italic' }}>
-              {importProgress || 'Extracting AI summaries...'}
-            </div>
-          )}
           {importSuccess && (
             <div style={{ fontSize: '0.7rem', color: 'var(--color-success, #16a34a)', marginBottom: '0.25rem', padding: '0.125rem 0' }}>
               {importSuccess}
@@ -331,16 +264,7 @@ export default function ZoteroImportPanel() {
                   style={{ fontSize: '0.65rem', padding: '0.125rem 0.25rem' }}
                   title="Import items"
                 >
-                  {importingItems.has(list.id) ? (list.item_count ? '...' : '...') : '↓'}
-                </button>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => handleImportAndExtract(list.id)}
-                  disabled={importingItems.has(list.id)}
-                  style={{ fontSize: '0.65rem', padding: '0.125rem 0.25rem', color: 'var(--color-primary)' }}
-                  title="Import items and run AI extraction"
-                >
-                  {importingItems.has(list.id) ? '...' : 'AI+'}
+                  {importingItems.has(list.id) ? '...' : <ExportIcon size="sm" />}
                 </button>
               </div>
             </div>

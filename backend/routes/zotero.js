@@ -20,14 +20,31 @@ async function getWorkspaceId(userId) {
   );
   return ws.rows[0]?.id;
 }
+
+function zoteroHeaders(apiKey, extraHeaders = {}) {
+  return {
+    'Zotero-API-Key': apiKey,
+    'Zotero-API-Version': '3',
+    ...extraHeaders,
+  };
+}
+
+function appendQueryParams(resourcePath, params) {
+  const [pathname, query = ''] = resourcePath.split('?');
+  const search = new URLSearchParams(query);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) search.set(key, String(value));
+  });
+  const queryString = search.toString();
+  return `${pathname}${queryString ? `?${queryString}` : ''}`;
+}
+
 async function zoteroFetch(path, apiKey, options = {}) {
   const url = `${ZOTERO_API}${path}`;
   const response = await fetch(url, {
     ...options,
     headers: {
-      'Zotero-API-Key': apiKey,
-      'Zotero-API-Version': '3',
-      'Content-Type': 'application/json',
+      ...zoteroHeaders(apiKey),
       ...(options.headers || {}),
     },
   });
@@ -39,6 +56,76 @@ async function zoteroFetch(path, apiKey, options = {}) {
 
   const data = await response.json();
   return { data, headers: response.headers };
+}
+
+async function zoteroFetchAll(path, apiKey) {
+  const limit = 100;
+  let start = 0;
+  let total = null;
+  const results = [];
+
+  do {
+    const pagePath = appendQueryParams(path, { limit, start });
+    const { data, headers } = await zoteroFetch(pagePath, apiKey);
+    const page = Array.isArray(data) ? data : [];
+    results.push(...page);
+
+    const totalHeader = headers.get('Total-Results');
+    total = totalHeader ? parseInt(totalHeader, 10) : results.length;
+    start += limit;
+  } while (Number.isFinite(total) && results.length < total);
+
+  return results;
+}
+
+function parseCredentials(credentialsJson) {
+  return typeof credentialsJson === 'string'
+    ? JSON.parse(credentialsJson)
+    : credentialsJson || {};
+}
+
+function getLibraryPrefix(zoteroUserId) {
+  return `/users/${encodeURIComponent(zoteroUserId)}`;
+}
+
+function sanitizeFileName(fileName) {
+  const safe = path.basename(String(fileName || 'untitled.pdf')).replace(/[^\w.\- ()[\]]+/g, '_');
+  return safe.toLowerCase().endsWith('.pdf') ? safe : `${safe}.pdf`;
+}
+
+function formatAuthors(creators) {
+  return creators
+    .map(c => {
+      if (c.name) return c.name;
+      return [c.lastName, c.firstName].filter(Boolean).join(', ');
+    })
+    .filter(Boolean)
+    .join('; ');
+}
+
+async function downloadZoteroAttachment(libraryPrefix, attachment, apiKey) {
+  const candidateUrls = [
+    `${ZOTERO_API}${libraryPrefix}/items/${encodeURIComponent(attachment.key)}/file`,
+    attachment.links?.enclosure?.href,
+  ].filter(Boolean);
+
+  let lastError = null;
+  for (const url of candidateUrls) {
+    try {
+      const response = await fetch(url, { headers: zoteroHeaders(apiKey) });
+      if (!response.ok) {
+        lastError = new Error(`HTTP ${response.status}`);
+        continue;
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('No downloadable attachment URL found');
 }
 
 /**
@@ -53,16 +140,25 @@ router.post('/connect', async (req, res) => {
     }
 
     // Validate key against Zotero API
-    const { data: keyData } = await zoteroFetch('/keys/current', apiKey);
+    let keyData;
+    try {
+      ({ data: keyData } = await zoteroFetch('/keys/current', apiKey));
+    } catch (_) {
+      ({ data: keyData } = await zoteroFetch(`/keys/${encodeURIComponent(apiKey)}`, apiKey));
+    }
 
     const providerUserId = userId || keyData.userID || '';
     const providerDisplayName = keyData.username || keyData.displayName || 'Zotero User';
+    const workspaceId = await getWorkspaceId(req.user.id);
+    if (!workspaceId) {
+      return res.status(400).json({ error: 'Workspace not found' });
+    }
 
     // Check if already connected for this workspace
     const existing = await db.query(
       `SELECT id FROM external_accounts
        WHERE workspace_id = $1 AND provider = 'zotero' AND disconnected_at IS NULL`,
-      [await getWorkspaceId(req.user.id)]
+      [workspaceId]
     );
 
     let account;
@@ -90,7 +186,7 @@ router.post('/connect', async (req, res) => {
          RETURNING *`,
         [
           id,
-          await getWorkspaceId(req.user.id),
+          workspaceId,
           JSON.stringify({ collections: true, library: true }),
           providerUserId,
           providerDisplayName,
@@ -227,9 +323,7 @@ router.get('/collections', async (req, res) => {
     }
 
     const account = accountResult.rows[0];
-    const credentials = typeof account.credentials_json === 'string'
-      ? JSON.parse(account.credentials_json)
-      : account.credentials_json;
+    const credentials = parseCredentials(account.credentials_json);
     const apiKey = credentials.apiKey;
     const zoteroUserId = account.provider_user_id;
 
@@ -238,7 +332,7 @@ router.get('/collections', async (req, res) => {
     }
 
     // Fetch collections from Zotero
-    const { data: collections } = await zoteroFetch(`/users/${zoteroUserId}/collections?limit=100`, apiKey);
+    const collections = await zoteroFetchAll(`${getLibraryPrefix(zoteroUserId)}/collections`, apiKey);
 
     res.json({ collections });
   } catch (err) {
@@ -271,9 +365,7 @@ router.post('/import-collections', async (req, res) => {
     }
 
     const account = accountResult.rows[0];
-    const credentials = typeof account.credentials_json === 'string'
-      ? JSON.parse(account.credentials_json)
-      : account.credentials_json;
+    const credentials = parseCredentials(account.credentials_json);
     const apiKey = credentials.apiKey;
     const zoteroUserId = account.provider_user_id;
 
@@ -281,8 +373,13 @@ router.post('/import-collections', async (req, res) => {
       return res.status(400).json({ error: 'Zotero user ID not found. Please reconnect.' });
     }
 
+    const workspaceId = await getWorkspaceId(req.user.id);
+    if (!workspaceId) {
+      return res.status(400).json({ error: 'Workspace not found' });
+    }
+
     // Fetch all collections from Zotero
-    const { data: allCollections } = await zoteroFetch(`/users/${zoteroUserId}/collections?limit=100`, apiKey);
+    const allCollections = await zoteroFetchAll(`${getLibraryPrefix(zoteroUserId)}/collections`, apiKey);
     const selected = allCollections.filter(c => collectionIds.includes(c.key));
 
     const imported = [];
@@ -292,7 +389,10 @@ router.post('/import-collections', async (req, res) => {
       const existing = await db.query(
         `SELECT rl.id FROM reading_lists rl
          JOIN external_objects eo ON eo.id = rl.external_object_id
-         WHERE eo.provider_object_id = $1 AND eo.external_account_id = $2 AND rl.deleted_at IS NULL`,
+         WHERE eo.provider_object_id = $1
+           AND eo.provider_object_type = 'collection'
+           AND eo.external_account_id = $2
+           AND rl.deleted_at IS NULL`,
         [collection.key, account.id]
       );
 
@@ -305,14 +405,15 @@ router.post('/import-collections', async (req, res) => {
       const extObjId = uuidv4();
       await db.query(
         `INSERT INTO external_objects (id, external_account_id, provider, provider_object_type,
-          provider_object_id, provider_parent_id, sync_direction, metadata_json)
-         VALUES ($1, $2, 'zotero', 'collection', $3, $4, 'read_only', $5)`,
+          provider_object_id, provider_parent_id, local_object_type, sync_direction, remote_version, metadata_json)
+         VALUES ($1, $2, 'zotero', 'collection', $3, $4, 'reading_list', 'read_only', $5, $6)`,
         [
           extObjId,
           account.id,
           collection.key,
-          collection.parent?.key || null,
-          JSON.stringify({ name: collection.data?.name || '' }),
+          collection.data?.parentCollection || null,
+          collection.version ? String(collection.version) : null,
+          JSON.stringify({ name: collection.data?.name || '', zotero: collection }),
         ]
       );
 
@@ -323,11 +424,18 @@ router.post('/import-collections', async (req, res) => {
          VALUES ($1, $2, $3, $4, $5)`,
         [
           listId,
-          await getWorkspaceId(req.user.id),
+          workspaceId,
           collection.data?.name || 'Untitled Collection',
           collection.data?.description || null,
           extObjId,
         ]
+      );
+
+      await db.query(
+        `UPDATE external_objects
+         SET local_object_id = $1, updated_at = NOW()
+         WHERE id = $2`,
+        [listId, extObjId]
       );
 
       // Log import
@@ -388,7 +496,10 @@ router.post('/import-items', async (req, res) => {
         `SELECT eo.provider_object_id as collection_key
          FROM reading_lists rl
          JOIN external_objects eo ON eo.id = rl.external_object_id
-         WHERE rl.id = $1 AND rl.deleted_at IS NULL
+         WHERE rl.id = $1
+           AND eo.provider = 'zotero'
+           AND eo.provider_object_type = 'collection'
+           AND rl.deleted_at IS NULL
          LIMIT 1`,
         [readingListId]
       );
@@ -414,9 +525,7 @@ router.post('/import-items', async (req, res) => {
     }
 
     const account = accountResult.rows[0];
-    const credentials = typeof account.credentials_json === 'string'
-      ? JSON.parse(account.credentials_json)
-      : account.credentials_json;
+    const credentials = parseCredentials(account.credentials_json);
     const apiKey = credentials.apiKey;
     const zoteroUserId = account.provider_user_id;
 
@@ -428,9 +537,12 @@ router.post('/import-items', async (req, res) => {
     const readingListResult = await db.query(
       `SELECT rl.id FROM reading_lists rl
        JOIN external_objects eo ON eo.id = rl.external_object_id
-       WHERE eo.provider_object_id = $1 AND rl.deleted_at IS NULL
+       WHERE eo.provider_object_id = $1
+         AND eo.provider_object_type = 'collection'
+         AND eo.external_account_id = $2
+         AND rl.deleted_at IS NULL
        LIMIT 1`,
-      [effectiveCollectionId]
+      [effectiveCollectionId, account.id]
     );
 
     const resolvedReadingListId = readingListResult.rows[0]?.id;
@@ -453,28 +565,47 @@ router.post('/import-items', async (req, res) => {
       projectId = await getOrCreateZoteroProject(wsId, readingListName);
     }
 
+    const libraryPrefix = getLibraryPrefix(zoteroUserId);
+
     // Fetch items from Zotero (top-level items in the collection)
-    const { data: items } = await zoteroFetch(
-      `/users/${zoteroUserId}/collections/${effectiveCollectionId}/items/top?limit=100`,
+    const items = await zoteroFetchAll(
+      `${libraryPrefix}/collections/${encodeURIComponent(effectiveCollectionId)}/items/top`,
       apiKey
     );
 
     const imported = [];
+    const stats = {
+      totalItems: items.length,
+      importedItems: 0,
+      existingItems: 0,
+      skippedItems: 0,
+      papersCreated: 0,
+      pdfsDownloaded: 0,
+      pdfsMissing: 0,
+      pdfsFailed: 0,
+      warnings: [],
+    };
 
     for (const item of items) {
       const itemKey = item.key;
       const itemData = item.data || {};
 
       // Skip non-citable items (notes, attachments)
-      if (itemData.itemType === 'note' || itemData.itemType === 'attachment') continue;
+      if (itemData.itemType === 'note' || itemData.itemType === 'attachment') {
+        stats.skippedItems += 1;
+        continue;
+      }
 
       // Check if already imported
       const existing = await db.query(
         `SELECT ci.id FROM citation_items ci
          JOIN external_objects eo ON eo.id = ci.external_object_id
-         WHERE eo.provider_object_id = $1 AND ci.deleted_at IS NULL
+         WHERE eo.provider_object_id = $1
+           AND eo.provider_object_type = 'item'
+           AND eo.external_account_id = $2
+           AND ci.deleted_at IS NULL
          LIMIT 1`,
-        [itemKey]
+        [itemKey, account.id]
       );
 
       // Build creators array
@@ -498,6 +629,7 @@ router.post('/import-items', async (req, res) => {
       let citationId;
       if (existing.rows.length > 0) {
         citationId = existing.rows[0].id;
+        stats.existingItems += 1;
         if (effectiveReadingListId) {
           await addToReadingListIfMissing(effectiveReadingListId, citationId);
         }
@@ -506,13 +638,14 @@ router.post('/import-items', async (req, res) => {
         const extObjId = uuidv4();
         await db.query(
           `INSERT INTO external_objects (id, external_account_id, provider, provider_object_type,
-            provider_object_id, sync_direction, metadata_json)
-           VALUES ($1, $2, 'zotero', 'item', $3, 'read_only', $4)`,
+            provider_object_id, local_object_type, sync_direction, remote_version, metadata_json)
+           VALUES ($1, $2, 'zotero', 'item', $3, 'citation_item', 'read_only', $4, $5)`,
           [
             extObjId,
             account.id,
             itemKey,
-            JSON.stringify({ itemType: itemData.itemType }),
+            item.version ? String(item.version) : null,
+            JSON.stringify({ itemType: itemData.itemType, zotero: item }),
           ]
         );
 
@@ -526,7 +659,7 @@ router.post('/import-items', async (req, res) => {
            VALUES ($1, $2, 'zotero', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
           [
             citationId,
-            await getWorkspaceId(req.user.id),
+            wsId,
             extObjId,
             itemKey,
             itemData.title || 'Untitled',
@@ -542,10 +675,18 @@ router.post('/import-items', async (req, res) => {
           ]
         );
 
+        await db.query(
+          `UPDATE external_objects
+           SET local_object_id = $1, updated_at = NOW()
+           WHERE id = $2`,
+          [citationId, extObjId]
+        );
+
         // Add to reading list
         if (effectiveReadingListId) {
           await addToReadingListIfMissing(effectiveReadingListId, citationId);
         }
+        stats.importedItems += 1;
       }
 
       imported.push(citationId);
@@ -563,13 +704,13 @@ router.post('/import-items', async (req, res) => {
           // Try to find and download PDF attachment (don't fail import if no PDF)
           let storageKey = null;
           let pdfBuffer = null;
-          let fileName = `${itemData.title || 'untitled'}.pdf`;
+          let fileName = sanitizeFileName(`${itemData.title || 'untitled'}.pdf`);
           let fullText = null;
 
           try {
             // Fetch child items to find PDF attachments
             const childrenResult = await zoteroFetch(
-              `/users/${zoteroUserId}/items/${itemKey}/children`,
+              `${libraryPrefix}/items/${encodeURIComponent(itemKey)}/children`,
               apiKey
             );
             const children = childrenResult.data || [];
@@ -581,49 +722,44 @@ router.post('/import-items', async (req, res) => {
               || (c.data?.filename || '').toLowerCase().endsWith('.pdf')
             );
 
-            if (pdfAttachment?.links?.enclosure?.href) {
+            if (pdfAttachment) {
               // Download PDF from Zotero
-              const pdfResponse = await fetch(pdfAttachment.links.enclosure.href, {
-                headers: {
-                  'Zotero-API-Key': apiKey,
-                  'Zotero-API-Version': '3',
-                },
-              });
+              pdfBuffer = await downloadZoteroAttachment(libraryPrefix, pdfAttachment, apiKey);
+              storageKey = `lit-${uuidv4()}.pdf`;
+              const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '..', '..', 'uploads');
+              const pdfPath = path.join(uploadDir, storageKey);
 
-              if (pdfResponse.ok) {
-                pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
-                storageKey = `lit-${uuidv4()}.pdf`;
-                const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '..', '..', 'uploads');
-                const pdfPath = path.join(uploadDir, storageKey);
+              // Ensure directory exists
+              fs.mkdirSync(path.dirname(pdfPath), { recursive: true });
+              fs.writeFileSync(pdfPath, pdfBuffer);
+              stats.pdfsDownloaded += 1;
 
-                // Ensure directory exists
-                fs.mkdirSync(path.dirname(pdfPath), { recursive: true });
-                fs.writeFileSync(pdfPath, pdfBuffer);
+              fileName = sanitizeFileName(pdfAttachment.data?.filename || fileName);
 
-                fileName = pdfAttachment.data?.filename || fileName;
-
-                // Extract text using pdf-parse
-                try {
-                  const pdfParse = require('pdf-parse');
-                  const pdfData = await pdfParse(pdfBuffer);
-                  fullText = pdfData.text;
-                } catch (parseErr) {
-                  console.warn(`Failed to extract text from PDF for item ${itemKey}:`, parseErr.message);
-                }
-              } else {
-                console.warn(`Zotero PDF download failed for ${itemKey}: HTTP ${pdfResponse.status}`);
+              // Extract text using pdf-parse
+              try {
+                const pdfParse = require('pdf-parse');
+                const pdfData = await pdfParse(pdfBuffer);
+                fullText = pdfData.text;
+              } catch (parseErr) {
+                const warning = `Failed to extract text from PDF for "${itemData.title || itemKey}": ${parseErr.message}`;
+                stats.warnings.push(warning);
+                console.warn(warning);
               }
             } else {
+              stats.pdfsMissing += 1;
               console.log(`No PDF attachment found for item ${itemKey} — importing as metadata-only paper`);
             }
           } catch (pdfFetchErr) {
+            stats.pdfsFailed += 1;
+            stats.warnings.push(`PDF download failed for "${itemData.title || itemKey}": ${pdfFetchErr.message}`);
             console.error(`PDF fetch error for ${itemKey}:`, pdfFetchErr.message);
             // Don't fail — continue with paper creation using citation metadata
           }
 
           // Create literature_paper record (with or without PDF)
           const newPaperId = uuidv4();
-          const authorsStr = creators.map(c => `${c.lastName || ''}, ${c.firstName || ''}`).filter(Boolean).join('; ');
+          const authorsStr = formatAuthors(creators);
 
           if (projectId) {
             await db.query(
@@ -637,23 +773,24 @@ router.post('/import-items', async (req, res) => {
                 storageKey, citationId, itemData.title || null, authorsStr || null, issuedYear,
                 itemData.publicationTitle || null, itemData.DOI || null,
                 itemData.abstractNote || null, fullText,
-                fullText ? 'pending' : 'pending',
+                fullText ? 'pending' : 'completed',
               ]
             );
 
             // Link paper to reading list and citation
             if (effectiveReadingListId) {
-              await db.query(
-                `INSERT INTO literature_pdf_references (id, paper_id, reading_list_id, citation_item_id)
-                 VALUES ($1, $2, $3, $4)`,
-                [uuidv4(), newPaperId, effectiveReadingListId, citationId]
-              );
+              await addPaperReferenceIfMissing(newPaperId, effectiveReadingListId, citationId);
             }
+            stats.papersCreated += 1;
+            paperId = newPaperId;
+          } else {
+            stats.warnings.push(`No literature project was available for "${itemData.title || itemKey}", so only the citation was imported.`);
           }
-
-          paperId = newPaperId;
         } else {
           paperId = existingPaper.rows[0].id;
+          if (effectiveReadingListId) {
+            await addPaperReferenceIfMissing(paperId, effectiveReadingListId, citationId);
+          }
         }
       } catch (pdfErr) {
         console.error(`PDF download/creation error for ${itemKey}:`, pdfErr.message);
@@ -683,7 +820,7 @@ router.post('/import-items', async (req, res) => {
       citations = result.rows;
     }
 
-    res.json({ citationItems: citations, importedCount: imported.length, projectId });
+    res.json({ citationItems: citations, importedCount: imported.length, projectId, stats });
   } catch (err) {
     console.error('Zotero import items error:', err.message);
 
@@ -751,6 +888,22 @@ async function addToReadingListIfMissing(readingListId, citationItemId) {
       `INSERT INTO reading_list_items (id, reading_list_id, citation_item_id)
        VALUES ($1, $2, $3)`,
       [uuidv4(), readingListId, citationItemId]
+    );
+  }
+}
+
+async function addPaperReferenceIfMissing(paperId, readingListId, citationItemId) {
+  const existing = await db.query(
+    `SELECT id FROM literature_pdf_references
+     WHERE paper_id = $1 AND reading_list_id = $2 AND citation_item_id = $3
+     LIMIT 1`,
+    [paperId, readingListId, citationItemId]
+  );
+  if (existing.rows.length === 0) {
+    await db.query(
+      `INSERT INTO literature_pdf_references (id, paper_id, reading_list_id, citation_item_id)
+       VALUES ($1, $2, $3, $4)`,
+      [uuidv4(), paperId, readingListId, citationItemId]
     );
   }
 }

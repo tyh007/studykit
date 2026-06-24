@@ -5,7 +5,7 @@ import { modulesApi, lecturesApi, sourceDocumentsApi } from './lib/api';
 import { literaturePapersApi, paperRelationsApi } from './lib/literature-api';
 import PaperRelationsGraph from './components/literature/PaperRelationsGraph';
 import { SidebarIcon, LiteratureIcon, ReadingListIcon, GraphIcon } from './components/ui/Icons';
-import { useDragResize } from './hooks/useDragResize';
+import { LogoMarkWithWordmark } from './components/ui/Logo';
 import { db } from './lib/db';
 import PDFViewer from './components/PDFViewer';
 import NoteEditor from './components/NoteEditor';
@@ -134,17 +134,34 @@ function StudyKitApp() {
     const saved = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
     return saved ? Math.max(180, Math.min(600, parseInt(saved, 10))) : 280;
   });
+  const [sidebarResizing, setSidebarResizing] = useState(false);
+  const sidebarWidthRef = useRef(sidebarWidth);
+  sidebarWidthRef.current = sidebarWidth;
+  const sidebarResizeStart = useRef<{ startX: number; startWidth: number } | null>(null);
 
-  // Drag-resize the left sidebar. localStorage is written on pointerup only
-  // (the previous handler wrote on every move, which is wasteful).
-  const { onPointerDown: onSidebarDown, separatorProps: sidebarProps } = useDragResize({
-    axis: 'x',
-    startValue: sidebarWidth,
-    min: 180,
-    max: 600,
-    onChange: setSidebarWidth,
-    persistKey: STORAGE_KEY,
-  });
+  const handleSidebarResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setSidebarResizing(true);
+    sidebarResizeStart.current = { startX: e.clientX, startWidth: sidebarWidthRef.current };
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      if (!sidebarResizeStart.current) return;
+      const diff = ev.clientX - sidebarResizeStart.current.startX;
+      const newWidth = Math.max(180, Math.min(600, sidebarResizeStart.current.startWidth + diff));
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      setSidebarResizing(false);
+      sidebarResizeStart.current = null;
+      localStorage.setItem(STORAGE_KEY, String(sidebarWidthRef.current));
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, []);
 
   const {
     modules, setModules, addModule, selectedModuleId, selectModule,
@@ -158,14 +175,12 @@ function StudyKitApp() {
 
   const [graphData, setGraphData] = useState<{nodes: any[]; edges: any[]}>({nodes: [], edges: []});
   
-  // Fetch graph data when graph tab is active. Re-fetch when the paper
-  // count changes (e.g. a relation was added in PaperWorkspace) so the
-  // graph view stays in sync without a manual refresh.
+  // Fetch graph data when graph tab is active
   useEffect(() => {
     if (activeLiteratureTab === 'graph' && selectedLitProjectId) {
       paperRelationsApi.graph(selectedLitProjectId).then(setGraphData).catch(() => {});
     }
-  }, [activeLiteratureTab, selectedLitProjectId, litPapers.length]);
+  }, [activeLiteratureTab, selectedLitProjectId]);
 
   const { user, workspace_id: authWorkspaceId, logout } = useAuth();
   const setWorkspaceId = useStore((s) => s.setWorkspaceId);
@@ -277,7 +292,7 @@ function StudyKitApp() {
         <button className="btn btn-ghost btn-icon" onClick={toggleSidebar} title="Toggle sidebar" aria-label="Toggle sidebar">
           <SidebarIcon size="lg" />
         </button>
-        <div className="logo">StudyKit</div>
+        <div className="logo"><LogoMarkWithWordmark size="md" /></div>
         <div className="spacer" />
         <div className="header-right">
           <div className="sync-indicator" role="status" aria-label={`Save status: ${syncStatus}`}>
@@ -294,17 +309,15 @@ function StudyKitApp() {
 
       <div className="app-body">
         {/* Sidebar */}
-        <aside className={`sidebar glass-sidebar ${sidebarOpen ? '' : 'closed'}`} aria-label="Module navigation" style={{ width: sidebarOpen ? sidebarWidth : 0 }}>
+        <aside className={`sidebar glass-sidebar ${sidebarOpen ? '' : 'closed'} ${sidebarResizing ? 'resizing' : ''}`} aria-label="Module navigation" style={{ width: sidebarOpen ? sidebarWidth : 0 }}>
           <SidebarContent
             onShowNewModule={() => setShowNewModule(true)}
             onShowNewLecture={() => setShowNewLecture(true)}
           />
           {sidebarOpen && (
             <div
-              {...sidebarProps}
-              onPointerDown={onSidebarDown}
-              aria-label="Resize sidebar"
-              className="sidebar-resize-handle"
+              className={`sidebar-resize-handle ${sidebarResizing ? 'active' : ''}`}
+              onMouseDown={handleSidebarResizeStart}
             />
           )}
 

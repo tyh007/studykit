@@ -319,6 +319,38 @@ CREATE TABLE IF NOT EXISTS paper_relations (
 CREATE INDEX IF NOT EXISTS idx_paper_relations_source ON paper_relations(source_paper_id);
 CREATE INDEX IF NOT EXISTS idx_paper_relations_target ON paper_relations(target_paper_id);
 
+-- ===== LITERATURE AI PROVIDER PROFILES =====
+CREATE TABLE IF NOT EXISTS ai_provider_profiles (
+  id                    UUID PRIMARY KEY,
+  workspace_id          UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  name                  TEXT NOT NULL,
+  provider              TEXT NOT NULL,
+  base_url              TEXT,
+  model                 TEXT,
+  credential_encrypted  TEXT,
+  credential_mask       TEXT,
+  options_json          JSONB NOT NULL DEFAULT '{}',
+  capabilities_json     JSONB NOT NULL DEFAULT '{}',
+  last_test_status      TEXT NOT NULL DEFAULT 'untested'
+                        CHECK (last_test_status IN ('untested','success','error')),
+  last_test_error       TEXT,
+  last_tested_at        TIMESTAMPTZ,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at            TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_ai_profiles_workspace
+  ON ai_provider_profiles(workspace_id) WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS ai_task_defaults (
+  workspace_id          UUID PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+  summary_profile_id    UUID REFERENCES ai_provider_profiles(id) ON DELETE SET NULL,
+  vision_profile_id     UUID REFERENCES ai_provider_profiles(id) ON DELETE SET NULL,
+  chat_profile_id       UUID REFERENCES ai_provider_profiles(id) ON DELETE SET NULL,
+  summary_options_json  JSONB NOT NULL DEFAULT '{}',
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- ===== STAGE TWO: EXTERNAL ACCOUNTS =====
 CREATE TABLE IF NOT EXISTS external_accounts (
   id                  UUID PRIMARY KEY,

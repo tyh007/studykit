@@ -277,7 +277,17 @@ JWT_SECRET=change_me_in_production
 JWT_SECRET=studykit-jwt-secret-k8x9m2p4v6
 ```
 
-> **⚠️ Important:** Don't use the examples above — make up your own passwords and write them down somewhere safe.
+**Also add an AI credential encryption key:**
+```
+AI_CREDENTIAL_ENCRYPTION_KEY=请填写至少32位的独立随机字符串
+```
+
+You can generate a suitable 64-character hexadecimal key with:
+```bash
+openssl rand -hex 32
+```
+
+> **⚠️ Important:** Don't use the examples above. Keep `AI_CREDENTIAL_ENCRYPTION_KEY` stable after users save API keys, otherwise those credentials cannot be decrypted.
 
 **To save and exit nano:**
 1. Press `Ctrl + X` (hold the Control key, press X)

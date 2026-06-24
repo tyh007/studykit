@@ -34,6 +34,8 @@ services:
           property: password
       - key: JWT_SECRET
         generateValue: true
+      - key: AI_CREDENTIAL_ENCRYPTION_KEY
+        generateValue: true
       - key: CORS_ORIGIN
         fromService:
           type: web

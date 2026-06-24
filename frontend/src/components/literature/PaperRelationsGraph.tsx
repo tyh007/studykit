@@ -48,8 +48,7 @@ interface Position {
   y: number;
 }
 
-// Exported for unit tests (see PaperRelationsGraph.test.ts).
-export function runForceLayout(nodes: GraphNode[], edges: GraphEdge[], width: number, height: number): Position[] {
+function runForceLayout(nodes: GraphNode[], edges: GraphEdge[], width: number, height: number): Position[] {
   const cx = width / 2;
   const cy = height / 2;
   const n = nodes.length;

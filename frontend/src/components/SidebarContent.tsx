@@ -4,6 +4,7 @@ import { modulesApi, lecturesApi } from '../lib/api';
 import { db } from '../lib/db';
 import ProjectSidebar from './literature/ProjectSidebar';
 import { ModulesIcon, LiteratureIcon, RenameIcon, CopyIcon, TrashIcon, CloseIcon, ChevronUpIcon, ChevronDownIcon, RestoreIcon, DragIcon, BackIcon, AddIcon, MoreIcon } from '../components/ui/Icons';
+import { LogoMarkWithWordmark } from './ui/Logo';
 import ZoteroConnectionPanel from './literature/ZoteroConnectionPanel';
 import ZoteroImportPanel from './literature/ZoteroImportPanel';
 import type { Module, Lecture } from '../types';
@@ -366,6 +367,10 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
 
   return (
     <>
+      {/* Brand mark — anchors the sidebar visually */}
+      <div className="sidebar-brand">
+        <LogoMarkWithWordmark size="sm" />
+      </div>
       {/* Mode toggle: Modules / Literature */}
       <div className="lit-mode-toggle">
         <button className={sidebarMode === 'modules' ? 'active' : ''} onClick={() => setSidebarMode('modules')}>

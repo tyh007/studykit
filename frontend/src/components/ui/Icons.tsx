@@ -1,10 +1,10 @@
 /* ==========================================================================
    StudyKit — Custom SVG Icon Library
    Premium minimalist line icons for Liquid Glass design language.
-   All icons use 24x24 viewBox, 1.75px stroke, round caps, round joins.
+   All icons use stable pixel sizing, rounded caps/joins, and currentColor.
    ========================================================================== */
 
-import React from 'react';
+import React, { useId } from 'react';
 
 type IconSize = 'sm' | 'md' | 'lg' | 'xl';
 type IconProps = {
@@ -19,8 +19,16 @@ type IconProps = {
 function IconWrap({ children, size = 'md', className = '', style, onClick, title }: IconProps & { children: React.ReactNode }) {
   const sizeClass = size === 'sm' ? 'sk-icon-sm' : size === 'lg' ? 'sk-icon-lg' : size === 'xl' ? 'sk-icon-xl' : '';
   return (
-    <span className={`sk-icon ${sizeClass} ${className}`} style={style} onClick={onClick} role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined} title={title}>
-      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <span
+      className={`sk-icon ${sizeClass} ${className}`.trim()}
+      style={style}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      title={title}
+      aria-hidden={title ? undefined : true}
+    >
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" focusable="false">
         {children}
       </svg>
     </span>
@@ -29,18 +37,47 @@ function IconWrap({ children, size = 'md', className = '', style, onClick, title
 
 /* ---- Brand Logo ---- */
 export function LogoIcon(props: IconProps) {
+  const rawId = useId();
+  const prismId = `sk-icon-prism-${rawId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+
   return (
-    <IconWrap {...props}>
-      {/* Stylized 'S' with book spine - unique StudyKit mark */}
-      <path d="M4 4h4v16H4z" strokeWidth="1.75" />
-      <path d="M8 4h4v16H8z" strokeWidth="1.75" />
-      <path d="M12 4h4v16h-4z" strokeWidth="1.75" />
-      <path d="M16 4h4v16h-4z" strokeWidth="1.75" />
-      {/* Overlaid 'S' curve */}
-      <path d="M4 7c6 0 6-3 12-3" strokeWidth="1.75" />
-      <path d="M4 17c6 0 6 3 12 3" strokeWidth="1.75" />
-      <path d="M4 12h16" strokeWidth="1.5" strokeDasharray="2 2" opacity="0.4" />
-    </IconWrap>
+    <span
+      className={`sk-icon sk-icon-logo ${props.size === 'sm' ? 'sk-icon-sm' : props.size === 'lg' ? 'sk-icon-lg' : props.size === 'xl' ? 'sk-icon-xl' : ''} ${props.className || ''}`.trim()}
+      style={props.style}
+      onClick={props.onClick}
+      role={props.onClick ? 'button' : undefined}
+      tabIndex={props.onClick ? 0 : undefined}
+      title={props.title}
+      aria-hidden={props.title ? undefined : true}
+    >
+      <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" focusable="false">
+        <defs>
+          <linearGradient id={prismId} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stopColor="var(--accent-butter, #F5E5BE)" />
+            <stop offset="0.33" stopColor="var(--accent-blush, #F2D5D2)" />
+            <stop offset="0.66" stopColor="var(--accent-rose, #E5B8B0)" />
+            <stop offset="1" stopColor="var(--accent-lilac, #DCC8DC)" />
+          </linearGradient>
+        </defs>
+        <path
+          d="M 23 6 H 11 a 5 5 0 0 0 0 10 H 21 a 5 5 0 0 1 0 10 H 9"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <line
+          x1="13"
+          y1="16"
+          x2="19"
+          y2="16"
+          stroke={`url(#${prismId})`}
+          strokeWidth="4.5"
+          strokeLinecap="round"
+        />
+      </svg>
+    </span>
   );
 }
 
@@ -60,8 +97,8 @@ export function ModulesIcon(props: IconProps) {
     <IconWrap {...props}>
       <rect x="5" y="4" width="14" height="16" rx="2" strokeWidth="1.75" />
       <line x1="8" y1="8" x2="16" y2="8" strokeWidth="1.75" strokeLinecap="round" />
-      <line x1="8" y1="11" x2="14" y2="11" strokeWidth="1.5" strokeLinecap="round" opacity="0.6" />
-      <line x1="8" y1="14" x2="12" y2="14" strokeWidth="1.5" strokeLinecap="round" opacity="0.4" />
+      <line x1="8" y1="11" x2="14" y2="11" strokeWidth="1.25" strokeLinecap="round" opacity="0.6" />
+      <line x1="8" y1="14" x2="12" y2="14" strokeWidth="1.25" strokeLinecap="round" opacity="0.4" />
     </IconWrap>
   );
 }
@@ -72,8 +109,8 @@ export function LiteratureIcon(props: IconProps) {
     <IconWrap {...props}>
       <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" strokeWidth="1.75" />
       <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" strokeWidth="1.75" />
-      <line x1="8" y1="7" x2="15" y2="7" strokeWidth="1.5" strokeLinecap="round" opacity="0.6" />
-      <line x1="8" y1="10" x2="14" y2="10" strokeWidth="1.5" strokeLinecap="round" opacity="0.4" />
+      <line x1="8" y1="7" x2="15" y2="7" strokeWidth="1.25" strokeLinecap="round" opacity="0.6" />
+      <line x1="8" y1="10" x2="14" y2="10" strokeWidth="1.25" strokeLinecap="round" opacity="0.4" />
       {/* Atomic orbit accent for scientific literature */}
       <ellipse cx="17" cy="10" rx="2.5" ry="1.5" strokeWidth="1" opacity="0.3" transform="rotate(-30 17 10)" />
     </IconWrap>
@@ -102,10 +139,10 @@ export function GraphIcon(props: IconProps) {
       <circle cx="12" cy="5" r="2.5" strokeWidth="1.75" />
       <circle cx="5" cy="17" r="2.5" strokeWidth="1.75" />
       <circle cx="19" cy="17" r="2.5" strokeWidth="1.75" />
-      <circle cx="12" cy="12" r="1.5" strokeWidth="1.5" opacity="0.5" />
-      <line x1="12" y1="7.5" x2="7" y2="14.5" strokeWidth="1.5" />
-      <line x1="12" y1="7.5" x2="17" y2="14.5" strokeWidth="1.5" />
-      <line x1="7" y1="19.5" x2="17" y2="19.5" strokeWidth="1.5" />
+      <circle cx="12" cy="12" r="1.5" strokeWidth="1.25" opacity="0.5" />
+      <line x1="12" y1="7.5" x2="7" y2="14.5" strokeWidth="1.25" />
+      <line x1="12" y1="7.5" x2="17" y2="14.5" strokeWidth="1.25" />
+      <line x1="7" y1="19.5" x2="17" y2="19.5" strokeWidth="1.25" />
     </IconWrap>
   );
 }
@@ -115,19 +152,6 @@ export function RenameIcon(props: IconProps) {
   return (
     <IconWrap {...props}>
       <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" strokeWidth="1.75" />
-    </IconWrap>
-  );
-}
-
-/* ---- Comment (chat bubble) ---- */
-export function CommentIcon(props: IconProps) {
-  return (
-    <IconWrap {...props}>
-      <path
-        d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"
-        strokeWidth="1.75"
-        strokeLinejoin="round"
-      />
     </IconWrap>
   );
 }
@@ -149,8 +173,8 @@ export function TrashIcon(props: IconProps) {
       <path d="M3 6h18" strokeWidth="1.75" strokeLinecap="round" />
       <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" strokeWidth="1.75" />
       <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" strokeWidth="1.75" />
-      <line x1="10" y1="10" x2="10" y2="17" strokeWidth="1.5" strokeLinecap="round" />
-      <line x1="14" y1="10" x2="14" y2="17" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="10" y1="10" x2="10" y2="17" strokeWidth="1.25" strokeLinecap="round" />
+      <line x1="14" y1="10" x2="14" y2="17" strokeWidth="1.25" strokeLinecap="round" />
     </IconWrap>
   );
 }
@@ -207,12 +231,12 @@ export function RestoreIcon(props: IconProps) {
 export function DragIcon(props: IconProps) {
   return (
     <IconWrap {...props}>
-      <circle cx="10" cy="7" r="1" strokeWidth="1.5" fill="currentColor" />
-      <circle cx="14" cy="7" r="1" strokeWidth="1.5" fill="currentColor" />
-      <circle cx="10" cy="12" r="1" strokeWidth="1.5" fill="currentColor" />
-      <circle cx="14" cy="12" r="1" strokeWidth="1.5" fill="currentColor" />
-      <circle cx="10" cy="17" r="1" strokeWidth="1.5" fill="currentColor" />
-      <circle cx="14" cy="17" r="1" strokeWidth="1.5" fill="currentColor" />
+      <circle cx="10" cy="7" r="1" strokeWidth="1.25" fill="currentColor" />
+      <circle cx="14" cy="7" r="1" strokeWidth="1.25" fill="currentColor" />
+      <circle cx="10" cy="12" r="1" strokeWidth="1.25" fill="currentColor" />
+      <circle cx="14" cy="12" r="1" strokeWidth="1.25" fill="currentColor" />
+      <circle cx="10" cy="17" r="1" strokeWidth="1.25" fill="currentColor" />
+      <circle cx="14" cy="17" r="1" strokeWidth="1.25" fill="currentColor" />
     </IconWrap>
   );
 }
@@ -275,8 +299,8 @@ export function NotesIcon(props: IconProps) {
     <IconWrap {...props}>
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" strokeWidth="1.75" />
       <polyline points="14 2 14 8 20 8" strokeWidth="1.75" />
-      <line x1="8" y1="13" x2="16" y2="13" strokeWidth="1.5" strokeLinecap="round" />
-      <line x1="8" y1="17" x2="14" y2="17" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="8" y1="13" x2="16" y2="13" strokeWidth="1.25" strokeLinecap="round" />
+      <line x1="8" y1="17" x2="14" y2="17" strokeWidth="1.25" strokeLinecap="round" />
     </IconWrap>
   );
 }
@@ -328,10 +352,10 @@ export function CiteIcon(props: IconProps) {
   return (
     <IconWrap {...props}>
       <path d="M4 3h16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" strokeWidth="1.75" />
-      <circle cx="9" cy="10" r="1.5" strokeWidth="1.5" fill="currentColor" />
-      <circle cx="15" cy="10" r="1.5" strokeWidth="1.5" fill="currentColor" />
-      <path d="M7 15c1 1.5 3 1.5 4 0" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M13 15c1 1.5 3 1.5 4 0" strokeWidth="1.5" strokeLinecap="round" />
+      <circle cx="9" cy="10" r="1.5" strokeWidth="1.25" fill="currentColor" />
+      <circle cx="15" cy="10" r="1.5" strokeWidth="1.25" fill="currentColor" />
+      <path d="M7 15c1 1.5 3 1.5 4 0" strokeWidth="1.25" strokeLinecap="round" />
+      <path d="M13 15c1 1.5 3 1.5 4 0" strokeWidth="1.25" strokeLinecap="round" />
     </IconWrap>
   );
 }
@@ -353,8 +377,8 @@ export function TrashFullIcon(props: IconProps) {
       <path d="M3 6h18" strokeWidth="1.75" strokeLinecap="round" />
       <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" strokeWidth="1.75" />
       <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" strokeWidth="1.75" />
-      <line x1="10" y1="10" x2="10" y2="17" strokeWidth="1.5" strokeLinecap="round" />
-      <line x1="14" y1="10" x2="14" y2="17" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="10" y1="10" x2="10" y2="17" strokeWidth="1.25" strokeLinecap="round" />
+      <line x1="14" y1="10" x2="14" y2="17" strokeWidth="1.25" strokeLinecap="round" />
     </IconWrap>
   );
 }
@@ -406,8 +430,8 @@ export function LectureIcon(props: IconProps) {
       <rect x="2" y="3" width="20" height="14" rx="2" strokeWidth="1.75" />
       <line x1="8" y1="21" x2="16" y2="21" strokeWidth="1.75" />
       <line x1="12" y1="17" x2="12" y2="21" strokeWidth="1.75" />
-      <line x1="7" y1="8" x2="17" y2="8" strokeWidth="1.5" strokeLinecap="round" />
-      <circle cx="8" cy="12" r="1.5" strokeWidth="1.5" fill="currentColor" />
+      <line x1="7" y1="8" x2="17" y2="8" strokeWidth="1.25" strokeLinecap="round" />
+      <circle cx="8" cy="12" r="1.5" strokeWidth="1.25" fill="currentColor" />
     </IconWrap>
   );
 }
@@ -467,6 +491,95 @@ export function MoreIcon(props: IconProps) {
   );
 }
 
+/* ---- Spark (AI, 4-pointed star + center dot) ---- */
+export function SparkIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <path d="M12 3 L13.6 10.4 L21 12 L13.6 13.6 L12 21 L10.4 13.6 L3 12 L10.4 10.4 Z" strokeWidth="1.75" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+    </IconWrap>
+  );
+}
+
+/* ---- Flashcard (2 stacked cards, offset 2px) ---- */
+export function FlashcardIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <rect x="3" y="5" width="14" height="16" rx="2" strokeWidth="1.75" />
+      <rect x="6" y="3" width="14" height="16" rx="2" strokeWidth="1.75" fill="var(--surface, white)" />
+      <line x1="9" y1="9" x2="17" y2="9" strokeWidth="1.75" strokeLinecap="round" />
+      <line x1="9" y1="12" x2="15" y2="12" strokeWidth="1.25" strokeLinecap="round" opacity="0.6" />
+    </IconWrap>
+  );
+}
+
+/* ---- Code (< />) ---- */
+export function CodeIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <polyline points="8 7 3 12 8 17" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <polyline points="16 7 21 12 16 17" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="14" y1="5" x2="10" y2="19" strokeWidth="1.75" strokeLinecap="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Mind Map (center node + 3 radiating branches) ---- */
+export function MindMapIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <circle cx="12" cy="12" r="2.5" strokeWidth="1.75" />
+      <circle cx="4" cy="4" r="1.5" strokeWidth="1.75" />
+      <circle cx="20" cy="4" r="1.5" strokeWidth="1.75" />
+      <circle cx="12" cy="20" r="1.5" strokeWidth="1.75" />
+      <line x1="10" y1="10" x2="5.5" y2="5.5" strokeWidth="1.75" strokeLinecap="round" />
+      <line x1="14" y1="10" x2="18.5" y2="5.5" strokeWidth="1.75" strokeLinecap="round" />
+      <line x1="12" y1="14.5" x2="12" y2="18.5" strokeWidth="1.75" strokeLinecap="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Highlight (pen tip over an underline) ---- */
+export function HighlightIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <path d="M4 19h16" strokeWidth="1.75" strokeLinecap="round" />
+      <path d="M8 3l8 6-3.5 1-1 3.5-6-8z" strokeWidth="1.75" strokeLinejoin="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Pen (stylus at 30 deg) ---- */
+export function PenIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <path d="M14 4l6 6L9 21H3v-6L14 4z" strokeWidth="1.75" strokeLinejoin="round" />
+      <line x1="13" y1="5" x2="19" y2="11" strokeWidth="1.75" strokeLinecap="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Bookmark (V-shaped page marker) ---- */
+export function BookmarkIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <path d="M6 3h12v18l-6-4-6 4V3z" strokeWidth="1.75" strokeLinejoin="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Cornell (3-column note layout: cue | main | summary) ---- */
+export function CornellIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="1.5" strokeWidth="1.75" />
+      <line x1="8" y1="4" x2="8" y2="20" strokeWidth="1.75" />
+      <line x1="16" y1="4" x2="16" y2="20" strokeWidth="1.75" />
+      <line x1="3" y1="10" x2="21" y2="10" strokeWidth="1.25" opacity="0.55" />
+    </IconWrap>
+  );
+}
+
 /* ==========================================================================
    Combined icon component for dynamic rendering
    ========================================================================== */
@@ -478,7 +591,6 @@ const iconMap: Record<string, React.ComponentType<IconProps>> = {
   readingList: ReadingListIcon,
   graph: GraphIcon,
   rename: RenameIcon,
-  comment: CommentIcon,
   copy: CopyIcon,
   trash: TrashIcon,
   close: CloseIcon,
@@ -507,6 +619,14 @@ const iconMap: Record<string, React.ComponentType<IconProps>> = {
   pdf: PDFIcon,
   externalLink: ExternalLinkIcon,
   more: MoreIcon,
+  spark: SparkIcon,
+  flashcard: FlashcardIcon,
+  code: CodeIcon,
+  mindMap: MindMapIcon,
+  highlight: HighlightIcon,
+  pen: PenIcon,
+  bookmark: BookmarkIcon,
+  cornell: CornellIcon,
 };
 
 export type IconName = keyof typeof iconMap;

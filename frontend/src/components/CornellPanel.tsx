@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../store/useStore';
-import { AnnotationIcon, CloseIcon, CheckIcon, CommentIcon } from './ui/Icons';
+import { AnnotationIcon, CloseIcon, CheckIcon } from './ui/Icons';
 import { db } from '../lib/db';
 import type { NoteBlock, BlockContent } from '../types';
 
@@ -170,7 +170,7 @@ export function AddAnnotationButton({ paragraphIndex, paragraphPreview, hasAnnot
           onClick={(e) => { e.stopPropagation(); setShowInput(true); }}
           title={hasAnnotation ? 'Edit annotation' : 'Add margin annotation'}
         >
-          <>{hasAnnotation ? <AnnotationIcon size="sm" /> : <CommentIcon size="sm" />}</>
+          <>{hasAnnotation ? <AnnotationIcon size="sm" /> : <AnnotationIcon size="sm" />}</>
         </button>
       ) : (
         <span className="annotation-inline-form" onClick={(e) => e.stopPropagation()}>

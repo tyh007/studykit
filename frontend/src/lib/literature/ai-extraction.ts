@@ -1,87 +1,22 @@
-import { getAuthToken } from '../api'
 import type { ExtractedData, CustomFieldDefinition } from './types'
-import { extractPaperWithLocalOllama, getLocalOllamaAvailability, truncatePaperText, parseExtractionResponse } from './local-ollama-ai'
-import { extractPaperWithCustomAI, getCustomAIAvailability } from './custom-ai-extraction'
-import { readAIProviderConfig, type AIProvider } from './ai-provider-config'
+import { extractPaperWithLocalOllama, parseExtractionResponse, truncatePaperText } from './local-ollama-ai'
+import { saveOllamaSettings } from './ollama-settings'
+import { saveCustomAISettings } from './custom-ai-settings'
+import { extractPaperWithCustomAI } from './custom-ai-extraction'
 import { PromptBuilder } from './prompt-builder'
-import { fetchWithTimeout } from './fetch-with-timeout'
+import { literatureAiApi } from '../literature-api'
+import type { AIProfile } from './ai-profiles'
+import { readLocalProfileCredential } from './ai-profiles'
 
-async function tryOllama(paperText: string, detailLevel: 'brief' | 'detailed', customFields?: CustomFieldDefinition[]): Promise<{ extractedData: ExtractedData; method: string } | null> {
-  try {
-    const availability = await getLocalOllamaAvailability()
-    if (availability.available) {
-      const result = await extractPaperWithLocalOllama(paperText, detailLevel, customFields)
-      return { extractedData: result.extractedData, method: result.model }
-    }
-  } catch (err) {
-    console.warn('Local Ollama extraction failed:', err)
-  }
-  return null
+async function resolveSummaryProfile(profileId?: string): Promise<AIProfile> {
+  const result = await literatureAiApi.profiles()
+  const id = profileId || result.defaults?.summaryProfileId
+  const profile = result.profiles.find((item: AIProfile) => item.id === id)
+  if (!profile) throw new Error('请先在 Literature AI 配置中心设置“文献总结”的默认配置')
+  return profile
 }
 
-async function tryCustomAPI(paperText: string, detailLevel: 'brief' | 'detailed', customFields?: CustomFieldDefinition[]): Promise<{ extractedData: ExtractedData; method: string } | null> {
-  try {
-    const availability = await getCustomAIAvailability()
-    if (availability.available) {
-      const result = await extractPaperWithCustomAI(paperText, detailLevel, customFields)
-      return { extractedData: result.extractedData, method: result.model }
-    }
-  } catch (err) {
-    console.warn('Custom API extraction failed:', err)
-  }
-  return null
-}
-
-async function tryGemini(paperText: string, detailLevel: 'brief' | 'detailed', customFields?: CustomFieldDefinition[]): Promise<{ extractedData: ExtractedData; method: string } | null> {
-  try {
-    const config = readAIProviderConfig()
-    const prompt = PromptBuilder.buildExtractionPrompt(
-      truncatePaperText(paperText),
-      detailLevel,
-      customFields
-    )
-    const token = getAuthToken()
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (token) headers['Authorization'] = `Bearer ${token}`
-    const response = await fetchWithTimeout('/api/literature/ai/extract', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        systemPrompt: prompt.systemPrompt,
-        userPrompt: prompt.userPrompt,
-        expectedFields: prompt.expectedFields,
-        detailLevel,
-        geminiModel: config.geminiModel || 'gemini-2.0-flash',
-        userApiKey: config.geminiApiKey,
-      })
-    }, 30000)
-    if (response.ok) {
-      const data = await response.json()
-      if (data.success && data.extractedData) {
-        const extractedData = parseExtractionResponse(data.extractedData)
-        return { extractedData, method: 'Gemini (cloud)' }
-      }
-    }
-  } catch (err) {
-    console.warn('Server AI extraction failed:', err)
-  }
-  return null
-}
-
-function getFallbackOrder(configuredProvider: AIProvider): Array<typeof tryOllama> {
-  // When Gemini is the configured provider, skip local providers entirely
-  if (configuredProvider === 'gemini') return [tryGemini]
-
-  // Local providers: configured one first, then the other, Gemini as last resort
-  const locals: Array<typeof tryOllama> =
-    configuredProvider === 'custom'
-      ? [tryCustomAPI, tryOllama]
-      : [tryOllama, tryCustomAPI]
-
-  return [...locals, tryGemini]
-}
-
-export function createAIExtractionService(): {
+export function createAIExtractionService(profileId?: string): {
   extractWithFallback(
     paperText: string,
     detailLevel?: 'brief' | 'detailed',
@@ -92,19 +27,38 @@ export function createAIExtractionService(): {
     async extractWithFallback(
       paperText: string,
       detailLevel: 'brief' | 'detailed' = 'brief',
-      customFields?: CustomFieldDefinition[]
-    ): Promise<{ extractedData: ExtractedData; method: string }> {
-      const config = readAIProviderConfig()
-      const fallbackChain = getFallbackOrder(config.provider)
+      customFields?: CustomFieldDefinition[],
+    ) {
+      const profile = await resolveSummaryProfile(profileId)
 
-      // Try each provider in order
-      for (const tryFn of fallbackChain) {
-        const result = await tryFn(paperText, detailLevel, customFields)
-        if (result) return result
+      if (profile.provider === 'ollama') {
+        saveOllamaSettings({ baseUrl: profile.baseUrl, model: profile.model })
+        const result = await extractPaperWithLocalOllama(paperText, detailLevel, customFields, profile.model)
+        return { extractedData: result.extractedData, method: profile.name }
+      }
+      if (profile.provider === 'custom' && profile.local) {
+        saveCustomAISettings({ baseUrl: profile.baseUrl, model: profile.model, apiKey: readLocalProfileCredential(profile.id) })
+        const result = await extractPaperWithCustomAI(paperText, detailLevel, customFields, profile.model)
+        return { extractedData: result.extractedData, method: profile.name }
       }
 
-      // All AI providers failed — propagate the error, never use rule-based fallback
-      throw new Error('All AI providers failed. Check your AI provider configuration (API key, connectivity).')
-    }
+      const prompt = PromptBuilder.buildExtractionPrompt(
+        truncatePaperText(paperText),
+        detailLevel,
+        customFields,
+      )
+      const result = await literatureAiApi.extract({
+        systemPrompt: prompt.systemPrompt,
+        userPrompt: prompt.userPrompt,
+        profileId: profile.id,
+      })
+      if (!result.success || !result.extractedData) {
+        throw new Error(result.error || 'AI 总结没有返回结构化结果')
+      }
+      return {
+        extractedData: parseExtractionResponse(result.extractedData as Record<string, unknown>),
+        method: profile.name,
+      }
+    },
   }
 }
