@@ -344,7 +344,7 @@
 }
 .canvas-node-paper-warning {
   font-size: 0.7rem;
-  color: var(--color-danger, #b91c1c);
+  color: var(--color-danger, #fca5a5);
   font-style: italic;
 }
 
