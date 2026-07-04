@@ -113,6 +113,7 @@ export function useDragResize(opts: UseDragResizeOptions): UseDragResizeResult {
   const onChangeRef = useRef(onChange)
   const onCommitRef = useRef(onCommit)
   const startValueRef = useRef(startValue)
+  const latestValueRef = useRef(startValue)
   onChangeRef.current = onChange
   onCommitRef.current = onCommit
   startValueRef.current = startValue
@@ -122,6 +123,7 @@ export function useDragResize(opts: UseDragResizeOptions): UseDragResizeResult {
   // Mirror the parent-controlled startValue when it changes (e.g. width
   // restored from localStorage at mount, or a hard reset by the parent).
   useEffect(() => {
+    latestValueRef.current = startValue
     setValue(startValue)
   }, [startValue])
 
@@ -145,6 +147,7 @@ export function useDragResize(opts: UseDragResizeOptions): UseDragResizeResult {
         next = Math.max(min, Math.min(max, startRef.current.start + delta))
       }
 
+      latestValueRef.current = next
       setValue(next)
       onChangeRef.current(next)
     },
@@ -161,7 +164,7 @@ export function useDragResize(opts: UseDragResizeOptions): UseDragResizeResult {
 
   function handlePointerUp() {
     if (!startRef.current) return
-    const finalValue = value
+    const finalValue = latestValueRef.current
     startRef.current = null
     cleanup()
     if (persistKey) {
@@ -188,6 +191,7 @@ export function useDragResize(opts: UseDragResizeOptions): UseDragResizeResult {
         pointer: axis === 'x' ? e.clientX : e.clientY,
         start: startValueRef.current,
       }
+      latestValueRef.current = startValueRef.current
       document.body.style.cursor = axis === 'x' ? 'col-resize' : 'row-resize'
       document.body.style.userSelect = 'none'
       document.addEventListener('pointermove', handlePointerMove)

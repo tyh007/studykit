@@ -13,6 +13,7 @@ type Tab = 'pdf' | 'summary' | 'notes' | 'ask';
 interface Props {
   paper: LiteraturePaper | null;
   onClose: () => void;
+  onAddAnswerToCanvas?: (paper: LiteraturePaper, prompt: string, answer: string) => void;
 }
 
 function getInitialWidth(): number {
@@ -24,7 +25,7 @@ function getInitialWidth(): number {
   return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, n));
 }
 
-export default function PaperPreviewDrawer({ paper, onClose }: Props) {
+export default function PaperPreviewDrawer({ paper, onClose, onAddAnswerToCanvas }: Props) {
   const [width, setWidth] = useState<number>(getInitialWidth);
   const [activeTab, setActiveTab] = useState<Tab>('pdf');
   const [pdfPage, setPdfPage] = useState(0);
@@ -280,6 +281,16 @@ export default function PaperPreviewDrawer({ paper, onClose }: Props) {
             {askAnswer && (
               <div className="paper-preview-drawer-ask-answer">
                 {askAnswer}
+                {onAddAnswerToCanvas && (
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => onAddAnswerToCanvas(paper, askInput, askAnswer)}
+                    >
+                      Add to canvas
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

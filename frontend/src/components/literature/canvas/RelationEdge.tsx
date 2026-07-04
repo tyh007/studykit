@@ -31,6 +31,7 @@ interface RelationEdgeData {
     edge_type?: 'canvas' | 'paper_relation';
     relation_id?: string | null;
     relation_type?: string;
+    content_json?: Record<string, any>;
   };
 }
 
@@ -50,7 +51,7 @@ export default function RelationEdge(props: any) {
 
   const typed = (data ?? {}) as RelationEdgeData;
   const isPaperRelation = typed.canvasEdge?.edge_type === 'paper_relation';
-  const relType = typed.canvasEdge?.relation_type;
+  const relType = typed.canvasEdge?.relation_type || typed.canvasEdge?.content_json?.relation_type;
   const stroke = isPaperRelation
     ? RELATION_EDGE_COLORS[relType || 'related'] || '#6b7280'
     : '#9ca3af';

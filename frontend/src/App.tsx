@@ -5,7 +5,7 @@ import { modulesApi, lecturesApi, sourceDocumentsApi } from './lib/api';
 import { literaturePapersApi } from './lib/literature-api';
 // @deprecated PaperRelationsGraph is replaced by LiteratureCanvas; kept on disk for later cleanup.
 import LiteratureCanvas from './components/literature/canvas/LiteratureCanvas';
-import { SidebarIcon, LiteratureIcon, ReadingListIcon, GraphIcon } from './components/ui/Icons';
+import { SidebarIcon, LiteratureIcon, ReadingListIcon } from './components/ui/Icons';
 import { LogoMarkWithWordmark } from './components/ui/Logo';
 import { db } from './lib/db';
 import PDFViewer from './components/PDFViewer';
@@ -365,12 +365,26 @@ function StudyKitApp() {
         {/* Main content — fully branched on sidebarMode so each mode only
             ever shows its own content, never stale lecture context. */}
         <main id="main-content" className={`main-content ${sidebarMode}`}>
-          {sidebarMode === 'literature' ? (
+          {sidebarMode === 'canvas' ? (
+            selectedLitProjectId ? (
+              <div className="literature-canvas-host">
+                <LiteratureCanvas projectId={selectedLitProjectId} />
+              </div>
+            ) : (
+              <div className="empty-state">
+                <h2>Research Canvas</h2>
+                <p>
+                  Pick or create a literature project in the sidebar to start a
+                  freeform AI research canvas for its papers.
+                </p>
+              </div>
+            )
+          ) : sidebarMode === 'literature' ? (
             selectedLitProjectId ? (
               <div className="literature-shell">
                 {/* Literature tab bar */}
                 <div className="literature-top-tabs">
-                  {(['papers', 'readingLists', 'canvas'] as const).map((tab) => (
+                  {(['papers', 'readingLists'] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setActiveLiteratureTab(tab)}
@@ -387,7 +401,7 @@ function StudyKitApp() {
                         transition: 'color 0.15s, border-color 0.15s',
                       }}
                     >
-                      {tab === 'papers' ? <><LiteratureIcon size="sm" /> Papers</> : tab === 'readingLists' ? <><ReadingListIcon size="sm" /> Reading Lists</> : <><GraphIcon size="sm" /> Canvas</>}
+                      {tab === 'papers' ? <><LiteratureIcon size="sm" /> Papers</> : <><ReadingListIcon size="sm" /> Reading Lists</>}
                     </button>
                   ))}
                 </div>
@@ -407,11 +421,6 @@ function StudyKitApp() {
                   <>
                     {activeLiteratureTab === 'papers' && <SummaryTable projectId={selectedLitProjectId} />}
                     {activeLiteratureTab === 'readingLists' && <ReadingListsView />}
-                    {activeLiteratureTab === 'canvas' && (
-                      <div className="literature-canvas-host">
-                        <LiteratureCanvas projectId={selectedLitProjectId} />
-                      </div>
-                    )}
                   </>
                 )}
               </div>

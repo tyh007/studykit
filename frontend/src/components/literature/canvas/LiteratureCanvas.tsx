@@ -71,6 +71,7 @@ function LiteratureCanvasInner({ projectId }: Props) {
   } | null>(null);
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
   const [aiAssistantPrompt, setAiAssistantPrompt] = useState('');
+  const [focusedPaperId, setFocusedPaperId] = useState<string | null>(null);
 
   const isReady = !!canvasId;
   const proOptions = useMemo(() => ({ hideAttribution: true }), []);
@@ -88,6 +89,10 @@ function LiteratureCanvasInner({ projectId }: Props) {
           onOpenPaper={(p) => setOpenPaper(p)}
           onRunSummary={(id) => handleRunSummary(id)}
           onCreateSummaryNote={(id) => handleCreateSummaryNote(id)}
+          onAskPaper={(id) => {
+            setFocusedPaperId(id);
+            setAiAssistantOpen(true);
+          }}
         />
       ),
       question: QuestionNode,
@@ -118,6 +123,28 @@ function LiteratureCanvasInner({ projectId }: Props) {
     }),
     []
   );
+
+  const getAIInsertPosition = useCallback((paperId?: string | null) => {
+    const anchorPaperId = paperId || focusedPaperId;
+    const anchorNode = anchorPaperId
+      ? nodes.find((n) => n.data?.canvasNode?.ref_type === 'paper' && n.data.canvasNode.ref_id === anchorPaperId)
+      : nodes.find((n) => n.selected);
+    if (anchorNode) {
+      return {
+        x: anchorNode.position.x + (anchorNode.width || 300) + 40,
+        y: anchorNode.position.y,
+      };
+    }
+    const wrapper = document.querySelector('.literature-canvas-flow');
+    const rect = wrapper?.getBoundingClientRect();
+    if (rect) {
+      return screenToFlowPosition({
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+      });
+    }
+    return { x: 120, y: 120 };
+  }, [focusedPaperId, nodes, screenToFlowPosition]);
 
   const handleConnect = useCallback(
     (conn: Connection) => {
@@ -306,7 +333,10 @@ function LiteratureCanvasInner({ projectId }: Props) {
       )}
       <button
         className="canvas-ai-assistant-toggle"
-        onClick={() => setAiAssistantOpen((v) => !v)}
+        onClick={() => {
+          setFocusedPaperId(null);
+          setAiAssistantOpen((v) => !v);
+        }}
         title="AI assistant"
         aria-label="Open AI assistant"
       >
@@ -315,7 +345,8 @@ function LiteratureCanvasInner({ projectId }: Props) {
       <CanvasAIAssistant
         open={aiAssistantOpen}
         onClose={() => setAiAssistantOpen(false)}
-        paperIds={selectedPaperIds}
+        paperId={focusedPaperId}
+        paperIds={selectedPaperIds.length > 0 ? selectedPaperIds : focusedPaperId ? [focusedPaperId] : []}
         prompt={aiAssistantPrompt}
         onPromptChange={setAiAssistantPrompt}
         onSubmitted={(answer, sources) => {
@@ -324,12 +355,23 @@ function LiteratureCanvasInner({ projectId }: Props) {
             prompt: aiAssistantPrompt,
             answer,
             sources,
-            position: { x: 200, y: 200 },
+            position: getAIInsertPosition(),
           });
           setAiAssistantOpen(false);
         }}
       />
-      <PaperPreviewDrawer paper={openPaper} onClose={() => setOpenPaper(null)} />
+      <PaperPreviewDrawer
+        paper={openPaper}
+        onClose={() => setOpenPaper(null)}
+        onAddAnswerToCanvas={(paper, prompt, answer) => {
+          handleInsertAIAnswer({
+            prompt,
+            answer,
+            sources: [paper.title || paper.file_name || paper.id],
+            position: getAIInsertPosition(paper.id),
+          });
+        }}
+      />
     </div>
   );
 }

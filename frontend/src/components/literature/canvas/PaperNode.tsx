@@ -7,6 +7,7 @@ interface PaperNodeProps extends NodeProps<CanvasFlowNode> {
   onOpenPaper?: (paper: LiteraturePaper) => void;
   onRunSummary?: (paperId: string) => void;
   onCreateSummaryNote?: (paperId: string) => void;
+  onAskPaper?: (paperId: string) => void;
 }
 
 function getSummaryStatus(paper: LiteraturePaper | null | undefined): {
@@ -50,6 +51,7 @@ export default function PaperNode({
   onOpenPaper,
   onRunSummary,
   onCreateSummaryNote,
+  onAskPaper,
 }: PaperNodeProps) {
   const paper: LiteraturePaper | null | undefined = data.paper;
   const [menuOpen, setMenuOpen] = useState(false);
@@ -137,6 +139,17 @@ export default function PaperNode({
               }}
             >
               Run summary
+            </button>
+          )}
+          {paper && onAskPaper && (
+            <button
+              className="canvas-node-menu-item"
+              onClick={() => {
+                setMenuOpen(false);
+                onAskPaper(paper.id);
+              }}
+            >
+              Ask AI
             </button>
           )}
           {paper && onCreateSummaryNote && paper.extracted_data && (

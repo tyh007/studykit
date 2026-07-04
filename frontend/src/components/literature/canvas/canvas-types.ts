@@ -3,6 +3,7 @@ import type { LiteratureCanvasNode, LiteratureCanvasEdge, LiteraturePaper } from
 
 export interface CanvasNodeActions {
   onContentChange: (nodeId: string, text: string) => void;
+  onContentPatch: (nodeId: string, patch: Record<string, any>) => void;
   onDelete: (nodeId: string) => void;
   onOpenPaper?: (paper: LiteraturePaper) => void;
 }

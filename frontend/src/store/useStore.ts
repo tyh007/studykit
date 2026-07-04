@@ -19,8 +19,8 @@ import { db } from '../lib/db';
 
 interface StudyKitState {
   // Sidebar mode
-  sidebarMode: 'modules' | 'literature';
-  setSidebarMode: (mode: 'modules' | 'literature') => void;
+  sidebarMode: 'modules' | 'literature' | 'canvas';
+  setSidebarMode: (mode: 'modules' | 'literature' | 'canvas') => void;
 
   // Literature Projects
   litProjects: LiteratureProject[];
@@ -98,8 +98,8 @@ interface StudyKitState {
   setCurrentLayout: (layout: 'slide_left_notes_right' | 'slide_top_notes_below') => void;
   zoom: number;
   setZoom: (zoom: number) => void;
-  activeLiteratureTab: 'papers' | 'readingLists' | 'canvas';
-  setActiveLiteratureTab: (tab: 'papers' | 'readingLists' | 'canvas') => void;
+  activeLiteratureTab: 'papers' | 'readingLists';
+  setActiveLiteratureTab: (tab: 'papers' | 'readingLists') => void;
 
   // Sync status
   syncStatus: 'synced' | 'pending' | 'error' | 'offline';

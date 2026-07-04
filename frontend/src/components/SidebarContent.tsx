@@ -3,7 +3,7 @@ import { useStore } from '../store/useStore';
 import { modulesApi, lecturesApi } from '../lib/api';
 import { db } from '../lib/db';
 import ProjectSidebar from './literature/ProjectSidebar';
-import { ModulesIcon, LiteratureIcon, RenameIcon, CopyIcon, TrashIcon, CloseIcon, ChevronUpIcon, ChevronDownIcon, RestoreIcon, DragIcon, BackIcon, AddIcon, MoreIcon } from '../components/ui/Icons';
+import { ModulesIcon, LiteratureIcon, GraphIcon, RenameIcon, CopyIcon, TrashIcon, CloseIcon, ChevronUpIcon, ChevronDownIcon, RestoreIcon, DragIcon, BackIcon, AddIcon, MoreIcon } from '../components/ui/Icons';
 import { LogoMarkWithWordmark } from './ui/Logo';
 import ZoteroConnectionPanel from './literature/ZoteroConnectionPanel';
 import ZoteroImportPanel from './literature/ZoteroImportPanel';
@@ -391,15 +391,17 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
       <div className="sidebar-brand">
         <LogoMarkWithWordmark size="sm" />
       </div>
-      {/* Mode toggle: Modules / Library (literature projects live in the
-          "Library" mode; the word "Literature" was overloaded elsewhere in
-          the product, so we now reserve "Library" for this whole-mode tab. */}
+      {/* Mode toggle: Modules / Library / Canvas. Canvas is a first-class
+          workspace but reuses literature projects for paper context. */}
       <div className="lit-mode-toggle">
         <button className={sidebarMode === 'modules' ? 'active' : ''} onClick={() => setSidebarMode('modules')}>
           <ModulesIcon size="sm" /> Modules
         </button>
         <button className={sidebarMode === 'literature' ? 'active' : ''} onClick={() => setSidebarMode('literature')}>
           <LiteratureIcon size="sm" /> Library
+        </button>
+        <button className={sidebarMode === 'canvas' ? 'active' : ''} onClick={() => setSidebarMode('canvas')}>
+          <GraphIcon size="sm" /> Canvas
         </button>
       </div>
 
@@ -413,6 +415,13 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
             <div style={{ margin: '0.25rem 0.5rem', borderTop: '1px solid var(--color-border)' }} />
             <ProjectSidebar />
           </div>
+        : sidebarMode === 'canvas'
+          ? <div className="sidebar-literature">
+              <div style={{ padding: '0.5rem 0.5rem 0.25rem', fontSize: '0.65rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)' }}>
+                Canvas Project
+              </div>
+              <ProjectSidebar />
+            </div>
         : <div className="sidebar-modules">
       <div className="sidebar-header">
         <h2>{showTrash ? 'Trash' : 'Modules'}</h2>

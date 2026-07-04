@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { NodeProps } from '@xyflow/react';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { CanvasFlowNode } from './canvas-types';
 
 export default function TextNode({ id, data, selected }: NodeProps<CanvasFlowNode>) {
@@ -40,6 +40,7 @@ export default function TextNode({ id, data, selected }: NodeProps<CanvasFlowNod
 
   return (
     <div className={`canvas-node canvas-node-text ${selected ? 'is-selected' : ''}`}>
+      <Handle type="target" position={Position.Top} />
       <div className="canvas-node-header">
         <span className="canvas-node-type">Text</span>
         <button
@@ -71,6 +72,7 @@ export default function TextNode({ id, data, selected }: NodeProps<CanvasFlowNod
           {value || <span className="canvas-node-placeholder">Double-click to edit</span>}
         </div>
       )}
+      <Handle type="source" position={Position.Bottom} />
     </div>
   );
 }

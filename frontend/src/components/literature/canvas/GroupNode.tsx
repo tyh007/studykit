@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { NodeProps } from '@xyflow/react';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { CanvasFlowNode } from './canvas-types';
 
 export default function GroupNode({ id, data, selected }: NodeProps<CanvasFlowNode>) {
@@ -23,14 +23,12 @@ export default function GroupNode({ id, data, selected }: NodeProps<CanvasFlowNo
 
   const commit = (next: string) => {
     setLabel(next);
-    // Persist via the same onContentChange channel so a backend PATCH happens.
-    // We keep the field under content_json.label to avoid clobbering text fields
-    // used by other node types.
-    data.actions.onContentChange(id, label); // triggers a PATCH; UI-only update suffices
+    data.actions.onContentPatch(id, { label: next });
   };
 
   return (
     <div className={`canvas-node canvas-node-group ${selected ? 'is-selected' : ''}`}>
+      <Handle type="target" position={Position.Top} />
       <div className="canvas-node-header">
         {editing ? (
           <input
@@ -75,6 +73,7 @@ export default function GroupNode({ id, data, selected }: NodeProps<CanvasFlowNo
       <div className="canvas-node-group-body">
         <span className="muted">Visual frame only — does not constrain children.</span>
       </div>
+      <Handle type="source" position={Position.Bottom} />
     </div>
   );
 }

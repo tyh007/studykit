@@ -405,6 +405,7 @@ export interface LiteratureCanvasEdge {
   target_node_id: string;
   relation_id?: string | null;
   edge_type: 'canvas' | 'paper_relation';
+  relation_type?: 'cites' | 'extends' | 'contradicts' | 'supports' | 'related' | 'method' | 'dataset' | null;
   label?: string | null;
   content_json: Record<string, any>;
   style_json: Record<string, any>;

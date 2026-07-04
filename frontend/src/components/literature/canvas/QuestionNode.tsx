@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { NodeProps } from '@xyflow/react';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { CanvasFlowNode } from './canvas-types';
 
 interface QuestionNodeProps extends NodeProps<CanvasFlowNode> {
@@ -45,11 +45,12 @@ export default function QuestionNode({
     setDraft(next);
     // Persist the new prompt but keep the existing answer visible until the
     // user clicks Regenerate.
-    data.actions.onContentChange(id, value);
+    data.actions.onContentPatch(id, { prompt: next, text: value });
   };
 
   return (
     <div className={`canvas-node canvas-node-question ${selected ? 'is-selected' : ''}`}>
+      <Handle type="target" position={Position.Top} />
       <div className="canvas-node-header">
         <span className="canvas-node-type">Question</span>
         <div className="canvas-node-header-actions">
@@ -136,6 +137,7 @@ export default function QuestionNode({
           </div>
         )}
       </div>
+      <Handle type="source" position={Position.Bottom} />
     </div>
   );
 }

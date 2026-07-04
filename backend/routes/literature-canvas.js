@@ -19,6 +19,38 @@ async function verifyProjectOwnership(projectId, workspaceId) {
   return r.rows.length > 0;
 }
 
+async function getCanvasForWorkspace(canvasId, workspaceId) {
+  const r = await db.query(
+    `SELECT id, project_id, workspace_id, title, viewport_json, settings_json, created_at, updated_at
+     FROM literature_canvases
+     WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL`,
+    [canvasId, workspaceId]
+  );
+  return r.rows[0] || null;
+}
+
+async function assertPaperBelongsToCanvas(paperId, canvas, { allowTrash = false } = {}) {
+  const r = await db.query(
+    `SELECT id FROM literature_papers
+     WHERE id = $1 AND workspace_id = $2 AND project_id = $3
+       AND deleted_at IS NULL
+       ${allowTrash ? '' : 'AND in_trash = false'}`,
+    [paperId, canvas.workspace_id, canvas.project_id]
+  );
+  return r.rows.length > 0;
+}
+
+function edgeRowWithRelation(row, relationType) {
+  return {
+    ...row,
+    relation_type: relationType || row.relation_type || null,
+    content_json: {
+      ...(row.content_json || {}),
+      ...(relationType || row.relation_type ? { relation_type: relationType || row.relation_type } : {}),
+    },
+  };
+}
+
 /**
  * GET /api/literature/canvas?projectId=xxx
  * Returns the project's default canvas. Creates one if none exists.
@@ -75,13 +107,8 @@ router.get('/:canvasId/state', async (req, res) => {
     const ws = await getWorkspaceId(req.user.id);
     if (!ws) return res.status(404).json({ error: 'Workspace not found' });
 
-    const c = await db.query(
-      `SELECT id, project_id, workspace_id, title, viewport_json, settings_json, created_at, updated_at
-       FROM literature_canvases
-       WHERE id = $1 AND workspace_id = $2 AND deleted_at IS NULL`,
-      [canvasId, ws]
-    );
-    if (c.rows.length === 0) return res.status(404).json({ error: 'Canvas not found' });
+    const canvas = await getCanvasForWorkspace(canvasId, ws);
+    if (!canvas) return res.status(404).json({ error: 'Canvas not found' });
 
     const nodes = await db.query(
       `SELECT id, canvas_id, node_type, ref_type, ref_id, x, y, width, height, z_index,
@@ -92,11 +119,13 @@ router.get('/:canvasId/state', async (req, res) => {
       [canvasId]
     );
     const edges = await db.query(
-      `SELECT id, canvas_id, source_node_id, target_node_id, relation_id, edge_type,
-              label, content_json, style_json, created_at, updated_at
-       FROM literature_canvas_edges
-       WHERE canvas_id = $1 AND deleted_at IS NULL
-       ORDER BY created_at ASC`,
+      `SELECT e.id, e.canvas_id, e.source_node_id, e.target_node_id, e.relation_id, e.edge_type,
+              e.label, e.content_json, e.style_json, e.created_at, e.updated_at,
+              pr.relation_type
+       FROM literature_canvas_edges e
+       LEFT JOIN paper_relations pr ON pr.id = e.relation_id
+       WHERE e.canvas_id = $1 AND e.deleted_at IS NULL
+       ORDER BY e.created_at ASC`,
       [canvasId]
     );
 
@@ -117,16 +146,19 @@ router.get('/:canvasId/state', async (req, res) => {
                 storage_key, citation_item_id, in_trash, trashed_at,
                 created_at, updated_at
          FROM literature_papers
-         WHERE id = ANY($1::uuid[])`,
-        [paperIds]
+         WHERE id = ANY($1::uuid[])
+           AND workspace_id = $2
+           AND project_id = $3
+           AND deleted_at IS NULL`,
+        [paperIds, ws, canvas.project_id]
       );
       papers = r.rows;
     }
 
     res.json({
-      canvas: c.rows[0],
+      canvas,
       nodes: nodes.rows,
-      edges: edges.rows,
+      edges: edges.rows.map((row) => edgeRowWithRelation(row)),
       papers,
     });
   } catch (err) {
@@ -195,6 +227,19 @@ router.post('/:canvasId/nodes', async (req, res) => {
       return res.status(400).json({ error: 'invalid node_type' });
     }
 
+    const ws = await getWorkspaceId(req.user.id);
+    if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+    const canvas = await getCanvasForWorkspace(canvasId, ws);
+    if (!canvas) return res.status(404).json({ error: 'Canvas not found' });
+    if (ref_id || ref_type) {
+      if (node_type !== 'paper' || ref_type !== 'paper' || !ref_id) {
+        return res.status(400).json({ error: 'Only paper nodes may reference external records' });
+      }
+      if (!(await assertPaperBelongsToCanvas(ref_id, canvas))) {
+        return res.status(400).json({ error: 'Referenced paper is not in this canvas project' });
+      }
+    }
+
     const id = uuidv4();
     const r = await db.query(
       `INSERT INTO literature_canvas_nodes
@@ -231,6 +276,10 @@ router.patch('/:canvasId/nodes/:nodeId', async (req, res) => {
   try {
     const { canvasId, nodeId } = req.params;
     const { x, y, width, height, z_index, content_json, style_json } = req.body;
+    const ws = await getWorkspaceId(req.user.id);
+    if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+    const canvas = await getCanvasForWorkspace(canvasId, ws);
+    if (!canvas) return res.status(404).json({ error: 'Canvas not found' });
     const fields = [];
     const values = [];
     let idx = 1;
@@ -271,6 +320,10 @@ router.delete('/:canvasId/nodes/:nodeId', async (req, res) => {
   const { canvasId, nodeId } = req.params;
   const client = await db.getClient();
   try {
+    const ws = await getWorkspaceId(req.user.id);
+    if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+    const canvas = await getCanvasForWorkspace(canvasId, ws);
+    if (!canvas) return res.status(404).json({ error: 'Canvas not found' });
     await client.query('BEGIN');
     await client.query(
       `UPDATE literature_canvas_edges SET deleted_at = NOW()
@@ -317,6 +370,11 @@ router.post('/:canvasId/edges', async (req, res) => {
       return res.status(400).json({ error: 'invalid edge_type' });
     }
 
+    const ws = await getWorkspaceId(req.user.id);
+    if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+    const canvas = await getCanvasForWorkspace(canvasId, ws);
+    if (!canvas) return res.status(404).json({ error: 'Canvas not found' });
+
     let relationId = null;
 
     if (edge_type === 'paper_relation') {
@@ -337,6 +395,15 @@ router.post('/:canvasId/edges', async (req, res) => {
       const tgt = endpoints.rows.find((r) => r.id === target_node_id);
       if (!src || !tgt || src.node_type !== 'paper' || tgt.node_type !== 'paper' || !src.ref_id || !tgt.ref_id) {
         return res.status(400).json({ error: 'paper_relation edges require two paper nodes' });
+      }
+      const papers = await db.query(
+        `SELECT id FROM literature_papers
+         WHERE id = ANY($1::uuid[]) AND workspace_id = $2 AND project_id = $3
+           AND deleted_at IS NULL AND in_trash = false`,
+        [[src.ref_id, tgt.ref_id], canvas.workspace_id, canvas.project_id]
+      );
+      if (papers.rows.length !== 2) {
+        return res.status(400).json({ error: 'paper_relation edges require papers in this canvas project' });
       }
       // Upsert paper_relations row
       const up = await db.query(
@@ -365,11 +432,14 @@ router.post('/:canvasId/edges', async (req, res) => {
         relationId,
         edge_type,
         label || null,
-        JSON.stringify(content_json || {}),
+        JSON.stringify({
+          ...(content_json || {}),
+          ...(edge_type === 'paper_relation' ? { relation_type } : {}),
+        }),
         JSON.stringify(style_json || {}),
       ]
     );
-    res.status(201).json(r.rows[0]);
+    res.status(201).json(edgeRowWithRelation(r.rows[0], edge_type === 'paper_relation' ? relation_type : null));
   } catch (err) {
     console.error('Create edge error:', err);
     res.status(500).json({ error: 'Failed to create edge' });
@@ -383,6 +453,10 @@ router.patch('/:canvasId/edges/:edgeId', async (req, res) => {
   try {
     const { canvasId, edgeId } = req.params;
     const { label, content_json, style_json } = req.body;
+    const ws = await getWorkspaceId(req.user.id);
+    if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+    const canvas = await getCanvasForWorkspace(canvasId, ws);
+    if (!canvas) return res.status(404).json({ error: 'Canvas not found' });
     const fields = [];
     const values = [];
     let idx = 1;
@@ -423,6 +497,10 @@ router.patch('/:canvasId/edges/:edgeId', async (req, res) => {
 router.delete('/:canvasId/edges/:edgeId', async (req, res) => {
   try {
     const { canvasId, edgeId } = req.params;
+    const ws = await getWorkspaceId(req.user.id);
+    if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+    const canvas = await getCanvasForWorkspace(canvasId, ws);
+    if (!canvas) return res.status(404).json({ error: 'Canvas not found' });
     const r = await db.query(
       `UPDATE literature_canvas_edges SET deleted_at = NOW(), updated_at = NOW()
        WHERE canvas_id = $1 AND id = $2 AND deleted_at IS NULL
@@ -449,17 +527,36 @@ router.post('/:canvasId/import-papers', async (req, res) => {
     if (!Array.isArray(paperIds) || paperIds.length === 0) {
       return res.status(400).json({ error: 'paperIds array is required' });
     }
+    const uniquePaperIds = [...new Set(paperIds.map((id) => String(id)))];
+    if (uniquePaperIds.length > 100) {
+      return res.status(400).json({ error: 'Cannot import more than 100 papers at once' });
+    }
+
+    const ws = await getWorkspaceId(req.user.id);
+    if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+    const canvas = await getCanvasForWorkspace(canvasId, ws);
+    if (!canvas) return res.status(404).json({ error: 'Canvas not found' });
+
+    const validPapers = await db.query(
+      `SELECT id FROM literature_papers
+       WHERE id = ANY($1::uuid[]) AND workspace_id = $2 AND project_id = $3
+         AND deleted_at IS NULL AND in_trash = false`,
+      [uniquePaperIds, canvas.workspace_id, canvas.project_id]
+    );
+    if (validPapers.rows.length !== uniquePaperIds.length) {
+      return res.status(400).json({ error: 'One or more papers do not belong to this canvas project' });
+    }
 
     // Skip papers already on the canvas
     const existing = await db.query(
       `SELECT ref_id FROM literature_canvas_nodes
        WHERE canvas_id = $1 AND ref_type = 'paper' AND ref_id = ANY($2::uuid[]) AND deleted_at IS NULL`,
-      [canvasId, paperIds]
+      [canvasId, uniquePaperIds]
     );
     const existingSet = new Set(existing.rows.map((r) => r.ref_id));
-    const toCreate = paperIds.filter((id) => !existingSet.has(id));
+    const toCreate = uniquePaperIds.filter((id) => !existingSet.has(id));
     if (toCreate.length === 0) {
-      return res.json({ created: [], skipped: paperIds });
+      return res.json({ created: [], skipped: uniquePaperIds });
     }
 
     const baseX = origin?.x ?? 0;

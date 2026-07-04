@@ -89,9 +89,9 @@ describe('useDragResize', () => {
         target: document.createElement('div'),
       } as unknown as React.PointerEvent)
     })
-    // Drag up by 30 (smaller clientY) → height = 250 + (100 - 70) = 280
+    // In standard mode, dragging down grows a top-anchored row/height.
     act(() => {
-      document.dispatchEvent(new PointerEvent('pointermove', { clientX: 0, clientY: 70 }))
+      document.dispatchEvent(new PointerEvent('pointermove', { clientX: 0, clientY: 130 }))
     })
     expect(onChange).toHaveBeenLastCalledWith(280)
     act(() => {

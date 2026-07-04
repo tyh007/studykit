@@ -1,5 +1,20 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
+const mocks = vi.hoisted(() => ({
+  extractWithFallback: vi.fn(async (text: string) => ({
+    extractedData: {
+      background: `bg:${text.slice(0, 4)}`,
+      theory: 'T',
+      methodology: 'M',
+      measures: 'Ms',
+      results: 'R',
+      implications: 'I',
+      limitations: 'L',
+    },
+    method: 'mock',
+  })),
+}))
+
 // Mock the API + downstream AI helpers before importing the SUT.
 vi.mock('../literature-api', () => ({
   literaturePapersApi: {
@@ -9,18 +24,7 @@ vi.mock('../literature-api', () => ({
 
 vi.mock('./ai-extraction', () => ({
   createAIExtractionService: () => ({
-    extractWithFallback: vi.fn(async (text: string) => ({
-      extractedData: {
-        background: `bg:${text.slice(0, 4)}`,
-        theory: 'T',
-        methodology: 'M',
-        measures: 'Ms',
-        results: 'R',
-        implications: 'I',
-        limitations: 'L',
-      },
-      method: 'mock',
-    })),
+    extractWithFallback: mocks.extractWithFallback,
   }),
 }))
 
@@ -54,6 +58,19 @@ const makePaper = (overrides: Partial<LiteraturePaper> = {}): LiteraturePaper =>
 
 describe('extractPapersBatch', () => {
   beforeEach(() => {
+    mocks.extractWithFallback.mockReset()
+    mocks.extractWithFallback.mockImplementation(async (text: string) => ({
+      extractedData: {
+        background: `bg:${text.slice(0, 4)}`,
+        theory: 'T',
+        methodology: 'M',
+        measures: 'Ms',
+        results: 'R',
+        implications: 'I',
+        limitations: 'L',
+      },
+      method: 'mock',
+    }))
     vi.mocked(literaturePapersApi.update).mockClear()
     vi.mocked(literaturePapersApi.update).mockResolvedValue({ success: true } as any)
   })
@@ -76,10 +93,9 @@ describe('extractPapersBatch', () => {
 
   it('marks a paper as error and PATCHes error_message when extraction throws', async () => {
     const papers = [makePaper({ id: 'a' }), makePaper({ id: 'b' })]
-    const { createAIExtractionService } = await import('./ai-extraction')
     // First paper succeeds, second throws.
     let i = 0
-    vi.mocked(createAIExtractionService().extractWithFallback).mockImplementation(async () => {
+    mocks.extractWithFallback.mockImplementation(async () => {
       i++
       if (i === 2) throw new Error('LLM offline')
       return {
@@ -107,8 +123,7 @@ describe('extractPapersBatch', () => {
     const onProgress = vi.fn()
     // Abort before the second paper finishes its await.
     let calls = 0
-    const { createAIExtractionService } = await import('./ai-extraction')
-    vi.mocked(createAIExtractionService().extractWithFallback).mockImplementation(async () => {
+    mocks.extractWithFallback.mockImplementation(async () => {
       calls++
       if (calls === 2) controller.abort()
       return {

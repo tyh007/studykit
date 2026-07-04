@@ -42,6 +42,19 @@ export function useLiteratureCanvas(projectId: string) {
     nodesRef.current = nodes;
   }, [nodes]);
 
+  useEffect(() => {
+    setNodes((curr) =>
+      curr.map((node) => {
+        const paperId = node.data.canvasNode.ref_type === 'paper' ? node.data.canvasNode.ref_id : null;
+        if (!paperId) return node;
+        const nextPaper = papersById[paperId] ?? null;
+        return node.data.paper === nextPaper
+          ? node
+          : { ...node, data: { ...node.data, paper: nextPaper } };
+      })
+    );
+  }, [papersById, setNodes]);
+
   // ---- Load canvas + state on projectId change ----
   useEffect(() => {
     let cancelled = false;
@@ -75,6 +88,7 @@ export function useLiteratureCanvas(projectId: string) {
         // Build fresh action closures that read the latest nodesRef / canvasId
         const buildNodeActions = () => ({
           onContentChange: (nodeId: string, text: string) => handleContentChange(nodeId, text),
+          onContentPatch: (nodeId: string, patch: Record<string, any>) => handleContentPatch(nodeId, patch),
           onDelete: (nodeId: string) => handleDeleteNode(nodeId),
           onOpenPaper: (paper: LiteraturePaper) => setOpenPaper(paper),
         });
@@ -151,29 +165,83 @@ export function useLiteratureCanvas(projectId: string) {
             .updateNode(canvasId, ch.id, { x: ch.position.x, y: ch.position.y })
             .then(() => setLastSavedAt(Date.now()))
             .catch((err) => console.warn('Node move save failed:', err));
+        } else if (ch.type === 'remove') {
+          setEdges((curr) => curr.filter((edge) => edge.source !== ch.id && edge.target !== ch.id));
+          literatureCanvasApi
+            .deleteNode(canvasId, ch.id)
+            .then(() => setLastSavedAt(Date.now()))
+            .catch((err) => console.warn('Node delete save failed:', err));
         }
       }
     },
-    [canvasId, onNodesChange]
+    [canvasId, onNodesChange, setEdges]
+  );
+
+  const handleEdgesChange = useCallback(
+    (changes: EdgeChange<CanvasFlowEdge>[]) => {
+      onEdgesChange(changes);
+      if (!canvasId) return;
+      for (const ch of changes) {
+        if (ch.type === 'remove') {
+          literatureCanvasApi
+            .deleteEdge(canvasId, ch.id)
+            .then(() => setLastSavedAt(Date.now()))
+            .catch((err) => console.warn('Edge delete save failed:', err));
+        }
+      }
+    },
+    [canvasId, onEdgesChange]
   );
 
   // ---- Content persistence (debounced 600 ms) ----
-  const handleContentChange = useCallback(
-    (nodeId: string, text: string) => {
+  const handleContentPatch = useCallback(
+    (nodeId: string, patch: Record<string, any>) => {
       if (!canvasId) return;
+      setNodes((curr) =>
+        curr.map((node) => {
+          if (node.id !== nodeId) return node;
+          const prev = (node.data.canvasNode.content_json as Record<string, any>) || {};
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              canvasNode: {
+                ...node.data.canvasNode,
+                content_json: { ...prev, ...patch },
+              },
+            },
+          };
+        })
+      );
       if (contentBuffers.current[nodeId]) clearTimeout(contentBuffers.current[nodeId]);
       contentBuffers.current[nodeId] = setTimeout(() => {
         const node = nodesRef.current.find((n) => n.id === nodeId);
-        const prev = (node?.data.canvasNode.content_json as Record<string, any>) || {};
+        const nextContent = (node?.data.canvasNode.content_json as Record<string, any>) || {};
         literatureCanvasApi
-          .updateNode(canvasId, nodeId, { content_json: { ...prev, text } })
-          .then(() => setLastSavedAt(Date.now()))
+          .updateNode(canvasId, nodeId, { content_json: nextContent })
+          .then((updated) => {
+            setNodes((curr) =>
+              curr.map((item) =>
+                item.id === nodeId
+                  ? { ...item, data: { ...item.data, canvasNode: updated } }
+                  : item
+              )
+            );
+            setLastSavedAt(Date.now());
+          })
           .catch((err) => console.warn('Content save failed:', err))
           .finally(() => setSaving(false));
       }, CONTENT_DEBOUNCE_MS);
       setSaving(true);
     },
-    [canvasId]
+    [canvasId, setNodes]
+  );
+
+  const handleContentChange = useCallback(
+    (nodeId: string, text: string) => {
+      handleContentPatch(nodeId, { text });
+    },
+    [handleContentPatch]
   );
 
   // ---- Add node ----
@@ -200,6 +268,7 @@ export function useLiteratureCanvas(projectId: string) {
             paper: null,
             actions: {
               onContentChange: (nodeId, text) => handleContentChange(nodeId, text),
+              onContentPatch: (nodeId, patch) => handleContentPatch(nodeId, patch),
               onDelete: (nodeId) => handleDeleteNode(nodeId),
               onOpenPaper: (paper) => setOpenPaper(paper),
             },
@@ -238,7 +307,8 @@ export function useLiteratureCanvas(projectId: string) {
           canvasNode: created,
           paper: null,
           actions: {
-            onContentChange: (nodeId) => handleDeleteNode(nodeId), // group has no text; delegate no-op
+            onContentChange: (nodeId, text) => handleContentChange(nodeId, text),
+            onContentPatch: (nodeId, patch) => handleContentPatch(nodeId, patch),
             onDelete: (nodeId) => handleDeleteNode(nodeId),
             onOpenPaper: (paper) => setOpenPaper(paper),
           },
@@ -274,6 +344,7 @@ export function useLiteratureCanvas(projectId: string) {
                 paper: n.ref_type === 'paper' && n.ref_id ? papersById[n.ref_id] ?? null : null,
                 actions: {
                   onContentChange: (nodeId, text) => handleContentChange(nodeId, text),
+                  onContentPatch: (nodeId, patch) => handleContentPatch(nodeId, patch),
                   onDelete: (nodeId) => handleDeleteNode(nodeId),
                   onOpenPaper: (paper) => setOpenPaper(paper),
                 },
@@ -472,6 +543,7 @@ export function useLiteratureCanvas(projectId: string) {
             paper: null,
             actions: {
               onContentChange: (nodeId, t) => handleContentChange(nodeId, t),
+              onContentPatch: (nodeId, patch) => handleContentPatch(nodeId, patch),
               onDelete: (nodeId) => handleDeleteNode(nodeId),
               onOpenPaper: (p) => setOpenPaper(p),
             },
@@ -483,7 +555,7 @@ export function useLiteratureCanvas(projectId: string) {
         console.warn('createSummaryNote failed', err);
       }
     },
-    [canvasId, papersById, handleContentChange, handleDeleteNode]
+    [canvasId, papersById, handleContentChange, handleContentPatch, handleDeleteNode]
   );
 
   // ---- Create a question/AI node from a prompt + answer, placed at position ----
@@ -520,6 +592,7 @@ export function useLiteratureCanvas(projectId: string) {
             paper: null,
             actions: {
               onContentChange: (nodeId, t) => handleContentChange(nodeId, t),
+              onContentPatch: (nodeId, patch) => handleContentPatch(nodeId, patch),
               onDelete: (nodeId) => handleDeleteNode(nodeId),
               onOpenPaper: (p) => setOpenPaper(p),
             },
@@ -531,7 +604,7 @@ export function useLiteratureCanvas(projectId: string) {
         console.warn('Insert AI answer failed', err);
       }
     },
-    [canvasId, handleContentChange, handleDeleteNode]
+    [canvasId, handleContentChange, handleContentPatch, handleDeleteNode]
   );
 
   return {
@@ -542,7 +615,7 @@ export function useLiteratureCanvas(projectId: string) {
     nodes,
     edges,
     onNodesChange: handleNodesChange,
-    onEdgesChange: onEdgesChange as (changes: EdgeChange[]) => void,
+    onEdgesChange: handleEdgesChange as (changes: EdgeChange[]) => void,
     onViewportChange,
     handleAddNode,
     handleAddGroup,

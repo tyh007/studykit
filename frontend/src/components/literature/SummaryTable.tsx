@@ -57,7 +57,7 @@ function formatAuthorsAPA(authors?: string): string {
 }
 
 export default function SummaryTable({ projectId }: { projectId: string }) {
-  const { litPapers, setLitPapers, litCustomFields, readingLists, selectLitPaper, setActiveLiteratureTab } = useStore();
+  const { litPapers, setLitPapers, litCustomFields, readingLists, selectLitPaper, setSidebarMode } = useStore();
   const { uploadFiles, isUploading } = useLiteratureFileUpload();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sendingToCanvas, setSendingToCanvas] = useState(false);
@@ -183,7 +183,7 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
         return;
       }
       await literatureCanvasApi.importPapers(canvas.id, Array.from(selectedIds));
-      setActiveLiteratureTab('canvas');
+      setSidebarMode('canvas');
     } catch (err) {
       console.warn('Send to canvas failed:', err);
     } finally {
