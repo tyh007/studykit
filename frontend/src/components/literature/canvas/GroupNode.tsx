@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { CloseIcon } from '../../ui/Icons';
 import type { CanvasFlowNode } from './canvas-types';
 
 export default function GroupNode({ id, data, selected }: NodeProps<CanvasFlowNode>) {
@@ -59,7 +60,7 @@ export default function GroupNode({ id, data, selected }: NodeProps<CanvasFlowNo
           </span>
         )}
         <button
-          className="canvas-node-delete"
+          className="canvas-node-icon-btn canvas-node-delete"
           onClick={(e) => {
             e.stopPropagation();
             data.actions.onDelete(id);
@@ -67,7 +68,7 @@ export default function GroupNode({ id, data, selected }: NodeProps<CanvasFlowNo
           title="Delete"
           aria-label="Delete"
         >
-          ×
+          <CloseIcon size="sm" />
         </button>
       </div>
       <div className="canvas-node-group-body">

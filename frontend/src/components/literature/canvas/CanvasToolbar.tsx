@@ -1,4 +1,5 @@
 import React from 'react';
+import { AddIcon, CornellIcon, MindMapIcon, SyncIcon } from '../../ui/Icons';
 
 interface Props {
   onAddText: () => void;
@@ -22,32 +23,36 @@ export default function CanvasToolbar({
         onClick={onAddText}
         disabled={disabled}
         title="Add text card"
+        aria-label="Add text card"
       >
-        + Text
+        <AddIcon size="sm" /> Text
       </button>
       <button
         className="canvas-toolbar-btn"
         onClick={onAddNote}
         disabled={disabled}
         title="Add note card"
+        aria-label="Add note card"
       >
-        + Note
+        <CornellIcon size="sm" /> Note
       </button>
       <button
         className="canvas-toolbar-btn"
         onClick={onAddGroup}
         disabled={disabled}
         title="Add group frame"
+        aria-label="Add group frame"
       >
-        + Group
+        <MindMapIcon size="sm" /> Group
       </button>
       <button
         className="canvas-toolbar-btn"
         onClick={onFitView}
         disabled={disabled}
         title="Fit to content"
+        aria-label="Fit to content"
       >
-        Fit
+        <SyncIcon size="sm" /> Fit
       </button>
     </div>
   );

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { CloseIcon } from '../../ui/Icons';
 import type { CanvasFlowNode } from './canvas-types';
 
 export default function NoteNode({ id, data, selected }: NodeProps<CanvasFlowNode>) {
@@ -43,7 +44,7 @@ export default function NoteNode({ id, data, selected }: NodeProps<CanvasFlowNod
       <div className="canvas-node-header">
         <span className="canvas-node-type">Note</span>
         <button
-          className="canvas-node-delete"
+          className="canvas-node-icon-btn canvas-node-delete"
           onClick={(e) => {
             e.stopPropagation();
             data.actions.onDelete(id);
@@ -51,7 +52,7 @@ export default function NoteNode({ id, data, selected }: NodeProps<CanvasFlowNod
           title="Delete"
           aria-label="Delete node"
         >
-          ×
+          <CloseIcon size="sm" />
         </button>
       </div>
       {editing ? (

@@ -2,6 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import ReactMarkdown from 'react-markdown';
 import { parseAIContent } from '../../../lib/literature/ai-response';
+import {
+  BrainIcon,
+  CloseIcon,
+  ExportIcon,
+  SyncIcon,
+} from '../../ui/Icons';
 import type { CanvasFlowNode } from './canvas-types';
 
 interface QuestionNodeProps extends NodeProps<CanvasFlowNode> {
@@ -70,7 +76,7 @@ export default function QuestionNode({
               title="Regenerate answer"
               aria-label="Regenerate"
             >
-              ↻
+              <SyncIcon size="sm" />
             </button>
           )}
           {onInsertAsNote && (
@@ -83,11 +89,11 @@ export default function QuestionNode({
               title="Insert answer as a note"
               aria-label="Insert as note"
             >
-              ⤴
+              <ExportIcon size="sm" />
             </button>
           )}
           <button
-            className="canvas-node-delete"
+            className="canvas-node-icon-btn canvas-node-delete"
             onClick={(e) => {
               e.stopPropagation();
               data.actions.onDelete(id);
@@ -95,7 +101,7 @@ export default function QuestionNode({
             title="Delete"
             aria-label="Delete"
           >
-            ×
+            <CloseIcon size="sm" />
           </button>
         </div>
       </div>
@@ -138,7 +144,10 @@ export default function QuestionNode({
             <>
               {parsedAnswer.thinking && (
                 <details className="canvas-node-thinking">
-                  <summary>💭 Thinking</summary>
+                  <summary>
+                    <BrainIcon size="sm" />
+                    <span>Thinking</span>
+                  </summary>
                   <div className="canvas-node-thinking-body">
                     {parsedAnswer.thinking}
                   </div>

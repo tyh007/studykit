@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import type { LiteraturePaper, PaperNote, ExtractedData } from '../../../types';
 import { paperNotesApi } from '../../../lib/literature-api';
 import LiteraturePDFViewer from '../LiteraturePDFViewer';
+import { CloseIcon, TrashIcon } from '../../ui/Icons';
 
 const DRAWER_WIDTH_KEY = 'studykit-canvas-drawer-width';
 const MIN_WIDTH = 320;
@@ -158,7 +159,7 @@ export default function PaperPreviewDrawer({ paper, onClose, onAddAnswerToCanvas
           aria-label="Close drawer"
           title="Close"
         >
-          ×
+          <CloseIcon size="sm" />
         </button>
       </div>
       <div className="paper-preview-drawer-tabs" role="tablist">
@@ -255,7 +256,7 @@ export default function PaperPreviewDrawer({ paper, onClose, onAddAnswerToCanvas
                       title="Delete"
                       aria-label="Delete note"
                     >
-                      ×
+                      <TrashIcon size="sm" />
                     </button>
                   </li>
                 ))}

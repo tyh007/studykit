@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { CloseIcon } from '../../ui/Icons';
 
 interface Props {
   open: boolean;
@@ -82,7 +83,7 @@ export default function CanvasAIAssistant({
           onClick={onClose}
           aria-label="Close AI assistant"
         >
-          ×
+          <CloseIcon size="sm" />
         </button>
       </div>
       <div className="canvas-ai-assistant-body">

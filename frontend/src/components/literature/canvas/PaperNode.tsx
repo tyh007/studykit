@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { LiteraturePaper } from '../../../types';
+import { CloseIcon, MoreIcon } from '../../ui/Icons';
 import type { CanvasFlowNode } from './canvas-types';
 
 interface PaperNodeProps extends NodeProps<CanvasFlowNode> {
@@ -103,15 +104,15 @@ export default function PaperNode({
             aria-label="Paper actions"
             title="Actions"
           >
-            ⋯
+            <MoreIcon size="sm" />
           </button>
           <button
-            className="canvas-node-delete"
+            className="canvas-node-icon-btn canvas-node-delete"
             onClick={handleDelete}
             title="Remove from canvas (does not delete paper)"
             aria-label="Remove from canvas"
           >
-            ×
+            <CloseIcon size="sm" />
           </button>
         </div>
       </div>

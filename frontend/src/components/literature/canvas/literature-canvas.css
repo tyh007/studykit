@@ -1,7 +1,13 @@
 /* Literature Canvas — scoped styles for the React Flow host.
    Co-located with components and prefixed with .literature-canvas
-   to avoid colliding with other parts of the app. */
+   to avoid colliding with other parts of the app.
 
+   Color choices lean on the app-wide CSS tokens so nodes stay legible in
+   both light and dark modes without hardcoded hex values. */
+
+/* ============================================================
+   Canvas host
+   ============================================================ */
 .literature-canvas {
   position: relative;
   width: 100%;
@@ -15,29 +21,38 @@
   inset: 0;
 }
 
-/* Toolbar */
+/* ============================================================
+   Toolbar (top-left)
+   ============================================================ */
 .canvas-toolbar {
   position: absolute;
-  top: 0.5rem;
-  left: 0.5rem;
+  top: 0.75rem;
+  left: 0.75rem;
   display: flex;
   gap: 0.25rem;
-  background: var(--color-bg-secondary, #f9fafb);
+  background: var(--glass-liquid-floating, var(--color-bg-secondary, #f9fafb));
   border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: var(--radius-sm, 4px);
-  padding: 0.25rem;
+  border-radius: var(--radius-md, 10px);
+  padding: 0.3rem;
   z-index: 10;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 .canvas-toolbar-btn {
   background: transparent;
   border: 1px solid transparent;
   color: var(--color-text, #111827);
   font-size: 0.78rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: var(--radius-sm, 4px);
+  padding: 0.3rem 0.55rem;
+  border-radius: var(--radius-sm, 6px);
   cursor: pointer;
   font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  line-height: 1;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 .canvas-toolbar-btn:hover:not(:disabled) {
   background: var(--color-bg, #fff);
@@ -48,26 +63,124 @@
   cursor: not-allowed;
 }
 
-/* Status bar */
+/* ============================================================
+   Status bar (bottom-center, between AI toggle and minimap)
+   ============================================================ */
 .canvas-status {
   position: absolute;
-  right: 0.5rem;
-  bottom: 0.5rem;
+  left: 50%;
+  bottom: 0.75rem;
+  transform: translateX(-50%);
   display: flex;
   gap: 0.5rem;
   align-items: center;
-  background: var(--color-bg-secondary, #f9fafb);
+  background: var(--glass-liquid-floating, var(--color-bg-secondary, #f9fafb));
   border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: var(--radius-sm, 4px);
-  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-md, 10px);
+  padding: 0.3rem 0.6rem;
   font-size: 0.7rem;
   color: var(--color-text-secondary, #6b7280);
   z-index: 10;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
-/* Node base */
+/* ============================================================
+   Zoom controls (top-right, Liquid Glass pill)
+   ============================================================ */
+.canvas-zoom-controls {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.3rem;
+  background: var(--glass-liquid-floating, var(--color-bg-secondary, #f9fafb));
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: var(--radius-md, 10px);
+  z-index: 10;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.canvas-zoom-btn {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--color-text-secondary, #6b7280);
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.canvas-zoom-btn:hover:not(:disabled) {
+  background: var(--color-bg, #fff);
+  color: var(--color-text, #111827);
+  border-color: var(--color-border-light, #f3f4f6);
+}
+.canvas-zoom-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ============================================================
+   React Flow overrides
+   ============================================================ */
+.react-flow {
+  background: transparent;
+}
+.react-flow__background {
+  opacity: 0.55;
+}
+/* Hide the default attribution — provided by xyflow, looks noisy in dark mode */
+.react-flow__attribution {
+  display: none !important;
+}
+/* Edge / connection styling tuned for dark mode */
+.react-flow__edge-path {
+  stroke: var(--color-text-muted, #9ca3af);
+}
+.react-flow__handle {
+  background: var(--color-primary, #3b82f6);
+  border: 2px solid var(--color-bg, #fff);
+  width: 8px;
+  height: 8px;
+}
+.react-flow__connection-path {
+  stroke: var(--color-primary, #3b82f6);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+/* MiniMap: themed to match the Liquid Glass language */
+.react-flow__minimap {
+  bottom: 0.75rem !important;
+  right: 0.75rem !important;
+  top: auto !important;
+  width: 180px !important;
+  height: 120px !important;
+  border-radius: var(--radius-md, 12px) !important;
+  overflow: hidden;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
+}
+.react-flow__minimap-mask {
+  fill: rgba(28, 18, 22, 0.10);
+}
+.react-flow__minimap-node {
+  fill-opacity: 0.85;
+}
+
+/* ============================================================
+   Node base — theme-aware surface
+   ============================================================ */
 .canvas-node {
-  background: #fff;
+  background: var(--glass-liquid-floating, var(--color-bg, #fff));
   border: 1px solid var(--color-border, #e5e7eb);
   border-radius: var(--radius-sm, 6px);
   width: 100%;
@@ -76,13 +189,15 @@
   flex-direction: column;
   font-size: 0.8rem;
   color: var(--color-text, #111827);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10);
   overflow: hidden;
   box-sizing: border-box;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 .canvas-node.is-selected {
   border-color: var(--color-primary, #3b82f6);
-  box-shadow: 0 0 0 2px var(--color-primary, #3b82f6);
+  box-shadow: 0 0 0 2px var(--color-primary, #3b82f6), 0 2px 12px rgba(0, 0, 0, 0.10);
 }
 .canvas-node-header {
   display: flex;
@@ -92,21 +207,32 @@
   font-size: 0.7rem;
   color: var(--color-text-muted, #9ca3af);
   border-bottom: 1px solid var(--color-border-light, #f3f4f6);
-  background: var(--color-bg-secondary, #f9fafb);
+  background: var(--glass-white-light, var(--color-bg-secondary, rgba(249, 250, 251, 0.6)));
 }
 .canvas-node-type {
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
-.canvas-node-delete {
+.canvas-node-delete,
+.canvas-node-icon-btn {
   background: transparent;
   border: none;
   cursor: pointer;
   color: var(--color-text-muted, #9ca3af);
   font-size: 1rem;
   line-height: 1;
-  padding: 0;
+  padding: 0.25rem;
+  border-radius: var(--radius-sm, 4px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.canvas-node-delete:hover,
+.canvas-node-icon-btn:hover {
+  background: var(--color-bg-secondary, rgba(0, 0, 0, 0.04));
+  color: var(--color-text, #111827);
 }
 .canvas-node-delete:hover {
   color: var(--color-danger, #ef4444);
@@ -118,6 +244,7 @@
   white-space: pre-wrap;
   overflow: auto;
   word-break: break-word;
+  color: var(--color-text, #111827);
 }
 .canvas-node-textarea {
   flex: 1;
@@ -136,47 +263,40 @@
   font-style: italic;
 }
 
-/* Variants per plan styling direction */
+/* Per-type tinting — uses accent colors but blends with the surface so the
+   text remains legible in dark mode. */
 .canvas-node-note {
-  background: #fefce8; /* soft yellow */
+  background: color-mix(in srgb, var(--accent-butter, #fef3c7) 22%, var(--color-bg, #fff));
 }
 .canvas-node-question {
-  background: #eff6ff; /* soft blue */
+  background: color-mix(in srgb, var(--accent-lilac, #DCC8DC) 24%, var(--color-bg, #fff));
 }
 .canvas-node-paper {
-  background: #ffffff; /* neutral surface */
+  background: var(--color-bg, #fff);
 }
 
-/* Paper node specifics */
+/* ============================================================
+   Paper node specifics
+   ============================================================ */
 .canvas-node-header-actions {
   display: flex;
-  gap: 0.25rem;
+  gap: 0.1rem;
   align-items: center;
-}
-.canvas-node-icon-btn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: var(--color-text-muted, #9ca3af);
-  font-size: 1rem;
-  line-height: 1;
-  padding: 0 0.25rem;
-}
-.canvas-node-icon-btn:hover {
-  color: var(--color-text, #111827);
 }
 .canvas-node-menu {
   position: absolute;
   top: 1.75rem;
   right: 0.5rem;
-  background: #fff;
+  background: var(--glass-liquid-elevated, var(--color-bg-elevated, var(--color-bg, #fff)));
   border: 1px solid var(--color-border, #e5e7eb);
   border-radius: var(--radius-sm, 4px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
   display: flex;
   flex-direction: column;
   z-index: 20;
   min-width: 160px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 .canvas-node-menu-item {
   background: transparent;
@@ -188,17 +308,19 @@
   color: var(--color-text, #111827);
 }
 .canvas-node-menu-item:hover {
-  background: var(--color-bg-secondary, #f9fafb);
+  background: var(--color-bg-secondary, rgba(0, 0, 0, 0.04));
 }
 .canvas-node-paper-body {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  color: var(--color-text, #111827);
 }
 .canvas-node-paper-title {
   font-weight: 600;
   font-size: 0.85rem;
   line-height: 1.25;
+  color: var(--color-text, #111827);
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -216,47 +338,52 @@
   font-size: 0.65rem;
 }
 .canvas-node-paper-stars {
-  color: #f59e0b;
+  color: var(--accent-butter, #f59e0b);
   font-size: 0.85rem;
   letter-spacing: 0.05em;
 }
 .canvas-node-paper-warning {
   font-size: 0.7rem;
-  color: #b91c1c;
+  color: var(--color-danger, #b91c1c);
   font-style: italic;
 }
+
+/* Pills — translucent so they read in both light & dark */
 .canvas-pill {
   display: inline-block;
-  padding: 0.1rem 0.4rem;
+  padding: 0.1rem 0.45rem;
   border-radius: 999px;
-  font-size: 0.65rem;
+  font-size: 0.62rem;
   font-weight: 500;
-  background: var(--color-bg-secondary, #f3f4f6);
+  background: var(--glass-white-light, rgba(0, 0, 0, 0.06));
   color: var(--color-text-secondary, #4b5563);
   white-space: nowrap;
+  border: 1px solid var(--color-border-light, transparent);
 }
 .canvas-pill-summary.canvas-pill-none {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--glass-white-light, rgba(0, 0, 0, 0.06));
+  color: var(--color-text-muted, #6b7280);
 }
 .canvas-pill-summary.canvas-pill-pending {
-  background: #fef3c7;
-  color: #92400e;
+  background: color-mix(in srgb, var(--accent-butter, #f59e0b) 22%, transparent);
+  color: var(--accent-butter, #92400e);
 }
 .canvas-pill-summary.canvas-pill-success {
-  background: #d1fae5;
-  color: #065f46;
+  background: color-mix(in srgb, var(--accent-emerald, #10b981) 22%, transparent);
+  color: var(--accent-emerald, #065f46);
 }
 .canvas-pill-summary.canvas-pill-error {
-  background: #fee2e2;
-  color: #991b1b;
+  background: color-mix(in srgb, var(--color-danger, #ef4444) 22%, transparent);
+  color: var(--color-danger, #991b1b);
 }
 .canvas-pill-reading {
-  background: #dbeafe;
-  color: #1e40af;
+  background: color-mix(in srgb, var(--color-primary, #3b82f6) 18%, transparent);
+  color: var(--color-primary, #1e40af);
 }
 
-/* Paper Preview Drawer */
+/* ============================================================
+   Paper Preview Drawer
+   ============================================================ */
 .paper-preview-drawer {
   position: absolute;
   top: 0;
@@ -269,6 +396,7 @@
   flex-direction: column;
   z-index: 30;
   min-width: 320px;
+  color: var(--color-text, #111827);
 }
 .paper-preview-drawer-resize {
   position: absolute;
@@ -303,13 +431,17 @@
   background: transparent;
   border: none;
   cursor: pointer;
-  font-size: 1.25rem;
-  line-height: 1;
   color: var(--color-text-muted, #6b7280);
-  padding: 0 0.25rem;
+  padding: 0.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm, 4px);
+  transition: background 0.15s ease, color 0.15s ease;
 }
 .paper-preview-drawer-close:hover {
   color: var(--color-text, #111827);
+  background: var(--color-bg, #fff);
 }
 .paper-preview-drawer-tabs {
   display: flex;
@@ -372,15 +504,18 @@
   font-size: 0.85rem;
   resize: vertical;
   box-sizing: border-box;
+  background: var(--color-bg, #fff);
+  color: var(--color-text, #111827);
 }
 .paper-preview-drawer-ask-answer {
-  background: var(--color-bg-secondary, #f9fafb);
+  background: var(--color-bg-secondary, rgba(0, 0, 0, 0.04));
   border: 1px solid var(--color-border-light, #f3f4f6);
   border-radius: var(--radius-sm, 4px);
   padding: 0.6rem;
   font-size: 0.85rem;
   white-space: pre-wrap;
   line-height: 1.45;
+  color: var(--color-text, #111827);
 }
 .paper-preview-drawer-note-list {
   list-style: none;
@@ -395,12 +530,13 @@
   justify-content: space-between;
   align-items: flex-start;
   gap: 0.5rem;
-  background: var(--color-bg-secondary, #f9fafb);
+  background: var(--color-bg-secondary, rgba(0, 0, 0, 0.04));
   border: 1px solid var(--color-border-light, #f3f4f6);
   border-radius: var(--radius-sm, 4px);
   padding: 0.5rem;
   font-size: 0.85rem;
   white-space: pre-wrap;
+  color: var(--color-text, #111827);
 }
 .paper-preview-drawer-note-body {
   flex: 1;
@@ -411,11 +547,15 @@
   border: none;
   cursor: pointer;
   color: var(--color-text-muted, #9ca3af);
-  font-size: 1rem;
-  line-height: 1;
+  padding: 0.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm, 4px);
 }
 .paper-preview-drawer-note-delete:hover {
   color: var(--color-danger, #ef4444);
+  background: var(--color-bg, #fff);
 }
 .muted {
   color: var(--color-text-muted, #6b7280);
@@ -423,7 +563,9 @@
   margin: 0.5rem 0;
 }
 
-/* Drop overlay */
+/* ============================================================
+   Drop overlay + upload status
+   ============================================================ */
 .literature-canvas.is-dragging-files .literature-canvas-flow {
   outline: 2px dashed var(--color-primary, #3b82f6);
   outline-offset: -8px;
@@ -434,14 +576,14 @@
   left: 50%;
   transform: translate(-50%, -50%);
   background: var(--color-primary, #3b82f6);
-  color: #fff;
+  color: var(--color-primary-on, #fff);
   padding: 0.75rem 1.25rem;
   border-radius: var(--radius-sm, 6px);
   font-size: 0.95rem;
   font-weight: 600;
   pointer-events: none;
   z-index: 50;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.20);
 }
 
 .literature-canvas-upload-status {
@@ -449,16 +591,20 @@
   top: 0.5rem;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(17, 24, 39, 0.92);
+  background: var(--glass-liquid-deep, rgba(28, 18, 22, 0.92));
   color: #fff;
   padding: 0.4rem 0.75rem;
   border-radius: var(--radius-sm, 4px);
   font-size: 0.78rem;
   z-index: 40;
   pointer-events: none;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
-/* Question node */
+/* ============================================================
+   Question node
+   ============================================================ */
 .canvas-node-question-body {
   display: flex;
   flex-direction: column;
@@ -473,17 +619,19 @@
   border-left: 3px solid var(--color-primary, #3b82f6);
   padding-left: 0.5rem;
   cursor: text;
+  color: var(--color-text, #111827);
 }
 .canvas-node-question-answer {
   font-size: 0.78rem;
   line-height: 1.4;
-  border-left: 3px solid #d1d5db;
+  border-left: 3px solid var(--color-border-light, #d1d5db);
   padding-left: 0.5rem;
-  color: var(--color-text-secondary, #4b5563);
+  color: var(--color-text, #111827);
 }
 .canvas-node-answer-body {
   white-space: normal;
   word-break: break-word;
+  color: var(--color-text, #111827);
 }
 .canvas-node-answer-body > *:first-child { margin-top: 0; }
 .canvas-node-answer-body > *:last-child { margin-bottom: 0; }
@@ -499,17 +647,19 @@
   font-size: 0.85rem;
   font-weight: 600;
   line-height: 1.25;
-  color: var(--color-text, #1f2937);
+  color: var(--color-text, #111827);
 }
+.canvas-node-answer-body strong { color: var(--color-text, #111827); font-weight: 600; }
+.canvas-node-answer-body em { font-style: italic; }
 .canvas-node-answer-body code {
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--glass-white-light, rgba(0, 0, 0, 0.06));
   padding: 0.05rem 0.25rem;
   border-radius: 3px;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 0.85em;
 }
 .canvas-node-answer-body pre {
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--glass-white-light, rgba(0, 0, 0, 0.06));
   padding: 0.4rem 0.5rem;
   border-radius: 4px;
   overflow-x: auto;
@@ -519,10 +669,11 @@
 .canvas-node-answer-body blockquote {
   margin: 0.35rem 0;
   padding: 0.1rem 0.5rem;
-  border-left: 2px solid #d1d5db;
+  border-left: 2px solid var(--color-border-light, #d1d5db);
   color: var(--color-text-muted, #6b7280);
 }
 .canvas-node-answer-body a { color: var(--color-primary, #3b82f6); text-decoration: underline; }
+
 .canvas-node-thinking {
   margin: 0 0 0.4rem 0;
   font-size: 0.7rem;
@@ -534,37 +685,43 @@
   list-style: none;
   display: inline-flex;
   align-items: center;
-  gap: 0.2rem;
-  padding: 0.1rem 0.3rem;
-  border-radius: 3px;
+  gap: 0.3rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--glass-white-light, rgba(0, 0, 0, 0.04));
+  transition: background 0.15s ease;
 }
 .canvas-node-thinking > summary:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--glass-white, rgba(0, 0, 0, 0.06));
 }
 .canvas-node-thinking > summary::-webkit-details-marker { display: none; }
 .canvas-node-thinking[open] > summary { margin-bottom: 0.2rem; }
 .canvas-node-thinking-body {
-  padding: 0.25rem 0 0.25rem 0.5rem;
+  padding: 0.4rem 0 0.4rem 0.6rem;
   border-left: 2px solid var(--color-border, #e5e7eb);
   white-space: pre-wrap;
   line-height: 1.45;
   max-height: 12rem;
   overflow: auto;
+  color: var(--color-text-secondary, #6b7280);
+  font-size: 0.72rem;
 }
 .canvas-node-question-sources {
   font-size: 0.7rem;
   color: var(--color-text-muted, #6b7280);
 }
 
-/* Group node (visual frame) */
+/* ============================================================
+   Group node (visual frame)
+   ============================================================ */
 .canvas-node-group {
-  background: rgba(59, 130, 246, 0.04);
+  background: color-mix(in srgb, var(--color-primary, #3b82f6) 5%, transparent);
   border: 1.5px dashed var(--color-primary, #3b82f6);
 }
 .canvas-node-group.is-selected {
   border-color: var(--color-primary, #3b82f6);
   border-style: solid;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary, #3b82f6) 30%, transparent);
 }
 .canvas-node-group-label {
   font-weight: 600;
@@ -584,63 +741,81 @@
 .canvas-node-group-body {
   padding: 0.5rem 0.625rem;
   font-size: 0.78rem;
+  color: var(--color-text-secondary, #6b7280);
 }
 
-/* Canvas AI assistant toggle button */
+/* ============================================================
+   AI assistant toggle button (bottom-left, Liquid Glass)
+   ============================================================ */
 .canvas-ai-assistant-toggle {
   position: absolute;
-  bottom: 0.5rem;
-  left: 0.5rem;
-  width: 40px;
-  height: 40px;
+  bottom: 0.75rem;
+  left: 0.75rem;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: var(--color-primary, #3b82f6);
-  color: #fff;
-  border: none;
+  color: var(--color-primary-on, #fff);
+  border: 1px solid var(--glass-white-border, transparent);
   cursor: pointer;
-  font-size: 1.2rem;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 25;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.20);
+  transition: transform 0.15s ease, background 0.15s ease;
 }
 .canvas-ai-assistant-toggle:hover {
   background: var(--color-primary-hover, #2563eb);
+  transform: translateY(-1px);
 }
 
-/* Canvas AI assistant panel */
+/* ============================================================
+   AI assistant panel
+   ============================================================ */
 .canvas-ai-assistant {
   position: absolute;
-  bottom: 0.5rem;
-  left: 3.5rem;
+  bottom: 0.75rem;
+  left: 4rem;
   width: 320px;
   max-height: 60%;
-  background: #fff;
+  background: var(--glass-liquid-floating, var(--color-bg, #fff));
   border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: var(--radius-sm, 6px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border-radius: var(--radius-md, 10px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   z-index: 35;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: var(--color-text, #111827);
 }
 .canvas-ai-assistant-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 0.4rem 0.6rem;
-  background: var(--color-bg-secondary, #f9fafb);
+  background: var(--glass-white-light, var(--color-bg-secondary, rgba(0, 0, 0, 0.04)));
   border-bottom: 1px solid var(--color-border-light, #f3f4f6);
   font-weight: 600;
   font-size: 0.8rem;
+  color: var(--color-text, #111827);
 }
 .canvas-ai-assistant-close {
   background: transparent;
   border: none;
   cursor: pointer;
-  font-size: 1.1rem;
   color: var(--color-text-muted, #6b7280);
+  padding: 0.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm, 4px);
+}
+.canvas-ai-assistant-close:hover {
+  color: var(--color-text, #111827);
+  background: var(--color-bg, #fff);
 }
 .canvas-ai-assistant-body {
   display: flex;
@@ -661,29 +836,32 @@
   gap: 0.25rem;
 }
 .canvas-ai-assistant-chip {
-  background: var(--color-bg-secondary, #f3f4f6);
+  background: var(--glass-white-light, var(--color-bg-secondary, rgba(0, 0, 0, 0.05)));
   color: var(--color-text, #111827);
   border: 1px solid var(--color-border-light, #e5e7eb);
   border-radius: 999px;
-  padding: 0.15rem 0.5rem;
+  padding: 0.15rem 0.55rem;
   font-size: 0.7rem;
   cursor: pointer;
   font-family: inherit;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 .canvas-ai-assistant-chip:hover {
   background: var(--color-primary, #3b82f6);
-  color: #fff;
+  color: var(--color-primary-on, #fff);
   border-color: var(--color-primary, #3b82f6);
 }
 .canvas-ai-assistant-input {
   width: 100%;
   border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm, 6px);
   padding: 0.4rem;
   font: inherit;
   font-size: 0.85rem;
   resize: vertical;
   box-sizing: border-box;
+  background: var(--color-bg, #fff);
+  color: var(--color-text, #111827);
 }
 .canvas-ai-assistant-error {
   color: var(--color-danger, #ef4444);

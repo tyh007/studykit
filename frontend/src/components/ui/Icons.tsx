@@ -543,6 +543,39 @@ export function MindMapIcon(props: IconProps) {
   );
 }
 
+/* ---- Lightbulb (thinking / reasoning) ---- */
+export function LightbulbIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <path d="M9 18h6" strokeWidth="1.75" strokeLinecap="round" />
+      <path d="M10 21h4" strokeWidth="1.75" strokeLinecap="round" />
+      <path d="M12 3a6 6 0 0 0-4 10.5c.7.6 1 1.4 1 2.5h6c0-1.1.3-1.9 1-2.5A6 6 0 0 0 12 3z" strokeWidth="1.75" strokeLinejoin="round" />
+      <line x1="12" y1="6" x2="12" y2="6" strokeWidth="1.75" strokeLinecap="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Brain (deep thinking / chain of thought) ---- */
+export function BrainIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <path
+        d="M9.5 3.5a2.5 2.5 0 0 0-2.5 2.5v.4A2.5 2.5 0 0 0 5 8.9v.2A2.5 2.5 0 0 0 5.5 13a2.5 2.5 0 0 0 .5 3.4 2.5 2.5 0 0 0 2 3.6 2.5 2.5 0 0 0 4.5-1V3.5z"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M14.5 3.5a2.5 2.5 0 0 1 2.5 2.5v.4a2.5 2.5 0 0 1 2 2.5v.2a2.5 2.5 0 0 1-.5 3.9 2.5 2.5 0 0 1-.5 3.4 2.5 2.5 0 0 1-2 3.6 2.5 2.5 0 0 1-4.5-1V3.5z"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <line x1="9.5" y1="8" x2="9.5" y2="8" strokeWidth="1.5" />
+      <line x1="9.5" y1="12" x2="9.5" y2="12" strokeWidth="1.5" />
+      <line x1="9.5" y1="16" x2="9.5" y2="16" strokeWidth="1.5" />
+    </IconWrap>
+  );
+}
+
 /* ---- Highlight (pen tip over an underline) ---- */
 export function HighlightIcon(props: IconProps) {
   return (
@@ -784,6 +817,41 @@ export function SigmaIcon(props: IconProps) {
   return <EquationIcon {...props} />;
 }
 
+/* ---- Zoom In (magnifier with +) ---- */
+export function ZoomInIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <circle cx="11" cy="11" r="7" strokeWidth="1.75" />
+      <line x1="16.5" y1="16.5" x2="21" y2="21" strokeWidth="1.75" strokeLinecap="round" />
+      <line x1="8" y1="11" x2="14" y2="11" strokeWidth="1.75" strokeLinecap="round" />
+      <line x1="11" y1="8" x2="11" y2="14" strokeWidth="1.75" strokeLinecap="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Zoom Out (magnifier with −) ---- */
+export function ZoomOutIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <circle cx="11" cy="11" r="7" strokeWidth="1.75" />
+      <line x1="16.5" y1="16.5" x2="21" y2="21" strokeWidth="1.75" strokeLinecap="round" />
+      <line x1="8" y1="11" x2="14" y2="11" strokeWidth="1.75" strokeLinecap="round" />
+    </IconWrap>
+  );
+}
+
+/* ---- Maximize / Fit to content (arrows pointing inward to a frame) ---- */
+export function MaximizeIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <polyline points="4 9 4 4 9 4" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <polyline points="20 9 20 4 15 4" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <polyline points="20 15 20 20 15 20" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <polyline points="4 15 4 20 9 20" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    </IconWrap>
+  );
+}
+
 /* ==========================================================================
    Combined icon component for dynamic rendering
    ========================================================================== */
@@ -827,6 +895,8 @@ const iconMap: Record<string, React.ComponentType<IconProps>> = {
   flashcard: FlashcardIcon,
   code: CodeIcon,
   mindMap: MindMapIcon,
+  lightbulb: LightbulbIcon,
+  brain: BrainIcon,
   highlight: HighlightIcon,
   pen: PenIcon,
   bookmark: BookmarkIcon,
@@ -849,6 +919,9 @@ const iconMap: Record<string, React.ComponentType<IconProps>> = {
   redo: RedoIcon,
   save: SaveIcon,
   keyboard: KeyboardIcon,
+  zoomIn: ZoomInIcon,
+  zoomOut: ZoomOutIcon,
+  maximize: MaximizeIcon,
 };
 
 export type IconName = keyof typeof iconMap;
