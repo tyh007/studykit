@@ -41,6 +41,12 @@ export function useLiteratureCanvas(projectId: string) {
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
+  // Mirror papersById into a ref so async callbacks (e.g. import after upload)
+  // can resolve newly-added papers without relying on a stale closure capture.
+  const papersByIdRef = useRef<Record<string, LiteraturePaper>>({});
+  useEffect(() => {
+    papersByIdRef.current = papersById;
+  }, [papersById]);
 
   useEffect(() => {
     setNodes((curr) =>
@@ -328,7 +334,11 @@ export function useLiteratureCanvas(projectId: string) {
       if (!canvasId) return;
       try {
         const res = await literatureCanvasApi.importPapers(canvasId, paperIds, origin);
-        // Append created nodes to local state
+        // Append created nodes to local state. Read papers from a ref so we
+        // resolve papers even when this runs immediately after the caller
+        // updated papersById (the closure capture would otherwise be stale
+        // and the new nodes would render as "Missing paper").
+        const resolvedPapers = papersByIdRef.current;
         setNodes((curr) => {
           const existing = new Set(curr.map((n) => n.id));
           const additions: CanvasFlowNode[] = res.created
@@ -341,7 +351,7 @@ export function useLiteratureCanvas(projectId: string) {
               height: n.height,
               data: {
                 canvasNode: n,
-                paper: n.ref_type === 'paper' && n.ref_id ? papersById[n.ref_id] ?? null : null,
+                paper: n.ref_type === 'paper' && n.ref_id ? resolvedPapers[n.ref_id] ?? null : null,
                 actions: {
                   onContentChange: (nodeId, text) => handleContentChange(nodeId, text),
                   onContentPatch: (nodeId, patch) => handleContentPatch(nodeId, patch),
@@ -358,7 +368,7 @@ export function useLiteratureCanvas(projectId: string) {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canvasId, papersById]
+    [canvasId]
   );
 
   // ---- Delete node (and connected edges) ----

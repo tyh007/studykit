@@ -1,5 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
+import ReactMarkdown from 'react-markdown';
+import { parseAIContent } from '../../../lib/literature/ai-response';
 import type { CanvasFlowNode } from './canvas-types';
 
 interface QuestionNodeProps extends NodeProps<CanvasFlowNode> {
@@ -40,6 +42,10 @@ export default function QuestionNode({
 
   const sources: string[] =
     (data.canvasNode.content_json?.sources as string[]) ?? [];
+
+  // Split the AI response into a collapsible thinking block + the markdown body
+  // so verbose reasoning doesn't drown out the actual answer in the small node.
+  const parsedAnswer = useMemo(() => parseAIContent(value), [value]);
 
   const commitPrompt = (next: string) => {
     setDraft(next);
@@ -128,7 +134,23 @@ export default function QuestionNode({
           </div>
         )}
         <div className="canvas-node-question-answer">
-          {value || <span className="muted">No answer yet — ask the AI assistant.</span>}
+          {value ? (
+            <>
+              {parsedAnswer.thinking && (
+                <details className="canvas-node-thinking">
+                  <summary>💭 Thinking</summary>
+                  <div className="canvas-node-thinking-body">
+                    {parsedAnswer.thinking}
+                  </div>
+                </details>
+              )}
+              <div className="canvas-node-answer-body">
+                <ReactMarkdown>{parsedAnswer.response}</ReactMarkdown>
+              </div>
+            </>
+          ) : (
+            <span className="muted">No answer yet — ask the AI assistant.</span>
+          )}
         </div>
         {sources.length > 0 && (
           <div className="canvas-node-question-sources">

@@ -4,35 +4,12 @@ import { CloseIcon } from '../ui/Icons';
 import { OllamaClient } from '../../lib/literature/ollama-client';
 import { CustomAIClient } from '../../lib/literature/custom-ai-client';
 import { readLocalProfileCredential, type AIProfile } from '../../lib/literature/ai-profiles';
+import { parseAIContent } from '../../lib/literature/ai-response';
 import ReactMarkdown from 'react-markdown';
 import type { LiteraturePaper } from '../../types';
 
-// Parse AI response to separate thinking process from final answer
-function parseAIContent(text: string): { thinking: string | null; response: string } {
-  const marker = "Here's a thinking process:";
-  const idx = text.indexOf(marker);
-  if (idx === -1) return { thinking: null, response: text };
-
-  const lines = text.split('\n');
-  let markerLine = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes("Here's a thinking process:")) { markerLine = i; break; }
-  }
-  if (markerLine === -1) return { thinking: null, response: text };
-
-  // Find the LAST numbered step (1., 2., etc.) after the marker
-  let lastNumLine = -1;
-  for (let i = markerLine + 1; i < lines.length; i++) {
-    if (/^\s*\d+\./.test(lines[i])) { lastNumLine = i; }
-  }
-
-  if (lastNumLine !== -1) {
-    const thinking = lines.slice(0, lastNumLine + 1).join('\n').trim();
-    const rest = lines.slice(lastNumLine + 1).map(l => l.trim()).filter(Boolean).join('\n').trim();
-    return { thinking, response: rest || text };
-  }
-  return { thinking: null, response: text };
-}
+// parseAIContent now lives in `lib/literature/ai-response` and is shared with
+// the literature canvas QuestionNode.
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
