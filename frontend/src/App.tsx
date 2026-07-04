@@ -299,7 +299,19 @@ function StudyKitApp() {
             <span className={`dot ${syncStatus}`} />
             <span>{syncStatus === 'synced' ? 'Saved' : syncStatus === 'pending' ? 'Saving...' : syncStatus === 'error' ? 'Error' : 'Offline'}</span>
           </div>
-          <button className="btn btn-sm" onClick={() => setShowExport(true)} disabled={!selectedLecture}>
+          <button
+            className="btn btn-sm"
+            onClick={() => setShowExport(true)}
+            // Export dialog is lecture-scoped today, so it only makes sense in
+            // modules mode with a selected lecture. Literature projects use
+            // their own per-paper export in PaperWorkspace.
+            disabled={sidebarMode !== 'modules' || !selectedLecture}
+            title={sidebarMode !== 'modules'
+              ? 'Switch to Modules and pick a lecture to export'
+              : !selectedLecture
+                ? 'Select a lecture to export'
+                : 'Export this lecture'}
+          >
             Export
           </button>
           <span className="text-sm text-muted">{user?.display_name || user?.email}</span>
@@ -358,10 +370,11 @@ function StudyKitApp() {
           )}
         </aside>
 
-        {/* Main content */}
-        <main id="main-content" className={`main-content ${!selectedLecture ? (sidebarMode === 'literature' && selectedLitProjectId ? 'literature-active' : 'empty') : ''}`}>
-          {!selectedLecture ? (
-            sidebarMode === 'literature' && selectedLitProjectId ? (
+        {/* Main content — fully branched on sidebarMode so each mode only
+            ever shows its own content, never stale lecture context. */}
+        <main id="main-content" className={`main-content ${sidebarMode}`}>
+          {sidebarMode === 'literature' ? (
+            selectedLitProjectId ? (
               <div className="literature-shell">
                 {/* Literature tab bar */}
                 <div className="literature-top-tabs">
@@ -418,6 +431,27 @@ function StudyKitApp() {
               </div>
             ) : (
               <div className="empty-state">
+                <h2>Literature Library</h2>
+                <p>
+                  Create a literature project to collect papers, build reading lists,
+                  and visualize how they reference each other.
+                </p>
+                <p className="text-sm text-muted" style={{ marginTop: '0.5rem' }}>
+                  Use <strong>New Project</strong> in the sidebar to get started,
+                  or import from Zotero on the left.
+                </p>
+              </div>
+            )
+          ) : (
+            selectedLecture ? (
+              <LectureView
+                lecture={selectedLecture}
+                document={currentDocument}
+                pages={currentPages}
+                currentPageIndex={selectedPageIndex}
+              />
+            ) : (
+              <div className="empty-state">
                 <h2>Welcome to StudyKit</h2>
                 <p>
                   Create a module and lecture to get started. Upload your lecture slides,
@@ -430,13 +464,6 @@ function StudyKitApp() {
                 )}
               </div>
             )
-          ) : (
-            <LectureView
-              lecture={selectedLecture}
-              document={currentDocument}
-              pages={currentPages}
-              currentPageIndex={selectedPageIndex}
-            />
           )}
         </main>
       </div>
@@ -624,12 +651,27 @@ function LectureView({
               onClick={() => setActiveLectureTab('notes')}
             >Notes</div>
             <div
-              className={`note-panel-tab glass-tab ${activeLectureTab === 'literature' ? 'active' : ''}`}
-              onClick={() => setActiveLectureTab('literature')}
-            >Literature Review</div>
+              className={`note-panel-tab glass-tab ${activeLectureTab === 'citations' ? 'active' : ''}`}
+              onClick={() => setActiveLectureTab('citations')}
+            >Citations</div>
           </div>
           {activeLectureTab === 'notes' && (
           <div className="flex gap-1">
+            <button
+              className={`btn btn-ghost btn-sm ${currentLayout === 'slide_top_notes_below' ? 'active' : ''}`}
+              onClick={() => useStore.getState().setCurrentLayout(
+                currentLayout === 'slide_left_notes_right'
+                  ? 'slide_top_notes_below'
+                  : 'slide_left_notes_right',
+              )}
+              title={currentLayout === 'slide_left_notes_right'
+                ? 'Switch to slides on top, notes below'
+                : 'Switch to slides on left, notes on right'}
+              aria-pressed={currentLayout === 'slide_top_notes_below'}
+              style={currentLayout === 'slide_top_notes_below' ? { color: 'var(--color-primary)', fontWeight: 600 } : {}}
+            >
+              {currentLayout === 'slide_left_notes_right' ? '⬆ Stacked' : '⬅ Side-by-side'}
+            </button>
             <button
               className={`btn btn-ghost btn-sm ${cornellMode ? 'active' : ''}`}
               onClick={() => useStore.getState().setCornellMode(!cornellMode)}

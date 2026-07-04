@@ -39,6 +39,20 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
 
+  // Transient toast for user-facing feedback (e.g. dropped a lecture onto
+  // its own module / cross-module rejected). Renders inline at the bottom
+  // of the sidebar; auto-dismisses after 3 seconds.
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), 3000);
+  }, []);
+  useEffect(() => () => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+  }, []);
+
   useEffect(() => {
     if (!contextMenu) return;
     const close = () => setContextMenu(null);
@@ -221,7 +235,10 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
         const sourceLecture = lectures.find((l) => l.id === source.id);
         const targetLecture = lectures.find((l) => l.id === targetItem.id);
         if (!sourceLecture || !targetLecture) return;
-        if (sourceLecture.module_id !== targetLecture.module_id) return;
+        if (sourceLecture.module_id !== targetLecture.module_id) {
+          showToast('Lectures can only be reordered within the same module.');
+          return;
+        }
         const moduleLectures = lectures
           .filter((l) => l.module_id === targetLecture.module_id)
           .sort((a, b) => a.sort_order - b.sort_order);
@@ -242,7 +259,10 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
         const lecture = lectures.find((l) => l.id === source.id);
         const targetModule = modules.find((m) => m.id === targetItem.id);
         if (!lecture || !targetModule) return;
-        if (lecture.module_id === targetItem.id) return;
+        if (lecture.module_id === targetItem.id) {
+          showToast('This lecture already belongs to that module.');
+          return;
+        }
         await lecturesApi.update(source.id, { module_id: targetItem.id });
         const targetLectures = lectures
           .filter((l) => l.module_id === targetItem.id && l.id !== source.id)
@@ -371,13 +391,15 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
       <div className="sidebar-brand">
         <LogoMarkWithWordmark size="sm" />
       </div>
-      {/* Mode toggle: Modules / Literature */}
+      {/* Mode toggle: Modules / Library (literature projects live in the
+          "Library" mode; the word "Literature" was overloaded elsewhere in
+          the product, so we now reserve "Library" for this whole-mode tab. */}
       <div className="lit-mode-toggle">
         <button className={sidebarMode === 'modules' ? 'active' : ''} onClick={() => setSidebarMode('modules')}>
           <ModulesIcon size="sm" /> Modules
         </button>
         <button className={sidebarMode === 'literature' ? 'active' : ''} onClick={() => setSidebarMode('literature')}>
-          <LiteratureIcon size="sm" /> Literature
+          <LiteratureIcon size="sm" /> Library
         </button>
       </div>
 
@@ -550,6 +572,30 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
           </div>
         </div>
       )}
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: 'absolute',
+            left: '50%',
+            bottom: '0.75rem',
+            transform: 'translateX(-50%)',
+            padding: '0.4rem 0.75rem',
+            background: 'var(--color-bg, #fff)',
+            color: 'var(--color-text, #222)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-sm)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            fontSize: '0.8rem',
+            zIndex: 1100,
+            pointerEvents: 'none',
+            maxWidth: '90%',
+          }}
+        >
+          {toast}
+        </div>
+      )}
       </div>
       }
     </>
@@ -573,7 +619,8 @@ function TrashView({ onRestore }: { onRestore: () => void }) {
       setLoading(false);
     };
     load();
-  }, []);
+  }, [modules, lectures]);
+
 
   const handleRestore = async (type: 'module' | 'lecture', id: string) => {
     try {
