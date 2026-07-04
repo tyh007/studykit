@@ -1,3 +1,6 @@
+// @deprecated PaperRelationsGraph is replaced by LiteratureCanvas (see
+// frontend/src/components/literature/canvas/LiteratureCanvas.tsx). This file
+// is kept temporarily so its test can still compile; remove in a later phase.
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 
 interface GraphNode {

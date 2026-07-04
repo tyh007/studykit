@@ -583,6 +583,16 @@ display: flex;
   overscroll-behavior: contain;
 }
 
+.literature-canvas-host {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  /* React Flow needs an explicit, non-zero height. */
+  min-height: 400px;
+  overflow: hidden;
+}
+
 .paper-workspace {
   display: flex;
   flex: 1;

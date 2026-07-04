@@ -319,6 +319,64 @@ CREATE TABLE IF NOT EXISTS paper_relations (
 CREATE INDEX IF NOT EXISTS idx_paper_relations_source ON paper_relations(source_paper_id);
 CREATE INDEX IF NOT EXISTS idx_paper_relations_target ON paper_relations(target_paper_id);
 
+-- ===== LITERATURE CANVASES =====
+CREATE TABLE IF NOT EXISTS literature_canvases (
+  id            UUID PRIMARY KEY,
+  project_id    UUID NOT NULL REFERENCES literature_projects(id) ON DELETE CASCADE,
+  workspace_id  UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  title         TEXT NOT NULL DEFAULT 'Canvas',
+  viewport_json JSONB NOT NULL DEFAULT '{}',
+  settings_json JSONB NOT NULL DEFAULT '{}',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at    TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_lit_canvases_project
+  ON literature_canvases(project_id) WHERE deleted_at IS NULL;
+
+-- ===== LITERATURE CANVAS NODES =====
+CREATE TABLE IF NOT EXISTS literature_canvas_nodes (
+  id           UUID PRIMARY KEY,
+  canvas_id    UUID NOT NULL REFERENCES literature_canvases(id) ON DELETE CASCADE,
+  node_type    TEXT NOT NULL
+               CHECK (node_type IN ('paper','note','text','question','group','shape')),
+  ref_type     TEXT,
+  ref_id       UUID,
+  x            DOUBLE PRECISION NOT NULL,
+  y            DOUBLE PRECISION NOT NULL,
+  width        DOUBLE PRECISION NOT NULL DEFAULT 260,
+  height       DOUBLE PRECISION NOT NULL DEFAULT 160,
+  z_index      INTEGER NOT NULL DEFAULT 0,
+  content_json JSONB NOT NULL DEFAULT '{}',
+  style_json   JSONB NOT NULL DEFAULT '{}',
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at   TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_lit_canvas_nodes_canvas
+  ON literature_canvas_nodes(canvas_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_lit_canvas_nodes_ref
+  ON literature_canvas_nodes(ref_type, ref_id) WHERE deleted_at IS NULL;
+
+-- ===== LITERATURE CANVAS EDGES =====
+CREATE TABLE IF NOT EXISTS literature_canvas_edges (
+  id             UUID PRIMARY KEY,
+  canvas_id      UUID NOT NULL REFERENCES literature_canvases(id) ON DELETE CASCADE,
+  source_node_id UUID NOT NULL REFERENCES literature_canvas_nodes(id) ON DELETE CASCADE,
+  target_node_id UUID NOT NULL REFERENCES literature_canvas_nodes(id) ON DELETE CASCADE,
+  relation_id    UUID REFERENCES paper_relations(id) ON DELETE SET NULL,
+  edge_type      TEXT NOT NULL DEFAULT 'canvas'
+                 CHECK (edge_type IN ('canvas','paper_relation')),
+  label          TEXT,
+  content_json   JSONB NOT NULL DEFAULT '{}',
+  style_json     JSONB NOT NULL DEFAULT '{}',
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at     TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_lit_canvas_edges_canvas
+  ON literature_canvas_edges(canvas_id) WHERE deleted_at IS NULL;
+
 -- ===== LITERATURE AI PROVIDER PROFILES =====
 CREATE TABLE IF NOT EXISTS ai_provider_profiles (
   id                    UUID PRIMARY KEY,

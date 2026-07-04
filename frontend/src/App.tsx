@@ -2,8 +2,9 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from './lib/auth';
 import { useStore } from './store/useStore';
 import { modulesApi, lecturesApi, sourceDocumentsApi } from './lib/api';
-import { literaturePapersApi, paperRelationsApi } from './lib/literature-api';
-import PaperRelationsGraph from './components/literature/PaperRelationsGraph';
+import { literaturePapersApi } from './lib/literature-api';
+// @deprecated PaperRelationsGraph is replaced by LiteratureCanvas; kept on disk for later cleanup.
+import LiteratureCanvas from './components/literature/canvas/LiteratureCanvas';
 import { SidebarIcon, LiteratureIcon, ReadingListIcon, GraphIcon } from './components/ui/Icons';
 import { LogoMarkWithWordmark } from './components/ui/Logo';
 import { db } from './lib/db';
@@ -172,15 +173,6 @@ function StudyKitApp() {
     sidebarMode, litProjects, selectedLitProjectId, selectedLitPaperId, selectLitPaper, litPapers, setLitPapers,
     activeLiteratureTab, setActiveLiteratureTab,
   } = useStore();
-
-  const [graphData, setGraphData] = useState<{nodes: any[]; edges: any[]}>({nodes: [], edges: []});
-  
-  // Fetch graph data when graph tab is active
-  useEffect(() => {
-    if (activeLiteratureTab === 'graph' && selectedLitProjectId) {
-      paperRelationsApi.graph(selectedLitProjectId).then(setGraphData).catch(() => {});
-    }
-  }, [activeLiteratureTab, selectedLitProjectId]);
 
   const { user, workspace_id: authWorkspaceId, logout } = useAuth();
   const setWorkspaceId = useStore((s) => s.setWorkspaceId);
@@ -378,7 +370,7 @@ function StudyKitApp() {
               <div className="literature-shell">
                 {/* Literature tab bar */}
                 <div className="literature-top-tabs">
-                  {(['papers', 'readingLists', 'graph'] as const).map((tab) => (
+                  {(['papers', 'readingLists', 'canvas'] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setActiveLiteratureTab(tab)}
@@ -395,7 +387,7 @@ function StudyKitApp() {
                         transition: 'color 0.15s, border-color 0.15s',
                       }}
                     >
-                      {tab === 'papers' ? <><LiteratureIcon size="sm" /> Papers</> : tab === 'readingLists' ? <><ReadingListIcon size="sm" /> Reading Lists</> : <><GraphIcon size="sm" /> Graph</>}
+                      {tab === 'papers' ? <><LiteratureIcon size="sm" /> Papers</> : tab === 'readingLists' ? <><ReadingListIcon size="sm" /> Reading Lists</> : <><GraphIcon size="sm" /> Canvas</>}
                     </button>
                   ))}
                 </div>
@@ -415,15 +407,9 @@ function StudyKitApp() {
                   <>
                     {activeLiteratureTab === 'papers' && <SummaryTable projectId={selectedLitProjectId} />}
                     {activeLiteratureTab === 'readingLists' && <ReadingListsView />}
-                    {activeLiteratureTab === 'graph' && (
-                      <div className="literature-view-scroll">
-                        <PaperRelationsGraph
-                          nodes={graphData.nodes}
-                          edges={graphData.edges}
-                          onNodeClick={(id) => selectLitPaper(id)}
-                          width={800}
-                          height={500}
-                        />
+                    {activeLiteratureTab === 'canvas' && (
+                      <div className="literature-canvas-host">
+                        <LiteratureCanvas projectId={selectedLitProjectId} />
                       </div>
                     )}
                   </>
