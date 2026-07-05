@@ -11,6 +11,7 @@ import { literatureCanvasApi } from '../../../lib/literature-canvas-api';
 import type {
   LiteratureCanvasNode,
   LiteratureCanvasEdge,
+  LiteratureCanvasScene,
   LiteraturePaper,
 } from '../../../types';
 import type { CanvasFlowNode, CanvasFlowEdge } from './canvas-types';
@@ -19,16 +20,17 @@ import { debounce } from './canvas-utils';
 const VIEWPORT_DEBOUNCE_MS = 1000;
 const CONTENT_DEBOUNCE_MS = 600;
 
-type AddableNodeType = 'text' | 'note' | 'group';
+type AddableNodeType = 'text' | 'note' | 'question' | 'group';
 
 export function useLiteratureCanvas(projectId: string) {
   const [canvasId, setCanvasId] = useState<string | null>(null);
   const [papersById, setPapersById] = useState<Record<string, LiteraturePaper>>({});
+  const [scenes, setScenes] = useState<LiteratureCanvasScene[]>([]);
   const [initialViewport, setInitialViewport] = useState<Viewport | null>(null);
   const [saving, setSaving] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<number | undefined>();
   const [openPaper, setOpenPaper] = useState<LiteraturePaper | null>(null);
-  const { fitView } = useReactFlow();
+  const { fitView, getViewport, screenToFlowPosition, setCenter, setViewport } = useReactFlow();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<CanvasFlowNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<CanvasFlowEdge>([]);
@@ -47,6 +49,26 @@ export function useLiteratureCanvas(projectId: string) {
   useEffect(() => {
     papersByIdRef.current = papersById;
   }, [papersById]);
+
+  const getDefaultNodePosition = useCallback(
+    (width = 260) => {
+      const selected = nodesRef.current.find((node) => node.selected);
+      if (selected) {
+        return {
+          x: selected.position.x + (selected.width || width) + 36,
+          y: selected.position.y,
+        };
+      }
+      if (typeof window !== 'undefined') {
+        return screenToFlowPosition({
+          x: window.innerWidth / 2,
+          y: window.innerHeight / 2,
+        });
+      }
+      return { x: 120, y: 120 };
+    },
+    [screenToFlowPosition]
+  );
 
   useEffect(() => {
     setNodes((curr) =>
@@ -90,6 +112,7 @@ export function useLiteratureCanvas(projectId: string) {
         const pmap: Record<string, LiteraturePaper> = {};
         for (const p of state.papers || []) pmap[p.id] = p;
         setPapersById(pmap);
+        setScenes(state.scenes || []);
 
         // Build fresh action closures that read the latest nodesRef / canvasId
         const buildNodeActions = () => ({
@@ -252,16 +275,21 @@ export function useLiteratureCanvas(projectId: string) {
 
   // ---- Add node ----
   const handleAddNode = useCallback(
-    async (nodeType: AddableNodeType) => {
+    async (nodeType: AddableNodeType, position?: { x: number; y: number }) => {
       if (!canvasId) return;
       try {
+        const width = nodeType === 'question' ? 320 : 240;
+        const height = nodeType === 'question' ? 220 : 140;
+        const pos = position ?? getDefaultNodePosition(width);
         const created = await literatureCanvasApi.createNode(canvasId, {
           node_type: nodeType,
-          x: 80,
-          y: 80,
-          width: 240,
-          height: 140,
-          content_json: { text: '' },
+          x: pos.x,
+          y: pos.y,
+          width,
+          height,
+          content_json: nodeType === 'question'
+            ? { prompt: '', text: '', sources: [] }
+            : { text: '' },
         });
         const flowNode: CanvasFlowNode = {
           id: created.id,
@@ -282,23 +310,28 @@ export function useLiteratureCanvas(projectId: string) {
         };
         setNodes((curr) => [...curr, flowNode]);
         setLastSavedAt(Date.now());
+        setCenter(created.x + created.width / 2, created.y + created.height / 2, {
+          zoom: getViewport().zoom,
+          duration: 180,
+        });
       } catch (err) {
         console.warn('Add node failed:', err);
       }
     },
     // handleContentChange / handleDeleteNode captured via closure on next render; safe enough for toolbar action
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canvasId]
+    [canvasId, getDefaultNodePosition, getViewport, setCenter]
   );
 
   // ---- Add a group (visual frame) ----
-  const handleAddGroup = useCallback(async () => {
+  const handleAddGroup = useCallback(async (position?: { x: number; y: number }) => {
     if (!canvasId) return;
     try {
+      const pos = position ?? getDefaultNodePosition(360);
       const created = await literatureCanvasApi.createNode(canvasId, {
         node_type: 'group',
-        x: 60,
-        y: 60,
+        x: pos.x,
+        y: pos.y,
         width: 360,
         height: 240,
         content_json: { label: 'Group' },
@@ -322,11 +355,15 @@ export function useLiteratureCanvas(projectId: string) {
       };
       setNodes((curr) => [...curr, flowNode]);
       setLastSavedAt(Date.now());
+      setCenter(created.x + created.width / 2, created.y + created.height / 2, {
+        zoom: getViewport().zoom,
+        duration: 180,
+      });
     } catch (err) {
       console.warn('Add group failed:', err);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvasId]);
+  }, [canvasId, getDefaultNodePosition, getViewport, setCenter]);
 
   // ---- Import papers into canvas (server creates paper nodes in a grid) ----
   const handleImportPapers = useCallback(
@@ -442,6 +479,96 @@ export function useLiteratureCanvas(projectId: string) {
   const handleFitView = useCallback(() => {
     fitView({ padding: 0.2, duration: 250 });
   }, [fitView]);
+
+  const handleFocusNode = useCallback(
+    (nodeId: string) => {
+      const node = nodesRef.current.find((item) => item.id === nodeId);
+      if (!node) return;
+      setCenter(
+        node.position.x + (node.width || 260) / 2,
+        node.position.y + (node.height || 160) / 2,
+        { zoom: Math.max(getViewport().zoom, 0.8), duration: 260 }
+      );
+      setNodes((curr) =>
+        curr.map((item) => ({
+          ...item,
+          selected: item.id === nodeId,
+        }))
+      );
+    },
+    [getViewport, setCenter, setNodes]
+  );
+
+  const handleFocusScene = useCallback(
+    (scene: LiteratureCanvasScene) => {
+      const vp = scene.viewport_json;
+      if (
+        typeof vp?.x !== 'number' ||
+        typeof vp?.y !== 'number' ||
+        typeof vp?.zoom !== 'number'
+      ) {
+        return;
+      }
+      setViewport({ x: vp.x, y: vp.y, zoom: vp.zoom }, { duration: 260 });
+    },
+    [setViewport]
+  );
+
+  const handleCreateScene = useCallback(
+    async (name: string) => {
+      if (!canvasId) return null;
+      try {
+        const created = await literatureCanvasApi.createScene(canvasId, {
+          name,
+          viewport: getViewport(),
+        });
+        setScenes((curr) => [...curr, created].sort((a, b) => a.sort_order - b.sort_order));
+        setLastSavedAt(Date.now());
+        return created;
+      } catch (err) {
+        console.warn('Create scene failed:', err);
+        return null;
+      }
+    },
+    [canvasId, getViewport]
+  );
+
+  const handleUpdateScene = useCallback(
+    async (sceneId: string, data: { name?: string; captureCurrentView?: boolean }) => {
+      if (!canvasId) return null;
+      try {
+        const updated = await literatureCanvasApi.updateScene(canvasId, sceneId, {
+          ...(data.name !== undefined ? { name: data.name } : {}),
+          ...(data.captureCurrentView ? { viewport: getViewport() } : {}),
+        });
+        setScenes((curr) =>
+          curr
+            .map((scene) => (scene.id === sceneId ? updated : scene))
+            .sort((a, b) => a.sort_order - b.sort_order)
+        );
+        setLastSavedAt(Date.now());
+        return updated;
+      } catch (err) {
+        console.warn('Update scene failed:', err);
+        return null;
+      }
+    },
+    [canvasId, getViewport]
+  );
+
+  const handleDeleteScene = useCallback(
+    async (sceneId: string) => {
+      if (!canvasId) return;
+      setScenes((curr) => curr.filter((scene) => scene.id !== sceneId));
+      try {
+        await literatureCanvasApi.deleteScene(canvasId, sceneId);
+        setLastSavedAt(Date.now());
+      } catch (err) {
+        console.warn('Delete scene failed:', err);
+      }
+    },
+    [canvasId]
+  );
 
   // ---- Run AI summary on a paper ----
   const handleRunSummary = useCallback(
@@ -622,6 +749,7 @@ export function useLiteratureCanvas(projectId: string) {
     initialViewport,
     papersById,
     setPapersById,
+    scenes,
     nodes,
     edges,
     onNodesChange: handleNodesChange,
@@ -634,7 +762,12 @@ export function useLiteratureCanvas(projectId: string) {
     handleDeleteEdge,
     handleCreateEdge,
     handleContentChange,
+    handleFocusNode,
+    handleFocusScene,
     handleFitView,
+    handleCreateScene,
+    handleUpdateScene,
+    handleDeleteScene,
     handleRunSummary,
     handleCreateSummaryNote,
     handleInsertAIAnswer,

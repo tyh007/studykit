@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -14,6 +14,9 @@ import { useLiteratureCanvas } from './useLiteratureCanvas';
 import CanvasToolbar from './CanvasToolbar';
 import CanvasStatusBar from './CanvasStatusBar';
 import CanvasMinimapCluster from './CanvasMinimapCluster';
+import CanvasSearch from './CanvasSearch';
+import CanvasSceneNavigator from './CanvasSceneNavigator';
+import SelectionToolbar from './SelectionToolbar';
 import TextNode from './TextNode';
 import NoteNode from './NoteNode';
 import PaperNode from './PaperNode';
@@ -24,6 +27,7 @@ import QuestionNode from './QuestionNode';
 import CanvasAIAssistant from './CanvasAIAssistant';
 import GroupNode from './GroupNode';
 import { SparkIcon } from '../../ui/Icons';
+import { literaturePapersApi } from '../../../lib/literature-api';
 import { uploadPDFFile, validatePDFFiles } from '../../../lib/literature-pdf-upload';
 import type { CanvasFlowNode, CanvasFlowEdge } from './canvas-types';
 import type { LiteraturePaper } from '../../../types';
@@ -44,6 +48,7 @@ function LiteratureCanvasInner({ projectId }: Props) {
     nodes,
     edges,
     setPapersById,
+    scenes,
     onNodesChange,
     onEdgesChange,
     onViewportChange,
@@ -54,16 +59,24 @@ function LiteratureCanvasInner({ projectId }: Props) {
     handleRunSummary,
     handleCreateSummaryNote,
     handleCreateEdge,
+    handleDeleteNode,
     handleInsertAIAnswer,
+    handleFocusNode,
+    handleFocusScene,
+    handleCreateScene,
+    handleUpdateScene,
+    handleDeleteScene,
     saving,
     lastSavedAt,
     openPaper,
     setOpenPaper,
   } = useLiteratureCanvas(projectId);
 
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, zoomIn, zoomOut } = useReactFlow();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [connectorHint, setConnectorHint] = useState(false);
   const [pendingConnection, setPendingConnection] = useState<{
     sourceNodeId: string;
     targetNodeId: string;
@@ -76,6 +89,18 @@ function LiteratureCanvasInner({ projectId }: Props) {
   const isReady = !!canvasId;
   const proOptions = useMemo(() => ({ hideAttribution: true }), []);
   const fitViewOnLoad = !initialViewport;
+
+  const getCanvasCenterPosition = useCallback(() => {
+    const wrapper = document.querySelector('.literature-canvas-flow');
+    const rect = wrapper?.getBoundingClientRect();
+    if (rect) {
+      return screenToFlowPosition({
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+      });
+    }
+    return { x: 120, y: 120 };
+  }, [screenToFlowPosition]);
 
   // Register node types here so we can pass per-canvas callbacks down.
   const nodeTypes = useMemo(
@@ -115,6 +140,12 @@ function LiteratureCanvasInner({ projectId }: Props) {
     }
     return ids;
   }, [nodes]);
+
+  const selectedNodes = useMemo(() => nodes.filter((n) => n.selected), [nodes]);
+  const singleSelectedPaper = useMemo(() => {
+    if (selectedNodes.length !== 1 || selectedNodes[0].type !== 'paper') return null;
+    return selectedNodes[0].data.paper || null;
+  }, [selectedNodes]);
 
   const edgeTypes = useMemo(
     () => ({
@@ -219,6 +250,90 @@ function LiteratureCanvasInner({ projectId }: Props) {
     }
   }, []);
 
+  const uploadFilesToCanvas = useCallback(
+    async (files: File[], origin: { x: number; y: number }) => {
+      if (!canvasId) return;
+      const { valid, invalid } = validatePDFFiles(files);
+      if (invalid.length > 0) {
+        setUploadStatus(`Skipped ${invalid.length} invalid file(s).`);
+        setTimeout(() => setUploadStatus(null), 3000);
+      }
+      if (valid.length === 0) return;
+
+      const newPapers: LiteraturePaper[] = [];
+      for (let i = 0; i < valid.length; i++) {
+        const file = valid[i];
+        setUploadStatus(`Uploading ${file.name} (${i + 1}/${valid.length})...`);
+        try {
+          const paper = await uploadPDFFile(file, projectId);
+          newPapers.push(paper);
+        } catch (err) {
+          console.warn('Upload failed for', file.name, err);
+        }
+      }
+      if (newPapers.length > 0) {
+        setPapersById((prev) => {
+          const next = { ...prev };
+          for (const p of newPapers) next[p.id] = p;
+          return next;
+        });
+        await handleImportPapers(newPapers.map((p) => p.id), origin);
+      }
+      setUploadStatus(null);
+    },
+    [canvasId, projectId, setPapersById, handleImportPapers]
+  );
+
+  const handleImportProjectPapers = useCallback(async () => {
+    if (!canvasId) return;
+    try {
+      setUploadStatus('Adding project papers...');
+      const papers = (await literaturePapersApi.list(projectId, 'library')) as LiteraturePaper[];
+      setPapersById((prev) => {
+        const next = { ...prev };
+        for (const p of papers) next[p.id] = p;
+        return next;
+      });
+      await handleImportPapers(papers.map((paper) => paper.id), getCanvasCenterPosition());
+    } catch (err) {
+      console.warn('Import project papers failed:', err);
+    } finally {
+      setUploadStatus(null);
+    }
+  }, [canvasId, projectId, setPapersById, handleImportPapers, getCanvasCenterPosition]);
+
+  const handleDeleteSelected = useCallback(() => {
+    selectedNodes.forEach((node) => handleDeleteNode(node.id));
+  }, [selectedNodes, handleDeleteNode]);
+
+  const handleCreateNoteForSelection = useCallback(() => {
+    const paperId =
+      selectedNodes.length === 1 &&
+      selectedNodes[0].data.canvasNode.ref_type === 'paper'
+        ? selectedNodes[0].data.canvasNode.ref_id
+        : null;
+    if (paperId) {
+      handleCreateSummaryNote(paperId);
+      return;
+    }
+    handleAddNode('note', getCanvasCenterPosition());
+  }, [selectedNodes, handleCreateSummaryNote, handleAddNode, getCanvasCenterPosition]);
+
+  const handleGroupSelection = useCallback(() => {
+    if (selectedNodes.length === 0) {
+      handleAddGroup(getCanvasCenterPosition());
+      return;
+    }
+    const minX = Math.min(...selectedNodes.map((node) => node.position.x));
+    const minY = Math.min(...selectedNodes.map((node) => node.position.y));
+    handleAddGroup({ x: minX - 28, y: minY - 44 });
+  }, [selectedNodes, handleAddGroup, getCanvasCenterPosition]);
+
+  const handleConnectorMode = useCallback(() => {
+    setConnectorHint(true);
+    setTimeout(() => setConnectorHint(false), 3600);
+  }, []);
+
   const handleDrop = useCallback(
     async (e: React.DragEvent) => {
       e.preventDefault();
@@ -232,41 +347,37 @@ function LiteratureCanvasInner({ projectId }: Props) {
         setTimeout(() => setUploadStatus(null), 3000);
         return;
       }
-      const { valid, invalid } = validatePDFFiles(files);
-      if (invalid.length > 0) {
-        setUploadStatus(`Skipped ${invalid.length} invalid file(s).`);
-        setTimeout(() => setUploadStatus(null), 3000);
-      }
-      if (valid.length === 0) return;
-
       const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-      const newPapers: LiteraturePaper[] = [];
-      for (let i = 0; i < valid.length; i++) {
-        const file = valid[i];
-        setUploadStatus(`Uploading ${file.name} (${i + 1}/${valid.length})…`);
-        try {
-          const paper = await uploadPDFFile(file, projectId);
-          newPapers.push(paper);
-        } catch (err) {
-          console.warn('Upload failed for', file.name, err);
-        }
-      }
-      if (newPapers.length > 0) {
-        // Add the new papers to local cache so the hook can resolve them
-        setPapersById((prev) => {
-          const next = { ...prev };
-          for (const p of newPapers) next[p.id] = p;
-          return next;
-        });
-        // Then create paper nodes at the drop position
-        const newPaperIds = newPapers.map((p) => p.id);
-        const origin = { x: flowPos.x, y: flowPos.y };
-        await handleImportPapers(newPaperIds, origin);
-      }
-      setUploadStatus(null);
+      await uploadFilesToCanvas(files, flowPos);
     },
-    [canvasId, projectId, screenToFlowPosition, setPapersById, handleImportPapers]
+    [canvasId, screenToFlowPosition, uploadFilesToCanvas]
   );
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName?.toLowerCase();
+      const isTyping =
+        tagName === 'input' ||
+        tagName === 'textarea' ||
+        target?.isContentEditable;
+      if (event.key === 'Escape') {
+        setPendingConnection(null);
+        setAiAssistantOpen(false);
+        setConnectorHint(false);
+      }
+      if (isTyping) return;
+      if ((event.metaKey || event.ctrlKey) && (event.key === '+' || event.key === '=')) {
+        event.preventDefault();
+        zoomIn({ duration: 160 });
+      } else if ((event.metaKey || event.ctrlKey) && event.key === '-') {
+        event.preventDefault();
+        zoomOut({ duration: 160 });
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [zoomIn, zoomOut]);
 
   return (
     <div
@@ -276,11 +387,51 @@ function LiteratureCanvasInner({ projectId }: Props) {
       onDrop={handleDrop}
     >
       <CanvasToolbar
+        onImportPapers={handleImportProjectPapers}
+        onUploadPDF={() => fileInputRef.current?.click()}
         onAddText={() => handleAddNode('text')}
         onAddNote={() => handleAddNode('note')}
+        onAddQuestion={() => handleAddNode('question')}
         onAddGroup={handleAddGroup}
+        onConnectorMode={handleConnectorMode}
         onFitView={handleFitView}
         disabled={!isReady}
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,application/pdf"
+        multiple
+        className="canvas-file-input"
+        onChange={(event) => {
+          const files = Array.from(event.target.files || []);
+          event.target.value = '';
+          if (files.length > 0) uploadFilesToCanvas(files, getCanvasCenterPosition());
+        }}
+      />
+      <CanvasSearch nodes={nodes} disabled={!isReady} onFocusNode={handleFocusNode} />
+      <CanvasSceneNavigator
+        scenes={scenes}
+        disabled={!isReady}
+        onAddScene={handleCreateScene}
+        onGoToScene={handleFocusScene}
+        onRenameScene={(sceneId, name) => handleUpdateScene(sceneId, { name })}
+        onReplaceScene={(sceneId) => handleUpdateScene(sceneId, { captureCurrentView: true })}
+        onDeleteScene={handleDeleteScene}
+      />
+      <SelectionToolbar
+        selectedNodes={selectedNodes}
+        onAskAI={() => {
+          setFocusedPaperId(null);
+          setAiAssistantOpen(true);
+        }}
+        onCreateNote={handleCreateNoteForSelection}
+        onGroup={handleGroupSelection}
+        onDelete={handleDeleteSelected}
+        onOpenPaper={
+          singleSelectedPaper ? () => setOpenPaper(singleSelectedPaper) : undefined
+        }
+        onConnectorMode={handleConnectorMode}
       />
       <div className="literature-canvas-flow">
         <ReactFlow<CanvasFlowNode, CanvasFlowEdge>
@@ -312,6 +463,11 @@ function LiteratureCanvasInner({ projectId }: Props) {
         {isDraggingFiles && (
           <div className="literature-canvas-drop-overlay">
             Drop PDF to add as paper card
+          </div>
+        )}
+        {connectorHint && (
+          <div className="canvas-connector-hint" role="status">
+            Drag from a card handle to another card to connect them.
           </div>
         )}
       </div>

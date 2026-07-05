@@ -163,8 +163,14 @@ export default function QuestionNode({
         </div>
         {sources.length > 0 && (
           <div className="canvas-node-question-sources">
-            <span className="muted">Sources:</span> {sources.length} paper
-            {sources.length === 1 ? '' : 's'}
+            <span className="canvas-node-source-label">Sources</span>
+            <div className="canvas-node-source-chips" aria-label="AI answer sources">
+              {sources.map((source, index) => (
+                <span key={`${source}-${index}`} className="canvas-node-source-chip" title={source}>
+                  {source}
+                </span>
+              ))}
+            </div>
           </div>
         )}
       </div>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { LiteraturePaper, PaperNote, ExtractedData } from '../../../types';
 import { paperNotesApi } from '../../../lib/literature-api';
 import LiteraturePDFViewer from '../LiteraturePDFViewer';
@@ -27,6 +27,7 @@ function getInitialWidth(): number {
 }
 
 export default function PaperPreviewDrawer({ paper, onClose, onAddAnswerToCanvas }: Props) {
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const [width, setWidth] = useState<number>(getInitialWidth);
   const [activeTab, setActiveTab] = useState<Tab>('pdf');
   const [pdfPage, setPdfPage] = useState(0);
@@ -76,8 +77,18 @@ export default function PaperPreviewDrawer({ paper, onClose, onAddAnswerToCanvas
       setActiveTab('pdf');
       setAskAnswer(null);
       setAskInput('');
+      requestAnimationFrame(() => closeButtonRef.current?.focus());
     }
   }, [paper?.id]);
+
+  useEffect(() => {
+    if (!paper) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [paper, onClose]);
 
   if (!paper) return null;
 
@@ -147,7 +158,13 @@ export default function PaperPreviewDrawer({ paper, onClose, onAddAnswerToCanvas
   const extracted: ExtractedData | undefined = paper.extracted_data;
 
   return (
-    <div className="paper-preview-drawer" style={{ width }} role="dialog" aria-label="Paper preview">
+    <div
+      className="paper-preview-drawer"
+      style={{ width }}
+      role="dialog"
+      aria-modal="false"
+      aria-label="Paper preview"
+    >
       <div className="paper-preview-drawer-resize" onMouseDown={startResize} aria-hidden="true" />
       <div className="paper-preview-drawer-header">
         <div className="paper-preview-drawer-title" title={paper.title || paper.file_name}>
@@ -155,6 +172,7 @@ export default function PaperPreviewDrawer({ paper, onClose, onAddAnswerToCanvas
         </div>
         <button
           className="paper-preview-drawer-close"
+          ref={closeButtonRef}
           onClick={onClose}
           aria-label="Close drawer"
           title="Close"

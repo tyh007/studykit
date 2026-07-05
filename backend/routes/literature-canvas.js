@@ -51,6 +51,15 @@ function edgeRowWithRelation(row, relationType) {
   };
 }
 
+function isValidViewport(viewport) {
+  return (
+    viewport &&
+    typeof viewport.x === 'number' &&
+    typeof viewport.y === 'number' &&
+    typeof viewport.zoom === 'number'
+  );
+}
+
 /**
  * GET /api/literature/canvas?projectId=xxx
  * Returns the project's default canvas. Creates one if none exists.
@@ -128,6 +137,13 @@ router.get('/:canvasId/state', async (req, res) => {
        ORDER BY e.created_at ASC`,
       [canvasId]
     );
+    const scenes = await db.query(
+      `SELECT id, canvas_id, name, viewport_json, sort_order, created_at, updated_at
+       FROM literature_canvas_scenes
+       WHERE canvas_id = $1 AND deleted_at IS NULL
+       ORDER BY sort_order ASC, created_at ASC`,
+      [canvasId]
+    );
 
     // Include paper rows referenced by paper nodes (avoid full_text bloat)
     const paperIds = [
@@ -159,6 +175,7 @@ router.get('/:canvasId/state', async (req, res) => {
       canvas,
       nodes: nodes.rows,
       edges: edges.rows.map((row) => edgeRowWithRelation(row)),
+      scenes: scenes.rows,
       papers,
     });
   } catch (err) {
@@ -198,6 +215,153 @@ router.patch('/:canvasId/viewport', async (req, res) => {
   } catch (err) {
     console.error('Update viewport error:', err);
     res.status(500).json({ error: 'Failed to update viewport' });
+  }
+});
+
+/**
+ * GET /api/literature/canvas/:canvasId/scenes
+ */
+router.get('/:canvasId/scenes', async (req, res) => {
+  try {
+    const { canvasId } = req.params;
+    const ws = await getWorkspaceId(req.user.id);
+    if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+    const canvas = await getCanvasForWorkspace(canvasId, ws);
+    if (!canvas) return res.status(404).json({ error: 'Canvas not found' });
+
+    const r = await db.query(
+      `SELECT id, canvas_id, name, viewport_json, sort_order, created_at, updated_at
+       FROM literature_canvas_scenes
+       WHERE canvas_id = $1 AND deleted_at IS NULL
+       ORDER BY sort_order ASC, created_at ASC`,
+      [canvasId]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    console.error('List scenes error:', err);
+    res.status(500).json({ error: 'Failed to load scenes' });
+  }
+});
+
+/**
+ * POST /api/literature/canvas/:canvasId/scenes
+ * Body: { name: string, viewport: { x, y, zoom }, sort_order?: number }
+ */
+router.post('/:canvasId/scenes', async (req, res) => {
+  try {
+    const { canvasId } = req.params;
+    const { name, viewport, sort_order } = req.body;
+    const cleanName = typeof name === 'string' ? name.trim() : '';
+    if (!cleanName) return res.status(400).json({ error: 'Scene name is required' });
+    if (!isValidViewport(viewport)) {
+      return res.status(400).json({ error: 'viewport { x, y, zoom } required' });
+    }
+
+    const ws = await getWorkspaceId(req.user.id);
+    if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+    const canvas = await getCanvasForWorkspace(canvasId, ws);
+    if (!canvas) return res.status(404).json({ error: 'Canvas not found' });
+
+    let nextOrder = sort_order;
+    if (typeof nextOrder !== 'number') {
+      const order = await db.query(
+        `SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order
+         FROM literature_canvas_scenes
+         WHERE canvas_id = $1 AND deleted_at IS NULL`,
+        [canvasId]
+      );
+      nextOrder = order.rows[0]?.next_order ?? 0;
+    }
+
+    const id = uuidv4();
+    const r = await db.query(
+      `INSERT INTO literature_canvas_scenes (id, canvas_id, name, viewport_json, sort_order)
+       VALUES ($1, $2, $3, $4::jsonb, $5)
+       RETURNING id, canvas_id, name, viewport_json, sort_order, created_at, updated_at`,
+      [id, canvasId, cleanName, JSON.stringify(viewport), nextOrder]
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (err) {
+    console.error('Create scene error:', err);
+    res.status(500).json({ error: 'Failed to create scene' });
+  }
+});
+
+/**
+ * PATCH /api/literature/canvas/:canvasId/scenes/:sceneId
+ */
+router.patch('/:canvasId/scenes/:sceneId', async (req, res) => {
+  try {
+    const { canvasId, sceneId } = req.params;
+    const { name, viewport, sort_order } = req.body;
+    const ws = await getWorkspaceId(req.user.id);
+    if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+    const canvas = await getCanvasForWorkspace(canvasId, ws);
+    if (!canvas) return res.status(404).json({ error: 'Canvas not found' });
+
+    const fields = [];
+    const values = [];
+    let idx = 1;
+    if (name !== undefined) {
+      const cleanName = typeof name === 'string' ? name.trim() : '';
+      if (!cleanName) return res.status(400).json({ error: 'Scene name is required' });
+      fields.push(`name = $${idx++}`);
+      values.push(cleanName);
+    }
+    if (viewport !== undefined) {
+      if (!isValidViewport(viewport)) {
+        return res.status(400).json({ error: 'viewport { x, y, zoom } required' });
+      }
+      fields.push(`viewport_json = $${idx++}::jsonb`);
+      values.push(JSON.stringify(viewport));
+    }
+    if (sort_order !== undefined) {
+      if (typeof sort_order !== 'number') {
+        return res.status(400).json({ error: 'sort_order must be a number' });
+      }
+      fields.push(`sort_order = $${idx++}`);
+      values.push(sort_order);
+    }
+    if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
+    fields.push('updated_at = NOW()');
+    values.push(canvasId, sceneId);
+
+    const r = await db.query(
+      `UPDATE literature_canvas_scenes SET ${fields.join(', ')}
+       WHERE canvas_id = $${idx++} AND id = $${idx} AND deleted_at IS NULL
+       RETURNING id, canvas_id, name, viewport_json, sort_order, created_at, updated_at`,
+      values
+    );
+    if (r.rows.length === 0) return res.status(404).json({ error: 'Scene not found' });
+    res.json(r.rows[0]);
+  } catch (err) {
+    console.error('Update scene error:', err);
+    res.status(500).json({ error: 'Failed to update scene' });
+  }
+});
+
+/**
+ * DELETE /api/literature/canvas/:canvasId/scenes/:sceneId
+ */
+router.delete('/:canvasId/scenes/:sceneId', async (req, res) => {
+  try {
+    const { canvasId, sceneId } = req.params;
+    const ws = await getWorkspaceId(req.user.id);
+    if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+    const canvas = await getCanvasForWorkspace(canvasId, ws);
+    if (!canvas) return res.status(404).json({ error: 'Canvas not found' });
+
+    const r = await db.query(
+      `UPDATE literature_canvas_scenes SET deleted_at = NOW(), updated_at = NOW()
+       WHERE canvas_id = $1 AND id = $2 AND deleted_at IS NULL
+       RETURNING id`,
+      [canvasId, sceneId]
+    );
+    if (r.rows.length === 0) return res.status(404).json({ error: 'Scene not found' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete scene error:', err);
+    res.status(500).json({ error: 'Failed to delete scene' });
   }
 });
 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { MiniMap } from '@xyflow/react';
 import CanvasZoomControls from './CanvasZoomControls';
 import type { CanvasFlowNode } from './canvas-types';
@@ -13,36 +13,51 @@ import type { CanvasFlowNode } from './canvas-types';
  * access useReactFlow().
  */
 export default function CanvasMinimapCluster({ disabled = false }: { disabled?: boolean }) {
+  const [collapsed, setCollapsed] = useState(false);
+
   return (
-    <div className="canvas-minimap-cluster" aria-label="Canvas navigation">
-      <div className="canvas-minimap">
-        <MiniMap<CanvasFlowNode>
-          pannable
-          zoomable
-          aria-label="Canvas minimap"
-          nodeStrokeWidth={2}
-          nodeColor={(n) => {
-            switch (n.type) {
-              case 'paper':
-                return 'var(--accent-rose, #E5B8B0)';
-              case 'note':
-                return 'var(--accent-butter, #F5E5BE)';
-              case 'question':
-                return 'var(--accent-lilac, #DCC8DC)';
-              case 'text':
-                return 'var(--accent-blush, #F2D5D2)';
-              case 'group':
-                return 'var(--accent-emerald, #7AA68A)';
-              default:
-                return 'var(--color-primary, #D4A8A8)';
-            }
-          }}
-          nodeStrokeColor="var(--color-border, rgba(200,160,160,0.26))"
-          maskColor="rgba(28, 18, 22, 0.18)"
-          style={{ background: 'transparent' }}
-        />
-      </div>
-      <div className="canvas-minimap-divider" aria-hidden="true" />
+    <div className={`canvas-minimap-cluster ${collapsed ? 'is-collapsed' : ''}`} aria-label="Canvas navigation">
+      <button
+        type="button"
+        className="canvas-minimap-toggle"
+        onClick={() => setCollapsed((value) => !value)}
+        aria-expanded={!collapsed}
+        title={collapsed ? 'Show minimap' : 'Hide minimap'}
+      >
+        Map
+      </button>
+      {!collapsed && (
+        <>
+          <div className="canvas-minimap">
+            <MiniMap<CanvasFlowNode>
+              pannable
+              zoomable
+              aria-label="Canvas minimap"
+              nodeStrokeWidth={2}
+              nodeColor={(n) => {
+                switch (n.type) {
+                  case 'paper':
+                    return 'var(--accent-rose, #E5B8B0)';
+                  case 'note':
+                    return 'var(--accent-butter, #F5E5BE)';
+                  case 'question':
+                    return 'var(--accent-lilac, #DCC8DC)';
+                  case 'text':
+                    return 'var(--accent-blush, #F2D5D2)';
+                  case 'group':
+                    return 'var(--accent-emerald, #7AA68A)';
+                  default:
+                    return 'var(--color-primary, #D4A8A8)';
+                }
+              }}
+              nodeStrokeColor="var(--color-border, rgba(200,160,160,0.26))"
+              maskColor="rgba(28, 18, 22, 0.18)"
+              style={{ background: 'transparent' }}
+            />
+          </div>
+          <div className="canvas-minimap-divider" aria-hidden="true" />
+        </>
+      )}
       <CanvasZoomControls disabled={disabled} />
     </div>
   );

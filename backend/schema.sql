@@ -377,6 +377,20 @@ CREATE TABLE IF NOT EXISTS literature_canvas_edges (
 CREATE INDEX IF NOT EXISTS idx_lit_canvas_edges_canvas
   ON literature_canvas_edges(canvas_id) WHERE deleted_at IS NULL;
 
+-- ===== LITERATURE CANVAS SCENES =====
+CREATE TABLE IF NOT EXISTS literature_canvas_scenes (
+  id            UUID PRIMARY KEY,
+  canvas_id     UUID NOT NULL REFERENCES literature_canvases(id) ON DELETE CASCADE,
+  name          TEXT NOT NULL,
+  viewport_json JSONB NOT NULL DEFAULT '{}',
+  sort_order    INTEGER NOT NULL DEFAULT 0,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at    TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_lit_canvas_scenes_canvas
+  ON literature_canvas_scenes(canvas_id, sort_order) WHERE deleted_at IS NULL;
+
 -- ===== LITERATURE AI PROVIDER PROFILES =====
 CREATE TABLE IF NOT EXISTS ai_provider_profiles (
   id                    UUID PRIMARY KEY,

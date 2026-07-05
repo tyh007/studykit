@@ -3,6 +3,7 @@ import type {
   LiteratureCanvas,
   LiteratureCanvasNode,
   LiteratureCanvasEdge,
+  LiteratureCanvasScene,
   LiteratureCanvasState,
   LiteraturePaper,
 } from '../types';
@@ -74,6 +75,18 @@ export interface UpdateCanvasEdgeInput {
   style_json?: Record<string, any>;
 }
 
+export interface CreateCanvasSceneInput {
+  name: string;
+  viewport: ViewportPayload;
+  sort_order?: number;
+}
+
+export interface UpdateCanvasSceneInput {
+  name?: string;
+  viewport?: ViewportPayload;
+  sort_order?: number;
+}
+
 export const literatureCanvasApi = {
   listOrCreate(projectId: string): Promise<LiteratureCanvas[]> {
     return litRequest<LiteratureCanvas[]>(`/literature/canvas?projectId=${projectId}`);
@@ -87,6 +100,34 @@ export const literatureCanvasApi = {
     return litRequest<LiteratureCanvas>(`/literature/canvas/${canvasId}/viewport`, {
       method: 'PATCH',
       body: JSON.stringify({ viewport }),
+    });
+  },
+
+  scenes(canvasId: string): Promise<LiteratureCanvasScene[]> {
+    return litRequest<LiteratureCanvasScene[]>(`/literature/canvas/${canvasId}/scenes`);
+  },
+
+  createScene(canvasId: string, data: CreateCanvasSceneInput): Promise<LiteratureCanvasScene> {
+    return litRequest<LiteratureCanvasScene>(`/literature/canvas/${canvasId}/scenes`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateScene(
+    canvasId: string,
+    sceneId: string,
+    data: UpdateCanvasSceneInput
+  ): Promise<LiteratureCanvasScene> {
+    return litRequest<LiteratureCanvasScene>(`/literature/canvas/${canvasId}/scenes/${sceneId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteScene(canvasId: string, sceneId: string): Promise<{ success: boolean }> {
+    return litRequest<{ success: boolean }>(`/literature/canvas/${canvasId}/scenes/${sceneId}`, {
+      method: 'DELETE',
     });
   },
 

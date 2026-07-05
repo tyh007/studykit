@@ -101,6 +101,7 @@ async function migrateDatabase(pool) {
     'literature_canvases',
     'literature_canvas_nodes',
     'literature_canvas_edges',
+    'literature_canvas_scenes',
   ];
   for (const table of canvasTables) {
     const exists = await pool.query(
@@ -126,6 +127,7 @@ async function migrateDatabase(pool) {
     'idx_lit_canvas_nodes_canvas',
     'idx_lit_canvas_nodes_ref',
     'idx_lit_canvas_edges_canvas',
+    'idx_lit_canvas_scenes_canvas',
   ];
   for (const idx of canvasIndexes) {
     const exists = await pool.query(
