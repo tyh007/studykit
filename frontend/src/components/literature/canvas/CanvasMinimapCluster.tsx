@@ -17,15 +17,22 @@ export default function CanvasMinimapCluster({ disabled = false }: { disabled?: 
 
   return (
     <div className={`canvas-minimap-cluster ${collapsed ? 'is-collapsed' : ''}`} aria-label="Canvas navigation">
-      <button
-        type="button"
-        className="canvas-minimap-toggle"
-        onClick={() => setCollapsed((value) => !value)}
-        aria-expanded={!collapsed}
-        title={collapsed ? 'Show minimap' : 'Hide minimap'}
-      >
-        Map
-      </button>
+      <div className="canvas-minimap-header">
+        <span className="canvas-minimap-title">Map</span>
+        <button
+          type="button"
+          className="canvas-minimap-toggle"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            setCollapsed((value) => !value);
+          }}
+          aria-expanded={!collapsed}
+          title={collapsed ? 'Show minimap' : 'Hide minimap'}
+        >
+          {collapsed ? 'Show' : 'Hide'}
+        </button>
+      </div>
       {!collapsed && (
         <>
           <div className="canvas-minimap">

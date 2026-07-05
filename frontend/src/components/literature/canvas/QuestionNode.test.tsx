@@ -6,6 +6,7 @@ import type { CanvasFlowNode } from './canvas-types';
 
 vi.mock('@xyflow/react', () => ({
   Handle: () => <span data-testid="handle" />,
+  NodeResizer: () => <span data-testid="resizer" />,
   Position: { Top: 'top', Bottom: 'bottom' },
 }));
 
@@ -36,6 +37,7 @@ function makeNode(): CanvasFlowNode {
       actions: {
         onContentChange: () => {},
         onContentPatch: () => {},
+        onResize: () => {},
         onDelete: () => {},
       },
     },

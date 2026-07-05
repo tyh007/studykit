@@ -26,6 +26,7 @@ import RelationTypeMenu, { type RelationType } from './RelationTypeMenu';
 import QuestionNode from './QuestionNode';
 import CanvasAIAssistant from './CanvasAIAssistant';
 import GroupNode from './GroupNode';
+import ShapeNode from './ShapeNode';
 import { SparkIcon } from '../../ui/Icons';
 import { literaturePapersApi } from '../../../lib/literature-api';
 import { uploadPDFFile, validatePDFFiles } from '../../../lib/literature-pdf-upload';
@@ -108,6 +109,7 @@ function LiteratureCanvasInner({ projectId }: Props) {
       text: TextNode,
       note: NoteNode,
       group: GroupNode,
+      shape: ShapeNode,
       paper: (props: any) => (
         <PaperNode
           {...props}
@@ -392,6 +394,7 @@ function LiteratureCanvasInner({ projectId }: Props) {
         onAddText={() => handleAddNode('text')}
         onAddNote={() => handleAddNode('note')}
         onAddQuestion={() => handleAddNode('question')}
+        onAddShape={() => handleAddNode('shape')}
         onAddGroup={handleAddGroup}
         onConnectorMode={handleConnectorMode}
         onFitView={handleFitView}

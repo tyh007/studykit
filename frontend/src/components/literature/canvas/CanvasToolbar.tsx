@@ -16,6 +16,7 @@ interface Props {
   onAddText: () => void;
   onAddNote: () => void;
   onAddQuestion: () => void;
+  onAddShape: () => void;
   onAddGroup: () => void;
   onConnectorMode: () => void;
   onFitView: () => void;
@@ -28,6 +29,7 @@ export default function CanvasToolbar({
   onAddText,
   onAddNote,
   onAddQuestion,
+  onAddShape,
   onAddGroup,
   onConnectorMode,
   onFitView,
@@ -81,6 +83,15 @@ export default function CanvasToolbar({
         aria-label="Add question card"
       >
         <BrainIcon size="sm" /> Question
+      </button>
+      <button
+        className="canvas-toolbar-btn"
+        onClick={onAddShape}
+        disabled={disabled}
+        title={disabledTitle || 'Add selectable shape'}
+        aria-label="Add selectable shape"
+      >
+        <AddIcon size="sm" /> Shape
       </button>
       <button
         className="canvas-toolbar-btn"

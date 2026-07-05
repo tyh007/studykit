@@ -7,6 +7,7 @@ import {
 } from '@xyflow/react';
 
 export const RELATION_EDGE_COLORS: Record<string, string> = {
+  link: '#64748b',
   cites: '#3b82f6',
   extends: '#8b5cf6',
   contradicts: '#ef4444',
@@ -17,6 +18,7 @@ export const RELATION_EDGE_COLORS: Record<string, string> = {
 };
 
 export const RELATION_EDGE_LABELS: Record<string, string> = {
+  link: 'Link',
   cites: 'Cites',
   extends: 'Extends',
   contradicts: 'Contradicts',
@@ -51,10 +53,11 @@ export default function RelationEdge(props: any) {
 
   const typed = (data ?? {}) as RelationEdgeData;
   const isPaperRelation = typed.canvasEdge?.edge_type === 'paper_relation';
-  const relType = typed.canvasEdge?.relation_type || typed.canvasEdge?.content_json?.relation_type;
-  const stroke = isPaperRelation
-    ? RELATION_EDGE_COLORS[relType || 'related'] || '#6b7280'
-    : '#9ca3af';
+  const relType =
+    typed.canvasEdge?.relation_type ||
+    typed.canvasEdge?.content_json?.relation_type ||
+    (isPaperRelation ? 'related' : 'link');
+  const stroke = RELATION_EDGE_COLORS[relType] || (isPaperRelation ? '#6b7280' : '#64748b');
   const dashArray = isPaperRelation ? undefined : '4 4';
 
   const [edgePath, labelX, labelY] = getBezierPath({
@@ -68,7 +71,9 @@ export default function RelationEdge(props: any) {
 
   const edgeLabel =
     label ||
-    (isPaperRelation ? RELATION_EDGE_LABELS[relType || 'related'] || 'Related' : '');
+    RELATION_EDGE_LABELS[relType] ||
+    (isPaperRelation ? 'Related' : 'Link');
+  const edgeLabelText = String(edgeLabel);
 
   return (
     <>
@@ -77,28 +82,23 @@ export default function RelationEdge(props: any) {
         path={edgePath}
         style={{
           stroke,
-          strokeWidth: isPaperRelation ? 2 : 1.25,
+          strokeWidth: isPaperRelation ? 2.5 : 1.75,
           strokeDasharray: dashArray,
         }}
+        interactionWidth={18}
       />
       {edgeLabel && (
         <EdgeLabelRenderer>
           <div
-            className="canvas-edge-label"
+            className={`canvas-edge-label ${isPaperRelation ? 'is-paper-relation' : 'is-canvas-link'}`}
             style={{
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-              background: stroke,
-              color: '#fff',
-              padding: '1px 6px',
-              borderRadius: 4,
-              fontSize: 10,
-              fontWeight: 600,
-              pointerEvents: 'all',
-              whiteSpace: 'nowrap',
+              ['--edge-color' as string]: stroke,
             }}
+            title={edgeLabelText}
           >
-            {edgeLabel}
+            {edgeLabelText}
           </div>
         </EdgeLabelRenderer>
       )}

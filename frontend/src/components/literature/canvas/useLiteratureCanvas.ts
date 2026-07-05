@@ -20,7 +20,7 @@ import { debounce } from './canvas-utils';
 const VIEWPORT_DEBOUNCE_MS = 1000;
 const CONTENT_DEBOUNCE_MS = 600;
 
-type AddableNodeType = 'text' | 'note' | 'question' | 'group';
+type AddableNodeType = 'text' | 'note' | 'question' | 'group' | 'shape';
 
 export function useLiteratureCanvas(projectId: string) {
   const [canvasId, setCanvasId] = useState<string | null>(null);
@@ -118,6 +118,7 @@ export function useLiteratureCanvas(projectId: string) {
         const buildNodeActions = () => ({
           onContentChange: (nodeId: string, text: string) => handleContentChange(nodeId, text),
           onContentPatch: (nodeId: string, patch: Record<string, any>) => handleContentPatch(nodeId, patch),
+          onResize: (nodeId: string, width: number, height: number) => handleResizeNode(nodeId, width, height),
           onDelete: (nodeId: string) => handleDeleteNode(nodeId),
           onOpenPaper: (paper: LiteraturePaper) => setOpenPaper(paper),
         });
@@ -273,13 +274,59 @@ export function useLiteratureCanvas(projectId: string) {
     [handleContentPatch]
   );
 
+  const handleResizeNode = useCallback(
+    (nodeId: string, width: number, height: number) => {
+      if (!canvasId) return;
+      const nextWidth = Math.max(80, Math.round(width));
+      const nextHeight = Math.max(60, Math.round(height));
+      setNodes((curr) =>
+        curr.map((node) =>
+          node.id === nodeId
+            ? {
+                ...node,
+                width: nextWidth,
+                height: nextHeight,
+                data: {
+                  ...node.data,
+                  canvasNode: {
+                    ...node.data.canvasNode,
+                    width: nextWidth,
+                    height: nextHeight,
+                  },
+                },
+              }
+            : node
+        )
+      );
+      literatureCanvasApi
+        .updateNode(canvasId, nodeId, { width: nextWidth, height: nextHeight })
+        .then((updated) => {
+          setNodes((curr) =>
+            curr.map((node) =>
+              node.id === nodeId
+                ? {
+                    ...node,
+                    width: updated.width,
+                    height: updated.height,
+                    data: { ...node.data, canvasNode: updated },
+                  }
+                : node
+            )
+          );
+          setLastSavedAt(Date.now());
+        })
+        .catch((err) => console.warn('Node resize save failed:', err));
+    },
+    [canvasId, setNodes]
+  );
+
   // ---- Add node ----
   const handleAddNode = useCallback(
     async (nodeType: AddableNodeType, position?: { x: number; y: number }) => {
       if (!canvasId) return;
       try {
-        const width = nodeType === 'question' ? 320 : 240;
-        const height = nodeType === 'question' ? 220 : 140;
+        const width = nodeType === 'question' ? 320 : nodeType === 'shape' ? 220 : 240;
+        const height = nodeType === 'question' ? 220 : nodeType === 'shape' ? 140 : 140;
         const pos = position ?? getDefaultNodePosition(width);
         const created = await literatureCanvasApi.createNode(canvasId, {
           node_type: nodeType,
@@ -289,7 +336,9 @@ export function useLiteratureCanvas(projectId: string) {
           height,
           content_json: nodeType === 'question'
             ? { prompt: '', text: '', sources: [] }
-            : { text: '' },
+            : nodeType === 'shape'
+              ? { label: 'Shape' }
+              : { text: '' },
         });
         const flowNode: CanvasFlowNode = {
           id: created.id,
@@ -303,6 +352,7 @@ export function useLiteratureCanvas(projectId: string) {
             actions: {
               onContentChange: (nodeId, text) => handleContentChange(nodeId, text),
               onContentPatch: (nodeId, patch) => handleContentPatch(nodeId, patch),
+              onResize: (nodeId, width, height) => handleResizeNode(nodeId, width, height),
               onDelete: (nodeId) => handleDeleteNode(nodeId),
               onOpenPaper: (paper) => setOpenPaper(paper),
             },
@@ -348,6 +398,7 @@ export function useLiteratureCanvas(projectId: string) {
           actions: {
             onContentChange: (nodeId, text) => handleContentChange(nodeId, text),
             onContentPatch: (nodeId, patch) => handleContentPatch(nodeId, patch),
+            onResize: (nodeId, width, height) => handleResizeNode(nodeId, width, height),
             onDelete: (nodeId) => handleDeleteNode(nodeId),
             onOpenPaper: (paper) => setOpenPaper(paper),
           },
@@ -392,6 +443,7 @@ export function useLiteratureCanvas(projectId: string) {
                 actions: {
                   onContentChange: (nodeId, text) => handleContentChange(nodeId, text),
                   onContentPatch: (nodeId, patch) => handleContentPatch(nodeId, patch),
+                  onResize: (nodeId, width, height) => handleResizeNode(nodeId, width, height),
                   onDelete: (nodeId) => handleDeleteNode(nodeId),
                   onOpenPaper: (paper) => setOpenPaper(paper),
                 },
@@ -455,6 +507,8 @@ export function useLiteratureCanvas(projectId: string) {
           target_node_id: params.targetNodeId,
           edge_type: params.edgeType,
           relation_type: params.relationType,
+          label: params.edgeType === 'canvas' ? 'Link' : undefined,
+          content_json: params.edgeType === 'canvas' ? { relation_type: 'link' } : undefined,
         });
         const flowEdge: CanvasFlowEdge = {
           id: created.id,
@@ -681,6 +735,7 @@ export function useLiteratureCanvas(projectId: string) {
             actions: {
               onContentChange: (nodeId, t) => handleContentChange(nodeId, t),
               onContentPatch: (nodeId, patch) => handleContentPatch(nodeId, patch),
+              onResize: (nodeId, width, height) => handleResizeNode(nodeId, width, height),
               onDelete: (nodeId) => handleDeleteNode(nodeId),
               onOpenPaper: (p) => setOpenPaper(p),
             },
@@ -730,6 +785,7 @@ export function useLiteratureCanvas(projectId: string) {
             actions: {
               onContentChange: (nodeId, t) => handleContentChange(nodeId, t),
               onContentPatch: (nodeId, patch) => handleContentPatch(nodeId, patch),
+              onResize: (nodeId, width, height) => handleResizeNode(nodeId, width, height),
               onDelete: (nodeId) => handleDeleteNode(nodeId),
               onOpenPaper: (p) => setOpenPaper(p),
             },
@@ -741,7 +797,7 @@ export function useLiteratureCanvas(projectId: string) {
         console.warn('Insert AI answer failed', err);
       }
     },
-    [canvasId, handleContentChange, handleContentPatch, handleDeleteNode]
+    [canvasId, handleContentChange, handleContentPatch, handleDeleteNode, handleResizeNode]
   );
 
   return {

@@ -9,6 +9,7 @@ import {
   SyncIcon,
 } from '../../ui/Icons';
 import type { CanvasFlowNode } from './canvas-types';
+import CanvasNodeResizer from './CanvasNodeResizer';
 
 interface QuestionNodeProps extends NodeProps<CanvasFlowNode> {
   onRegenerate?: (nodeId: string) => void;
@@ -62,6 +63,7 @@ export default function QuestionNode({
 
   return (
     <div className={`canvas-node canvas-node-question ${selected ? 'is-selected' : ''}`}>
+      <CanvasNodeResizer nodeId={id} selected={selected} minWidth={260} minHeight={170} onResize={data.actions.onResize} />
       <Handle type="target" position={Position.Top} />
       <div className="canvas-node-header">
         <span className="canvas-node-type">Question</span>

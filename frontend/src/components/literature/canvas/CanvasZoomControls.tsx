@@ -11,13 +11,20 @@ import { MaximizeIcon, ZoomInIcon, ZoomOutIcon } from '../../ui/Icons';
  */
 export default function CanvasZoomControls({ disabled = false }: { disabled?: boolean }) {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
+  const stopCanvasGesture = (event: React.PointerEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+  };
 
   return (
     <div className="canvas-zoom-controls" role="toolbar" aria-label="Canvas zoom controls">
       <button
         type="button"
         className="canvas-zoom-btn"
-        onClick={() => zoomIn({ duration: 200 })}
+        onPointerDown={stopCanvasGesture}
+        onClick={(event) => {
+          event.stopPropagation();
+          zoomIn({ duration: 200 });
+        }}
         disabled={disabled}
         title="Zoom in"
         aria-label="Zoom in"
@@ -27,7 +34,11 @@ export default function CanvasZoomControls({ disabled = false }: { disabled?: bo
       <button
         type="button"
         className="canvas-zoom-btn"
-        onClick={() => zoomOut({ duration: 200 })}
+        onPointerDown={stopCanvasGesture}
+        onClick={(event) => {
+          event.stopPropagation();
+          zoomOut({ duration: 200 });
+        }}
         disabled={disabled}
         title="Zoom out"
         aria-label="Zoom out"
@@ -37,7 +48,11 @@ export default function CanvasZoomControls({ disabled = false }: { disabled?: bo
       <button
         type="button"
         className="canvas-zoom-btn"
-        onClick={() => fitView({ padding: 0.2, duration: 250 })}
+        onPointerDown={stopCanvasGesture}
+        onClick={(event) => {
+          event.stopPropagation();
+          fitView({ padding: 0.2, duration: 250 });
+        }}
         disabled={disabled}
         title="Fit to content"
         aria-label="Fit to content"

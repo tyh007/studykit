@@ -345,31 +345,45 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.35rem;
-  padding: 0.4rem;
+  gap: 0.3rem;
+  padding: 0.35rem;
   background: var(--glass-liquid-floating, var(--color-bg-secondary, #f9fafb));
   border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: var(--radius-md, 12px);
-  z-index: 10;
+  border-radius: var(--radius-sm, 8px);
+  z-index: 12;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  /* Cluster width is governed by the minimap so the whole card is
-     visually balanced (square corners, consistent padding). */
-  width: 200px;
+  width: 172px;
 }
 .canvas-minimap-cluster.is-collapsed {
-  width: 148px;
+  width: 126px;
+}
+.canvas-minimap-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  height: 24px;
+  padding: 0 0.1rem 0 0.25rem;
+}
+.canvas-minimap-title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary, #6b7280);
 }
 .canvas-minimap-toggle {
-  height: 26px;
+  height: 22px;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-sm, 4px);
   background: transparent;
   color: var(--color-text-secondary, #6b7280);
   cursor: pointer;
   font: inherit;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
+  padding: 0 0.35rem;
 }
 .canvas-minimap-toggle:hover {
   background: var(--color-bg, #fff);
@@ -377,10 +391,11 @@
 }
 .canvas-minimap {
   width: 100%;
-  height: 130px;
-  border-radius: var(--radius-sm, 8px);
+  height: 104px;
+  border-radius: var(--radius-sm, 6px);
   overflow: hidden;
-  background: transparent;
+  background: color-mix(in srgb, var(--color-bg, #fff) 84%, transparent);
+  border: 1px solid var(--color-border-light, #f3f4f6);
 }
 .canvas-minimap-divider {
   height: 1px;
@@ -396,11 +411,11 @@
   display: flex;
   flex-direction: row;
   justify-content: space-between;
-  gap: 0.2rem;
+  gap: 0.25rem;
 }
 .canvas-zoom-btn {
   flex: 1;
-  height: 28px;
+  height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -410,6 +425,8 @@
   border-radius: var(--radius-sm, 6px);
   cursor: pointer;
   padding: 0;
+  position: relative;
+  z-index: 1;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 .canvas-zoom-btn:hover:not(:disabled) {
@@ -467,6 +484,22 @@
 .react-flow__minimap-node {
   fill-opacity: 0.85;
 }
+.canvas-edge-label {
+  background: var(--edge-color, #64748b);
+  color: #fff;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.1;
+  pointer-events: all;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
+  border: 1px solid color-mix(in srgb, #fff 45%, transparent);
+}
+.canvas-edge-label.is-canvas-link {
+  background: color-mix(in srgb, var(--edge-color, #64748b) 92%, #fff);
+}
 
 /* ============================================================
    Node base — theme-aware surface
@@ -486,6 +519,16 @@
   box-sizing: border-box;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+}
+.canvas-node-resizer-line {
+  border-color: var(--color-primary, #3b82f6) !important;
+}
+.canvas-node-resizer-handle {
+  width: 10px !important;
+  height: 10px !important;
+  border: 2px solid var(--color-bg, #fff) !important;
+  background: var(--color-primary, #3b82f6) !important;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
 }
 .canvas-node.is-selected {
   border-color: var(--color-primary, #3b82f6);
@@ -565,6 +608,13 @@
 }
 .canvas-node-paper {
   background: var(--color-bg, #fff);
+}
+.canvas-node-shape {
+  background: color-mix(in srgb, var(--accent-emerald, #7AA68A) 12%, var(--color-bg, #fff));
+  border: 1.5px solid color-mix(in srgb, var(--accent-emerald, #7AA68A) 82%, var(--color-border, #e5e7eb));
+}
+.canvas-node-shape.is-selected {
+  border-color: var(--accent-emerald, #7AA68A);
 }
 
 /* ============================================================
@@ -1058,6 +1108,41 @@
   padding: 0.5rem 0.625rem;
   font-size: 0.78rem;
   color: var(--color-text-secondary, #6b7280);
+}
+.canvas-node-shape-delete {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  z-index: 2;
+  opacity: 0;
+}
+.canvas-node-shape:hover .canvas-node-shape-delete,
+.canvas-node-shape.is-selected .canvas-node-shape-delete {
+  opacity: 1;
+}
+.canvas-node-shape-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  text-align: center;
+  color: var(--color-text, #111827);
+}
+.canvas-node-shape-label {
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+.canvas-node-shape-label-input {
+  width: min(100%, 160px);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--color-bg, #fff);
+  color: var(--color-text, #111827);
+  font: inherit;
+  font-weight: 650;
+  text-align: center;
+  padding: 0.25rem 0.4rem;
 }
 
 /* ============================================================

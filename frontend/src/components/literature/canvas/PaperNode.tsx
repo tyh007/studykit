@@ -3,6 +3,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { LiteraturePaper } from '../../../types';
 import { CloseIcon, MoreIcon } from '../../ui/Icons';
 import type { CanvasFlowNode } from './canvas-types';
+import CanvasNodeResizer from './CanvasNodeResizer';
 
 interface PaperNodeProps extends NodeProps<CanvasFlowNode> {
   onOpenPaper?: (paper: LiteraturePaper) => void;
@@ -91,6 +92,7 @@ export default function PaperNode({
       className={`canvas-node canvas-node-paper ${selected ? 'is-selected' : ''}`}
       onDoubleClick={handleOpen}
     >
+      <CanvasNodeResizer nodeId={id} selected={selected} minWidth={220} minHeight={130} onResize={data.actions.onResize} />
       <Handle type="target" position={Position.Top} />
       <div className="canvas-node-header">
         <span className="canvas-node-type">Paper</span>

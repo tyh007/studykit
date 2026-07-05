@@ -74,6 +74,7 @@ describe('buildCanvasSearchResults', () => {
             actions: {
               onContentChange: () => {},
               onContentPatch: () => {},
+              onResize: () => {},
               onDelete: () => {},
             },
           },
@@ -99,6 +100,7 @@ describe('buildCanvasSearchResults', () => {
             actions: {
               onContentChange: () => {},
               onContentPatch: () => {},
+              onResize: () => {},
               onDelete: () => {},
             },
           },

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { CloseIcon } from '../../ui/Icons';
 import type { CanvasFlowNode } from './canvas-types';
+import CanvasNodeResizer from './CanvasNodeResizer';
 
 export default function NoteNode({ id, data, selected }: NodeProps<CanvasFlowNode>) {
   const [editing, setEditing] = useState(false);
@@ -40,6 +41,7 @@ export default function NoteNode({ id, data, selected }: NodeProps<CanvasFlowNod
 
   return (
     <div className={`canvas-node canvas-node-note ${selected ? 'is-selected' : ''}`}>
+      <CanvasNodeResizer nodeId={id} selected={selected} onResize={data.actions.onResize} />
       <Handle type="target" position={Position.Top} />
       <div className="canvas-node-header">
         <span className="canvas-node-type">Note</span>
