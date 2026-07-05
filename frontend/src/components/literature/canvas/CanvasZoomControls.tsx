@@ -3,19 +3,20 @@ import { useReactFlow } from '@xyflow/react';
 import { MaximizeIcon, ZoomInIcon, ZoomOutIcon } from '../../ui/Icons';
 
 /**
- * Compact zoom widget for the literature canvas. Replaces the default
- * React Flow <Controls /> with a styling that matches the rest of
- * StudyKit (glass surface, themed icons) and lives in the top-right
- * cluster alongside the minimap.
+ * Compact zoom widget for the literature canvas. Renders a row of three
+ * icon buttons (zoom in / zoom out / fit to content) that share a single
+ * Liquid Glass card with the minimap in the bottom-right corner of the
+ * canvas. Living next to the minimap lets the user pan AND zoom from the
+ * same control cluster — matches apps like Miro / Figma.
  */
 export default function CanvasZoomControls({ disabled = false }: { disabled?: boolean }) {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
 
   return (
-    <div className="canvas-controls" role="toolbar" aria-label="Canvas zoom controls">
+    <div className="canvas-zoom-controls" role="toolbar" aria-label="Canvas zoom controls">
       <button
         type="button"
-        className="canvas-control-btn"
+        className="canvas-zoom-btn"
         onClick={() => zoomIn({ duration: 200 })}
         disabled={disabled}
         title="Zoom in"
@@ -25,7 +26,7 @@ export default function CanvasZoomControls({ disabled = false }: { disabled?: bo
       </button>
       <button
         type="button"
-        className="canvas-control-btn"
+        className="canvas-zoom-btn"
         onClick={() => zoomOut({ duration: 200 })}
         disabled={disabled}
         title="Zoom out"
@@ -35,7 +36,7 @@ export default function CanvasZoomControls({ disabled = false }: { disabled?: bo
       </button>
       <button
         type="button"
-        className="canvas-control-btn"
+        className="canvas-zoom-btn"
         onClick={() => fitView({ padding: 0.2, duration: 250 })}
         disabled={disabled}
         title="Fit to content"

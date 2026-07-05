@@ -86,28 +86,55 @@
 }
 
 /* ============================================================
-   Zoom controls (top-right, Liquid Glass pill)
+   Bottom-right navigation cluster (minimap + zoom controls)
    ============================================================ */
-.canvas-zoom-controls {
+.canvas-minimap-cluster {
   position: absolute;
-  top: 0.75rem;
+  bottom: 0.75rem;
   right: 0.75rem;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.3rem;
+  align-items: stretch;
+  gap: 0.35rem;
+  padding: 0.4rem;
   background: var(--glass-liquid-floating, var(--color-bg-secondary, #f9fafb));
   border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: var(--radius-md, 10px);
+  border-radius: var(--radius-md, 12px);
   z-index: 10;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
+  /* Cluster width is governed by the minimap so the whole card is
+     visually balanced (square corners, consistent padding). */
+  width: 200px;
+}
+.canvas-minimap {
+  width: 100%;
+  height: 130px;
+  border-radius: var(--radius-sm, 8px);
+  overflow: hidden;
+  background: transparent;
+}
+.canvas-minimap-divider {
+  height: 1px;
+  margin: 0 0.1rem;
+  background: var(--color-border-light, #f3f4f6);
+  opacity: 0.7;
+}
+
+/* ============================================================
+   Zoom controls (live inside the minimap cluster)
+   ============================================================ */
+.canvas-zoom-controls {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  gap: 0.2rem;
 }
 .canvas-zoom-btn {
-  width: 30px;
-  height: 30px;
-  display: flex;
+  flex: 1;
+  height: 28px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   background: transparent;
@@ -156,18 +183,16 @@
   stroke-width: 1.5;
   stroke-dasharray: 4 3;
 }
-/* MiniMap: themed to match the Liquid Glass language */
+/* MiniMap: themed to match the Liquid Glass language. The cluster wrapper
+   handles positioning; we just style the inner xyflow element so it sits
+   flush inside its container. */
 .react-flow__minimap {
-  bottom: 0.75rem !important;
-  right: 0.75rem !important;
-  top: auto !important;
-  width: 180px !important;
-  height: 120px !important;
-  border-radius: var(--radius-md, 12px) !important;
+  width: 100% !important;
+  height: 100% !important;
+  border: none !important;
+  border-radius: var(--radius-sm, 8px) !important;
+  background: transparent !important;
   overflow: hidden;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
 }
 .react-flow__minimap-mask {
   fill: rgba(28, 18, 22, 0.10);

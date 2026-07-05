@@ -3,7 +3,6 @@ import {
   ReactFlow,
   ReactFlowProvider,
   Background,
-  MiniMap,
   useReactFlow,
   type DefaultEdgeOptions,
   type Viewport,
@@ -14,7 +13,7 @@ import './literature-canvas.css';
 import { useLiteratureCanvas } from './useLiteratureCanvas';
 import CanvasToolbar from './CanvasToolbar';
 import CanvasStatusBar from './CanvasStatusBar';
-import CanvasZoomControls from './CanvasZoomControls';
+import CanvasMinimapCluster from './CanvasMinimapCluster';
 import TextNode from './TextNode';
 import NoteNode from './NoteNode';
 import PaperNode from './PaperNode';
@@ -308,42 +307,14 @@ function LiteratureCanvasInner({ projectId }: Props) {
           multiSelectionKeyCode={['Shift', 'Meta', 'Control']}
         >
           <Background gap={20} size={1} />
-          <MiniMap
-            pannable
-            zoomable
-            nodeStrokeWidth={2}
-            nodeColor={(n) => {
-              switch (n.type) {
-                case 'paper':
-                  return 'var(--accent-rose, #E5B8B0)';
-                case 'note':
-                  return 'var(--accent-butter, #F5E5BE)';
-                case 'question':
-                  return 'var(--accent-lilac, #DCC8DC)';
-                case 'text':
-                  return 'var(--accent-blush, #F2D5D2)';
-                case 'group':
-                  return 'var(--accent-emerald, #7AA68A)';
-                default:
-                  return 'var(--color-primary, #D4A8A8)';
-              }
-            }}
-            nodeStrokeColor="var(--color-border, rgba(200,160,160,0.26))"
-            maskColor="rgba(28, 18, 22, 0.18)"
-            style={{
-              background: 'var(--glass-liquid-floating, rgba(60, 40, 48, 0.7))',
-              border: '1px solid var(--color-border, rgba(200,160,160,0.16))',
-              borderRadius: 'var(--radius-md, 12px)',
-            }}
-          />
         </ReactFlow>
+        <CanvasMinimapCluster disabled={!isReady} />
         {isDraggingFiles && (
           <div className="literature-canvas-drop-overlay">
             Drop PDF to add as paper card
           </div>
         )}
       </div>
-      <CanvasZoomControls disabled={!isReady} />
       <CanvasStatusBar
         nodeCount={nodes.length}
         saving={saving}
