@@ -17,7 +17,15 @@ import type {
 } from '../../../types';
 import type { CanvasFlowNode, CanvasFlowEdge } from './canvas-types';
 import { debounce } from './canvas-utils';
-import { getBoundsForNodes, getGroupChildIds, isTrueGroupNode } from './group-utils';
+import {
+  computeAutoFitGroup,
+  ensureGroupBelowChildren,
+  findContainingGroup,
+  getBoundsForNodes,
+  getGroupChildIds,
+  isTrueGroupNode,
+} from './group-utils';
+import { kindToEdgePayload, type RelationKind } from './relation-types';
 
 const VIEWPORT_DEBOUNCE_MS = 1000;
 const CONTENT_DEBOUNCE_MS = 600;
@@ -135,6 +143,7 @@ export function useLiteratureCanvas(projectId: string) {
         });
         const buildEdgeActions = () => ({
           onDelete: (edgeId: string) => handleDeleteEdge(edgeId),
+          onUpdateKind: (edgeId: string, next: RelationKind) => handleUpdateEdge(edgeId, next),
         });
 
         const flowNodes: CanvasFlowNode[] = (state.nodes || []).map((n: LiteratureCanvasNode) => ({
@@ -195,10 +204,208 @@ export function useLiteratureCanvas(projectId: string) {
     [canvasId, saveViewport]
   );
 
+  // ---- Group membership sync (called on drag/resize stop) ----
+  // After a drag stop, look at every affected non-group node:
+  //   - If its center is now inside a true_group, add it to that group's
+  //     child_node_ids (and remove it from any other group).
+  //   - If it was in a group but no longer inside, remove it.
+  // Membership changes are persisted to the backend.
+  const syncGroupMembership = useCallback(
+    (changedIds: string[], isRemove: (id: string) => boolean) => {
+      if (!canvasId) return;
+      const currentNodes = nodesRef.current;
+      const groupNodes = currentNodes.filter(isTrueGroupNode);
+      if (groupNodes.length === 0) return;
+
+      // Build current membership map
+      const membership = new Map<string, string | null>();
+      for (const node of currentNodes) {
+        if (node.type === 'group') continue;
+        const owningGroup = groupNodes.find((g) => getGroupChildIds(g).includes(node.id));
+        membership.set(node.id, owningGroup ? owningGroup.id : null);
+      }
+
+      const groupUpdates = new Map<string, { added: string[]; removed: string[] }>();
+      const ensureEntry = (gid: string) => {
+        if (!groupUpdates.has(gid)) groupUpdates.set(gid, { added: [], removed: [] });
+        return groupUpdates.get(gid)!;
+      };
+
+      for (const nodeId of changedIds) {
+        const node = currentNodes.find((n) => n.id === nodeId);
+        if (!node || node.type === 'group' || isRemove(nodeId)) continue;
+        const previousGroupId = membership.get(nodeId) ?? null;
+        const newGroup = findContainingGroup(node, currentNodes);
+        const newGroupId = newGroup ? newGroup.id : null;
+        if (previousGroupId === newGroupId) continue;
+
+        if (previousGroupId) {
+          ensureEntry(previousGroupId).removed.push(nodeId);
+        }
+        if (newGroupId) {
+          ensureEntry(newGroupId).added.push(nodeId);
+        }
+        membership.set(nodeId, newGroupId);
+      }
+
+      if (groupUpdates.size === 0) return;
+
+      setNodes((curr) => {
+        return curr.map((node) => {
+          const update = groupUpdates.get(node.id);
+          if (!update) return node;
+          const prev = getGroupChildIds(node);
+          const nextChildIds = Array.from(
+            new Set(
+              prev
+                .filter((cid) => !update.removed.includes(cid) && curr.some((c) => c.id === cid))
+                .concat(update.added)
+            )
+          );
+          const content = (node.data.canvasNode.content_json as Record<string, any>) || {};
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              canvasNode: {
+                ...node.data.canvasNode,
+                content_json: { ...content, child_node_ids: nextChildIds },
+              },
+            },
+          };
+        });
+      });
+
+      for (const [groupId, update] of groupUpdates) {
+        const group = currentNodes.find((n) => n.id === groupId);
+        if (!group) continue;
+        const prev = getGroupChildIds(group);
+        const next = Array.from(
+          new Set(
+            prev
+              .filter((cid) => !update.removed.includes(cid))
+              .concat(update.added)
+          )
+        );
+        const content = (group.data.canvasNode.content_json as Record<string, any>) || {};
+        const nextContent = { ...content, child_node_ids: next };
+        literatureCanvasApi
+          .updateNode(canvasId, groupId, { content_json: nextContent })
+          .then((updated) => {
+            setNodes((curr) =>
+              curr.map((item) =>
+                item.id === groupId
+                  ? { ...item, data: { ...item.data, canvasNode: updated } }
+                  : item
+              )
+            );
+            setLastSavedAt(Date.now());
+          })
+          .catch((err) => console.warn('Group membership save failed:', err));
+      }
+    },
+    [canvasId, setNodes]
+  );
+
+  // ---- Auto-fit a group whenever one of its children moves/resizes ----
+  const refitGroupsContaining = useCallback(
+    (changedIds: string[]) => {
+      if (!canvasId) return;
+      const currentNodes = nodesRef.current;
+      const groupNodes = currentNodes.filter(isTrueGroupNode);
+      const groupIds = new Set<string>();
+      for (const group of groupNodes) {
+        const childIds = getGroupChildIds(group);
+        if (changedIds.some((id) => childIds.includes(id))) {
+          groupIds.add(group.id);
+        }
+      }
+      if (groupIds.size === 0) return;
+
+      for (const groupId of groupIds) {
+        const group = currentNodes.find((n) => n.id === groupId);
+        if (!group) continue;
+        const childIds = getGroupChildIds(group);
+        const childNodes = currentNodes.filter((n) => childIds.includes(n.id));
+        const fit = computeAutoFitGroup(group, childNodes);
+        if (!fit) continue;
+        const widthChanged = Math.abs(fit.width - (group.width || 0)) > 0.5;
+        const heightChanged = Math.abs(fit.height - (group.height || 0)) > 0.5;
+        const xChanged = Math.abs(fit.x - group.position.x) > 0.5;
+        const yChanged = Math.abs(fit.y - group.position.y) > 0.5;
+        if (!widthChanged && !heightChanged && !xChanged && !yChanged) continue;
+        setNodes((curr) =>
+          curr.map((n) =>
+            n.id === groupId
+              ? {
+                  ...n,
+                  position: { x: fit.x, y: fit.y },
+                  width: fit.width,
+                  height: fit.height,
+                  data: {
+                    ...n.data,
+                    canvasNode: {
+                      ...n.data.canvasNode,
+                      x: fit.x,
+                      y: fit.y,
+                      width: fit.width,
+                      height: fit.height,
+                    },
+                  },
+                }
+              : n
+          )
+        );
+        literatureCanvasApi
+          .updateNode(canvasId, groupId, {
+            x: fit.x,
+            y: fit.y,
+            width: fit.width,
+            height: fit.height,
+          })
+          .then((updated) => {
+            setNodes((curr) =>
+              curr.map((n) =>
+                n.id === groupId
+                  ? { ...n, data: { ...n.data, canvasNode: updated } }
+                  : n
+              )
+            );
+            setLastSavedAt(Date.now());
+          })
+          .catch((err) => console.warn('Group auto-fit save failed:', err));
+      }
+    },
+    [canvasId, setNodes]
+  );
+
+  // ---- Keep group z-index below its children ----
+  const adjustGroupZIndexes = useCallback(() => {
+    if (!canvasId) return;
+    const currentNodes = nodesRef.current;
+    const groupNodes = currentNodes.filter(isTrueGroupNode);
+    for (const group of groupNodes) {
+      const childIds = getGroupChildIds(group);
+      const children = currentNodes.filter((n) => childIds.includes(n.id));
+      if (children.length === 0) continue;
+      const desiredZ = ensureGroupBelowChildren(group, children);
+      if ((group.zIndex ?? 0) === desiredZ) continue;
+      setNodes((curr) =>
+        curr.map((n) =>
+          n.id === group.id ? { ...n, zIndex: desiredZ } : n
+        )
+      );
+    }
+  }, [canvasId, setNodes]);
+
   // ---- Drag stop: PATCH x/y (only on dragging === false change) ----
   const handleNodesChange = useCallback(
     (changes: NodeChange<CanvasFlowNode>[]) => {
       const childMoves: Array<{ id: string; x: number; y: number }> = [];
+      const stopDragIds: string[] = [];
+      const isRemove = (id: string) =>
+        changes.some((ch) => ch.type === 'remove' && 'id' in ch && ch.id === id);
+
       setNodes((curr) => {
         const changedIds = new Set(
           changes.flatMap((change) => ('id' in change ? [change.id] : []))
@@ -236,6 +443,12 @@ export function useLiteratureCanvas(projectId: string) {
           }
         }
 
+        for (const ch of changes) {
+          if (ch.type === 'position' && ch.dragging === false && ch.position) {
+            stopDragIds.push(ch.id);
+          }
+        }
+
         return next;
       });
       if (!canvasId) return;
@@ -258,6 +471,14 @@ export function useLiteratureCanvas(projectId: string) {
           .updateNode(canvasId, child.id, { x: child.x, y: child.y })
           .then(() => setLastSavedAt(Date.now()))
           .catch((err) => console.warn('Grouped node move save failed:', err));
+      }
+
+      if (stopDragIds.length > 0) {
+        Promise.resolve().then(() => {
+          syncGroupMembership(stopDragIds, isRemove);
+          refitGroupsContaining(stopDragIds);
+          adjustGroupZIndexes();
+        });
       }
     },
     [canvasId, setEdges, setNodes]
@@ -412,6 +633,10 @@ export function useLiteratureCanvas(projectId: string) {
           setLastSavedAt(Date.now());
         })
         .catch((err) => console.warn('Node resize save failed:', err));
+      Promise.resolve().then(() => {
+        refitGroupsContaining([nodeId]);
+        adjustGroupZIndexes();
+      });
     },
     [canvasId, setNodes]
   );
@@ -611,27 +836,31 @@ export function useLiteratureCanvas(projectId: string) {
     async (params: {
       sourceNodeId: string;
       targetNodeId: string;
-      edgeType: 'canvas' | 'paper_relation';
-      relationType?: 'cites' | 'extends' | 'contradicts' | 'supports' | 'related' | 'method' | 'dataset';
+      kind: RelationKind;
     }) => {
       if (!canvasId) return;
       try {
+        const payload = kindToEdgePayload(params.kind);
         const created = await literatureCanvasApi.createEdge(canvasId, {
           source_node_id: params.sourceNodeId,
           target_node_id: params.targetNodeId,
-          edge_type: params.edgeType,
-          relation_type: params.relationType,
-          label: params.edgeType === 'canvas' ? 'Link' : undefined,
-          content_json: params.edgeType === 'canvas' ? { relation_type: 'link' } : undefined,
+          edge_type: payload.edge_type,
+          relation_type: payload.relation_type as any,
+          label: payload.label ?? undefined,
+          content_json: payload.content_json,
+          style_json: payload.style_json,
         });
         const flowEdge: CanvasFlowEdge = {
           id: created.id,
           source: created.source_node_id,
           target: created.target_node_id,
-          label: created.label || undefined,
+          label: created.label || params.kind.label,
           data: {
             canvasEdge: created,
-            actions: { onDelete: (id) => handleDeleteEdge(id) },
+            actions: {
+              onDelete: (id) => handleDeleteEdge(id),
+              onUpdateKind: (id, next) => handleUpdateEdge(id, next),
+            },
           },
         };
         setEdges((curr) => [...curr, flowEdge]);
@@ -641,6 +870,82 @@ export function useLiteratureCanvas(projectId: string) {
       }
     },
     [canvasId, setEdges, handleDeleteEdge]
+  );
+
+  // ---- Update edge (style / label / relation) ----
+  const handleUpdateEdge = useCallback(
+    async (edgeId: string, kind: RelationKind) => {
+      if (!canvasId) return;
+      const payload = kindToEdgePayload(kind);
+      // Optimistic local update
+      setEdges((curr) =>
+        curr.map((edge) => {
+          if (edge.id !== edgeId) return edge;
+          const prevEdge = edge.data?.canvasEdge;
+          if (!prevEdge) return edge;
+          const merged: LiteratureCanvasEdge = {
+            ...prevEdge,
+            edge_type: payload.edge_type,
+            relation_type: payload.relation_type as LiteratureCanvasEdge['relation_type'],
+            label: payload.label ?? kind.label,
+            content_json: payload.content_json,
+            style_json: payload.style_json,
+          };
+          return {
+            ...edge,
+            label: payload.label ?? kind.label,
+            data: {
+              canvasEdge: merged,
+              actions: edge.data!.actions,
+            },
+          };
+        })
+      );
+      try {
+        const updated = await literatureCanvasApi.updateEdge(canvasId, edgeId, {
+          label: payload.label ?? undefined,
+          content_json: payload.content_json,
+          style_json: payload.style_json,
+        });
+        setEdges((curr) =>
+          curr.map((edge) => {
+            if (edge.id !== edgeId) return edge;
+            return {
+              ...edge,
+              data: {
+                canvasEdge: updated,
+                actions: edge.data!.actions,
+              },
+            };
+          })
+        );
+        setLastSavedAt(Date.now());
+      } catch (err) {
+        console.warn('Update edge failed:', err);
+      }
+    },
+    [canvasId, setEdges]
+  );
+
+  // ---- Ungroup: delete the group node, keep its children ----
+  const handleUngroup = useCallback(
+    async (groupId: string) => {
+      if (!canvasId) return;
+      const group = nodesRef.current.find((n) => n.id === groupId);
+      const childIds = group ? getGroupChildIds(group) : [];
+      setNodes((curr) => curr.filter((n) => n.id !== groupId));
+      setEdges((curr) => curr.filter((e) => e.source !== groupId && e.target !== groupId));
+      try {
+        await literatureCanvasApi.deleteNode(canvasId, groupId);
+        setLastSavedAt(Date.now());
+      } catch (err) {
+        console.warn('Ungroup failed:', err);
+      }
+      // Also clear child_node_ids from any children that were in another group
+      // (none, by invariant, but be defensive).
+      void childIds;
+    },
+    [canvasId, setEdges, setNodes]
   );
 
   // ---- Fit view ----
@@ -933,6 +1238,8 @@ export function useLiteratureCanvas(projectId: string) {
     handleDeleteNode,
     handleDeleteEdge,
     handleCreateEdge,
+    handleUpdateEdge,
+    handleUngroup,
     handleContentChange,
     handleFocusNode,
     handleFocusScene,

@@ -541,44 +541,52 @@ router.post('/:canvasId/edges', async (req, res) => {
 
     let relationId = null;
 
+    let effectiveEdgeType = edge_type;
     if (edge_type === 'paper_relation') {
       const validTypes = ['cites', 'extends', 'contradicts', 'supports', 'related', 'method', 'dataset'];
-      if (!relation_type || !validTypes.includes(relation_type)) {
-        return res.status(400).json({ error: 'valid relation_type required for paper_relation edges' });
+      if (!relation_type) {
+        return res.status(400).json({ error: 'relation_type required for paper_relation edges' });
       }
-      // Resolve both endpoint paper_ids
-      const endpoints = await db.query(
-        `SELECT id, node_type, ref_id FROM literature_canvas_nodes
-         WHERE canvas_id = $1 AND id = ANY($2::uuid[]) AND deleted_at IS NULL`,
-        [canvasId, [source_node_id, target_node_id]]
-      );
-      if (endpoints.rows.length !== 2) {
-        return res.status(404).json({ error: 'Source or target node not found on this canvas' });
+      // 'custom' (or any unknown string) means a free-form typed canvas edge
+      // between two papers: still stored as a canvas edge so it doesn't pollute
+      // the paper_relations enum, but relation_type is preserved in content_json.
+      if (!validTypes.includes(relation_type)) {
+        effectiveEdgeType = 'canvas';
+      } else {
+        // Resolve both endpoint paper_ids
+        const endpoints = await db.query(
+          `SELECT id, node_type, ref_id FROM literature_canvas_nodes
+           WHERE canvas_id = $1 AND id = ANY($2::uuid[]) AND deleted_at IS NULL`,
+          [canvasId, [source_node_id, target_node_id]]
+        );
+        if (endpoints.rows.length !== 2) {
+          return res.status(404).json({ error: 'Source or target node not found on this canvas' });
+        }
+        const src = endpoints.rows.find((r) => r.id === source_node_id);
+        const tgt = endpoints.rows.find((r) => r.id === target_node_id);
+        if (!src || !tgt || src.node_type !== 'paper' || tgt.node_type !== 'paper' || !src.ref_id || !tgt.ref_id) {
+          return res.status(400).json({ error: 'paper_relation edges require two paper nodes' });
+        }
+        const papers = await db.query(
+          `SELECT id FROM literature_papers
+           WHERE id = ANY($1::uuid[]) AND workspace_id = $2 AND project_id = $3
+             AND deleted_at IS NULL AND in_trash = false`,
+          [[src.ref_id, tgt.ref_id], canvas.workspace_id, canvas.project_id]
+        );
+        if (papers.rows.length !== 2) {
+          return res.status(400).json({ error: 'paper_relation edges require papers in this canvas project' });
+        }
+        // Upsert paper_relations row
+        const up = await db.query(
+          `INSERT INTO paper_relations (id, source_paper_id, target_paper_id, relation_type, description)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (source_paper_id, target_paper_id, relation_type)
+           DO UPDATE SET description = COALESCE(EXCLUDED.description, paper_relations.description)
+           RETURNING id`,
+          [uuidv4(), src.ref_id, tgt.ref_id, relation_type, label || null]
+        );
+        relationId = up.rows[0]?.id || null;
       }
-      const src = endpoints.rows.find((r) => r.id === source_node_id);
-      const tgt = endpoints.rows.find((r) => r.id === target_node_id);
-      if (!src || !tgt || src.node_type !== 'paper' || tgt.node_type !== 'paper' || !src.ref_id || !tgt.ref_id) {
-        return res.status(400).json({ error: 'paper_relation edges require two paper nodes' });
-      }
-      const papers = await db.query(
-        `SELECT id FROM literature_papers
-         WHERE id = ANY($1::uuid[]) AND workspace_id = $2 AND project_id = $3
-           AND deleted_at IS NULL AND in_trash = false`,
-        [[src.ref_id, tgt.ref_id], canvas.workspace_id, canvas.project_id]
-      );
-      if (papers.rows.length !== 2) {
-        return res.status(400).json({ error: 'paper_relation edges require papers in this canvas project' });
-      }
-      // Upsert paper_relations row
-      const up = await db.query(
-        `INSERT INTO paper_relations (id, source_paper_id, target_paper_id, relation_type, description)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (source_paper_id, target_paper_id, relation_type)
-         DO UPDATE SET description = COALESCE(EXCLUDED.description, paper_relations.description)
-         RETURNING id`,
-        [uuidv4(), src.ref_id, tgt.ref_id, relation_type, label || null]
-      );
-      relationId = up.rows[0]?.id || null;
     }
 
     const id = uuidv4();
@@ -594,16 +602,16 @@ router.post('/:canvasId/edges', async (req, res) => {
         source_node_id,
         target_node_id,
         relationId,
-        edge_type,
+        effectiveEdgeType,
         label || null,
         JSON.stringify({
           ...(content_json || {}),
-          ...(edge_type === 'paper_relation' ? { relation_type } : {}),
+          ...(relation_type ? { relation_type } : {}),
         }),
         JSON.stringify(style_json || {}),
       ]
     );
-    res.status(201).json(edgeRowWithRelation(r.rows[0], edge_type === 'paper_relation' ? relation_type : null));
+    res.status(201).json(edgeRowWithRelation(r.rows[0], relation_type || null));
   } catch (err) {
     console.error('Create edge error:', err);
     res.status(500).json({ error: 'Failed to create edge' });

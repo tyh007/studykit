@@ -12,6 +12,7 @@ export interface CanvasNodeActions {
 
 export interface CanvasEdgeActions {
   onDelete: (edgeId: string) => void;
+  onUpdateKind?: (edgeId: string, kind: import('./relation-types').RelationKind) => void;
 }
 
 export interface CanvasNodeData {

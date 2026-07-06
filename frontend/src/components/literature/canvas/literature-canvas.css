@@ -522,15 +522,17 @@
 .canvas-edge-label {
   background: var(--edge-color, #64748b);
   color: #fff;
-  padding: 0.15rem 0.45rem;
+  padding: 0.18rem 0.55rem;
   border-radius: 999px;
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   font-weight: 700;
   line-height: 1.1;
   pointer-events: all;
   white-space: nowrap;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
   border: 1px solid color-mix(in srgb, #fff 45%, transparent);
+  cursor: pointer;
+  user-select: none;
 }
 .canvas-edge-label.is-canvas-link {
   background: color-mix(in srgb, var(--edge-color, #64748b) 92%, #fff);
@@ -539,23 +541,93 @@
   outline: 2px solid color-mix(in srgb, var(--edge-color, #64748b) 34%, #fff);
   outline-offset: 2px;
 }
-.canvas-edge-delete {
-  background: var(--glass-liquid-floating, var(--color-bg, #fff));
+.canvas-edge-label input {
+  background: transparent;
+  color: #fff;
+  border: none;
+  outline: none;
+  font: inherit;
+  font-weight: inherit;
+  text-align: center;
+  min-width: 60px;
+}
+.canvas-edge-actions {
+  display: flex;
+  gap: 4px;
+}
+.canvas-edge-action-btn {
+  background: var(--glass-liquid-floating, #fff);
   border: 1px solid var(--edge-color, #64748b);
   border-radius: 999px;
   color: var(--edge-color, #64748b);
   cursor: pointer;
   font: inherit;
-  font-size: 0.64rem;
+  font-size: 0.7rem;
   font-weight: 700;
   line-height: 1;
-  padding: 0.25rem 0.45rem;
+  padding: 0.3rem 0.55rem;
   pointer-events: all;
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
 }
-.canvas-edge-delete:hover {
+.canvas-edge-action-btn:hover {
   background: var(--edge-color, #64748b);
   color: #fff;
+}
+.canvas-edge-action-btn.canvas-edge-delete {
+  background: var(--edge-color, #ef4444);
+  color: #fff;
+  border-color: var(--edge-color, #ef4444);
+}
+.canvas-edge-action-btn.canvas-edge-delete:hover {
+  opacity: 0.9;
+}
+.canvas-edge-style-popover {
+  font-family: inherit;
+}
+.canvas-edge-style-popover button {
+  font-family: inherit;
+}
+
+/* ============================================================
+   Relation type menu (inline popover for choosing logic+style)
+   ============================================================ */
+.relation-type-menu-section-title {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--color-text-muted, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.3rem 0.25rem;
+}
+.relation-type-menu-item {
+  transition: background-color 100ms ease;
+}
+.relation-type-menu-item:hover {
+  background: color-mix(in srgb, var(--color-primary, #3b82f6) 8%, transparent) !important;
+}
+.relation-type-menu-custom {
+  margin: 0.3rem 0 0.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.relation-type-menu-pill {
+  transition: background-color 100ms ease, color 100ms ease;
+}
+.relation-type-menu-pill:hover {
+  filter: brightness(0.96);
+}
+.relation-type-menu-style {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-top: 0.3rem;
+}
+.relation-type-menu-style-toggle {
+  transition: background-color 100ms ease;
+}
+.relation-type-menu-style-toggle:hover {
+  background: color-mix(in srgb, var(--color-primary, #3b82f6) 8%, transparent) !important;
 }
 
 /* ============================================================
@@ -1144,6 +1216,9 @@
   border: 1.5px dashed var(--color-primary, #3b82f6);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  transition: width 160ms ease-out, height 160ms ease-out,
+    transform 160ms ease-out, border-color 120ms ease-out,
+    background 120ms ease-out, box-shadow 120ms ease-out;
 }
 .canvas-node-group.is-true-group {
   background: color-mix(in srgb, var(--accent-emerald, #7AA68A) 7%, transparent);
@@ -1154,10 +1229,21 @@
   border-style: solid;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary, #3b82f6) 30%, transparent);
 }
+.canvas-node-group.is-drop-target {
+  border-color: var(--color-primary, #3b82f6);
+  border-style: solid;
+  background: color-mix(in srgb, var(--color-primary, #3b82f6) 14%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary, #3b82f6) 24%, transparent);
+}
 .canvas-node-group-label {
   font-weight: 600;
   font-size: 0.78rem;
   color: var(--color-primary, #3b82f6);
+  cursor: text;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .canvas-node-group-label-input {
   font-weight: 600;
@@ -1168,11 +1254,57 @@
   border-radius: 2px;
   padding: 1px 4px;
   font-family: inherit;
+  flex: 1;
+  min-width: 0;
+}
+.canvas-node-group-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.625rem 0.3rem;
+  cursor: grab;
+}
+.canvas-node-group-header:active {
+  cursor: grabbing;
+}
+.canvas-node-group-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #fff;
+  background: color-mix(in srgb, var(--color-primary, #3b82f6) 90%, transparent);
+  border-radius: 999px;
+}
+.canvas-node-group.is-true-group .canvas-node-group-count-badge {
+  background: color-mix(in srgb, var(--accent-emerald, #7AA68A) 90%, transparent);
+}
+.canvas-node-group-ungroup {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.5rem;
+  font: inherit;
+  font-size: 0.66rem;
+  font-weight: 600;
+  border: 1px solid color-mix(in srgb, var(--color-primary, #3b82f6) 40%, transparent);
+  background: transparent;
+  color: var(--color-primary, #3b82f6);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.canvas-node-group-ungroup:hover {
+  background: color-mix(in srgb, var(--color-primary, #3b82f6) 12%, transparent);
 }
 .canvas-node-group-body {
-  padding: 0.5rem 0.625rem;
+  padding: 0.4rem 0.625rem 0.55rem;
   font-size: 0.78rem;
   color: var(--color-text-secondary, #6b7280);
+  overflow: auto;
+  max-height: 100%;
 }
 .canvas-node-group-count {
   display: inline-flex;
@@ -1182,9 +1314,51 @@
   background: color-mix(in srgb, var(--color-bg, #fff) 62%, transparent);
   border: 1px solid var(--color-border-light, #f3f4f6);
   color: var(--color-text-secondary, #6b7280);
-  font-size: 0.7rem;
-  font-weight: 600;
+  font-size: 0.72rem;
 }
+.canvas-node-group-member-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.canvas-node-group-member {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-bg, #fff) 60%, transparent);
+  font-size: 0.72rem;
+  color: var(--color-text-secondary, #4b5563);
+  overflow: hidden;
+}
+.canvas-node-group-member-glyph {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  background: color-mix(in srgb, var(--color-primary, #3b82f6) 12%, transparent);
+  color: var(--color-primary, #3b82f6);
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.canvas-node-group-member-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-node-group-member.is-overflow {
+  color: var(--color-text-muted, #6b7280);
+  font-style: italic;
+  background: transparent;
+}
+
 .canvas-node-shape-delete {
   position: absolute;
   top: 0.25rem;

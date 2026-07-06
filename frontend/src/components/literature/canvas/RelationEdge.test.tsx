@@ -4,8 +4,13 @@ import { describe, expect, it, vi } from 'vitest'
 import RelationEdge from './RelationEdge'
 
 vi.mock('@xyflow/react', () => ({
-  BaseEdge: ({ id, style }: { id: string; style: React.CSSProperties }) => (
-    <path data-testid={`edge-${id}`} style={style} />
+  BaseEdge: ({ id, style, markerStart, markerEnd }: { id: string; style: React.CSSProperties; markerStart?: string; markerEnd?: string }) => (
+    <path
+      data-testid={`edge-${id}`}
+      data-marker-start={markerStart}
+      data-marker-end={markerEnd}
+      style={style}
+    />
   ),
   EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   getBezierPath: () => ['M0 0 L100 100', 50, 50],
@@ -82,6 +87,62 @@ describe('RelationEdge', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete selected connection' }))
     expect(onDelete).toHaveBeenCalledWith('edge-1')
-    expect(screen.getByTestId('edge-edge-1')).toHaveStyle({ strokeWidth: 2.4 })
+  })
+
+  it('renders custom relation label with end-arrow marker and dashed style', () => {
+    render(
+      <svg>
+        <RelationEdge
+          {...baseProps}
+          id="edge-3"
+          data={{
+            canvasEdge: {
+              edge_type: 'canvas',
+              content_json: { relation_type: 'custom', custom_label: '启发' },
+              style_json: {
+                color: '#8b5cf6',
+                arrowEnd: 'double',
+                arrowStart: 'none',
+                dashStyle: 'dotted',
+              },
+            },
+          }}
+        />
+      </svg>,
+    )
+
+    expect(screen.getByText('启发')).toBeInTheDocument()
+    const path = screen.getByTestId('edge-edge-3')
+    expect(path).toHaveAttribute('data-marker-end', 'marker-edge-3-end-double')
+    expect(path).toHaveStyle({ stroke: '#8b5cf6' })
+  })
+
+  it('emits onUpdateKind when style popover changes are committed', () => {
+    const onUpdateKind = vi.fn()
+
+    render(
+      <svg>
+        <RelationEdge
+          {...baseProps}
+          id="edge-4"
+          selected
+          data={{
+            canvasEdge: {
+              edge_type: 'paper_relation',
+              relation_type: 'related',
+              content_json: { relation_type: 'related' },
+              style_json: { color: '#6b7280', arrowEnd: 'single', dashStyle: 'dashed' },
+            },
+            actions: { onUpdateKind },
+          }}
+        />
+      </svg>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change line style' }))
+    // Style popover is open: click "Solid"
+    const solidBtn = screen.getByRole('button', { name: /Solid/ })
+    fireEvent.click(solidBtn)
+    expect(onUpdateKind).toHaveBeenCalled()
   })
 })

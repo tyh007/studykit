@@ -22,7 +22,7 @@ import NoteNode from './NoteNode';
 import PaperNode from './PaperNode';
 import PaperPreviewDrawer from './PaperPreviewDrawer';
 import RelationEdge from './RelationEdge';
-import RelationTypeMenu, { type RelationType } from './RelationTypeMenu';
+import RelationTypeMenu from './RelationTypeMenu';
 import QuestionNode from './QuestionNode';
 import CanvasAIAssistant from './CanvasAIAssistant';
 import GroupNode from './GroupNode';
@@ -32,6 +32,12 @@ import { literaturePapersApi } from '../../../lib/literature-api';
 import { uploadPDFFile, validatePDFFiles } from '../../../lib/literature-pdf-upload';
 import type { CanvasFlowNode, CanvasFlowEdge } from './canvas-types';
 import type { LiteraturePaper } from '../../../types';
+import {
+  DEFAULT_RELATION,
+  RELATION_PRESET_MAP,
+  readRelationKindFromEdge,
+  type RelationKind,
+} from './relation-types';
 
 interface Props {
   projectId: string;
@@ -67,6 +73,7 @@ function LiteratureCanvasInner({ projectId }: Props) {
     handleCreateScene,
     handleUpdateScene,
     handleDeleteScene,
+    handleUngroup,
     saving,
     lastSavedAt,
     openPaper,
@@ -82,6 +89,7 @@ function LiteratureCanvasInner({ projectId }: Props) {
     sourceNodeId: string;
     targetNodeId: string;
     pos: { x: number; y: number };
+    bothPaper: boolean;
   } | null>(null);
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
   const [aiAssistantPrompt, setAiAssistantPrompt] = useState('');
@@ -108,7 +116,7 @@ function LiteratureCanvasInner({ projectId }: Props) {
     () => ({
       text: TextNode,
       note: NoteNode,
-      group: GroupNode,
+      group: (props: any) => <GroupNode {...props} onUngroup={handleUngroup} />,
       shape: ShapeNode,
       paper: (props: any) => (
         <PaperNode
@@ -124,7 +132,7 @@ function LiteratureCanvasInner({ projectId }: Props) {
       ),
       question: QuestionNode,
     }),
-    [setOpenPaper, handleRunSummary, handleCreateSummaryNote]
+    [setOpenPaper, handleRunSummary, handleCreateSummaryNote, handleUngroup]
   );
 
   // Compute selected paper IDs (for the AI assistant).
@@ -182,11 +190,14 @@ function LiteratureCanvasInner({ projectId }: Props) {
   const handleConnect = useCallback(
     (conn: Connection) => {
       if (!conn.source || !conn.target) return;
-      // Determine the actual node types involved
       const sourceNode = nodes.find((n) => n.id === conn.source);
       const targetNode = nodes.find((n) => n.id === conn.target);
       if (!sourceNode || !targetNode) return;
-      // Position the menu near the midpoint of the connection line
+      const wrapper = document.querySelector('.literature-canvas-flow');
+      const sourceRect = wrapper?.querySelector(
+        `[data-id="${conn.source}"]`
+      ) as HTMLElement | null;
+      const anchorRect = sourceRect?.getBoundingClientRect();
       const midX =
         ((sourceNode.position.x + (sourceNode.width || 200) / 2) +
           (targetNode.position.x + (targetNode.width || 200) / 2)) /
@@ -195,44 +206,28 @@ function LiteratureCanvasInner({ projectId }: Props) {
         ((sourceNode.position.y + (sourceNode.height || 140) / 2) +
           (targetNode.position.y + (targetNode.height || 140) / 2)) /
         2;
-      // Place the relation-type menu at the source node's screen position.
-      // We read the bounding rect of the source node's DOM element.
-      const wrapper = document.querySelector('.literature-canvas-flow');
-      const sourceRect = wrapper?.querySelector(
-        `[data-id="${conn.source}"]`
-      ) as HTMLElement | null;
-      const anchorRect = sourceRect?.getBoundingClientRect();
       const sx = anchorRect ? anchorRect.left + anchorRect.width / 2 : midX;
       const sy = anchorRect ? anchorRect.top + anchorRect.height / 2 : midY;
 
       const bothPaper =
         sourceNode.type === 'paper' && targetNode.type === 'paper';
-      if (bothPaper) {
-        setPendingConnection({
-          sourceNodeId: conn.source,
-          targetNodeId: conn.target,
-          pos: { x: sx, y: sy },
-        });
-      } else {
-        // Canvas-only edge: create immediately with no relation type
-        handleCreateEdge({
-          sourceNodeId: conn.source,
-          targetNodeId: conn.target,
-          edgeType: 'canvas',
-        });
-      }
+      setPendingConnection({
+        sourceNodeId: conn.source,
+        targetNodeId: conn.target,
+        pos: { x: sx, y: sy },
+        bothPaper,
+      });
     },
-    [nodes, handleCreateEdge]
+    [nodes]
   );
 
   const handlePickRelation = useCallback(
-    (type: RelationType) => {
+    (kind: RelationKind) => {
       if (!pendingConnection) return;
       handleCreateEdge({
         sourceNodeId: pendingConnection.sourceNodeId,
         targetNodeId: pendingConnection.targetNodeId,
-        edgeType: 'paper_relation',
-        relationType: type,
+        kind,
       });
       setPendingConnection(null);
     },
@@ -496,6 +491,12 @@ function LiteratureCanvasInner({ projectId }: Props) {
           position={pendingConnection.pos}
           onPick={handlePickRelation}
           onCancel={() => setPendingConnection(null)}
+          initialKind={
+            pendingConnection.bothPaper
+              ? RELATION_PRESET_MAP.related
+              : DEFAULT_RELATION
+          }
+          bothPaper={pendingConnection.bothPaper}
         />
       )}
       <button
