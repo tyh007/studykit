@@ -59,7 +59,7 @@ export default function CanvasMinimapCluster({ disabled = false }: { disabled?: 
               }}
               nodeStrokeColor="var(--color-border, rgba(200,160,160,0.26))"
               maskColor="rgba(28, 18, 22, 0.18)"
-              style={{ background: 'transparent' }}
+              style={{ background: 'transparent', width: '100%', height: '100%' }}
             />
           </div>
           <div className="canvas-minimap-divider" aria-hidden="true" />

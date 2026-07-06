@@ -5,9 +5,15 @@ import type { CanvasFlowNode } from './canvas-types';
 import CanvasNodeResizer from './CanvasNodeResizer';
 
 export default function GroupNode({ id, data, selected }: NodeProps<CanvasFlowNode>) {
+  const content = data.canvasNode.content_json as Record<string, unknown> | null;
+  const childIds = Array.isArray(content?.child_node_ids)
+    ? content.child_node_ids.filter((childId): childId is string => typeof childId === 'string')
+    : [];
+  const childCount = childIds.length;
+  const isTrueGroup = content?.group_mode === 'true_group';
   const [editing, setEditing] = useState(false);
   const [label, setLabel] = useState<string>(
-    (data.canvasNode.content_json?.label as string) ?? 'Group'
+    (content?.label as string) ?? 'Group'
   );
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -17,19 +23,20 @@ export default function GroupNode({ id, data, selected }: NodeProps<CanvasFlowNo
 
   useEffect(() => {
     if (!editing) {
-      const remote = (data.canvasNode.content_json?.label as string) ?? 'Group';
+      const remote = (content?.label as string) ?? 'Group';
       if (remote !== label) setLabel(remote);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.canvasNode.content_json?.label]);
+  }, [content?.label]);
 
   const commit = (next: string) => {
-    setLabel(next);
-    data.actions.onContentPatch(id, { label: next });
+    const clean = next.trim() || 'Group';
+    setLabel(clean);
+    data.actions.onContentPatch(id, { label: clean });
   };
 
   return (
-    <div className={`canvas-node canvas-node-group ${selected ? 'is-selected' : ''}`}>
+    <div className={`canvas-node canvas-node-group ${isTrueGroup ? 'is-true-group' : ''} ${selected ? 'is-selected' : ''}`}>
       <CanvasNodeResizer nodeId={id} selected={selected} minWidth={220} minHeight={140} onResize={data.actions.onResize} />
       <Handle type="target" position={Position.Top} />
       <div className="canvas-node-header">
@@ -49,7 +56,7 @@ export default function GroupNode({ id, data, selected }: NodeProps<CanvasFlowNo
                 commit(label);
               } else if (e.key === 'Escape') {
                 setEditing(false);
-                setLabel((data.canvasNode.content_json?.label as string) ?? 'Group');
+                setLabel((content?.label as string) ?? 'Group');
               }
             }}
           />
@@ -74,7 +81,9 @@ export default function GroupNode({ id, data, selected }: NodeProps<CanvasFlowNo
         </button>
       </div>
       <div className="canvas-node-group-body">
-        <span className="muted">Visual frame only — does not constrain children.</span>
+        <span className="canvas-node-group-count">
+          {childCount > 0 ? `${childCount} grouped item${childCount === 1 ? '' : 's'}` : 'Drop items nearby or select items first'}
+        </span>
       </div>
       <Handle type="source" position={Position.Bottom} />
     </div>

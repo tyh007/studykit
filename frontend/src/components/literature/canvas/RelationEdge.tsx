@@ -35,6 +35,9 @@ interface RelationEdgeData {
     relation_type?: string;
     content_json?: Record<string, any>;
   };
+  actions?: {
+    onDelete?: (edgeId: string) => void;
+  };
 }
 
 // We accept the loose React Flow EdgeProps shape and narrow `data` ourselves.
@@ -49,6 +52,7 @@ export default function RelationEdge(props: any) {
     targetPosition,
     data,
     label,
+    selected,
   } = props as EdgeProps & { data?: RelationEdgeData };
 
   const typed = (data ?? {}) as RelationEdgeData;
@@ -82,7 +86,7 @@ export default function RelationEdge(props: any) {
         path={edgePath}
         style={{
           stroke,
-          strokeWidth: isPaperRelation ? 2.5 : 1.75,
+          strokeWidth: selected ? (isPaperRelation ? 3.2 : 2.4) : (isPaperRelation ? 2.5 : 1.75),
           strokeDasharray: dashArray,
         }}
         interactionWidth={18}
@@ -90,7 +94,7 @@ export default function RelationEdge(props: any) {
       {edgeLabel && (
         <EdgeLabelRenderer>
           <div
-            className={`canvas-edge-label ${isPaperRelation ? 'is-paper-relation' : 'is-canvas-link'}`}
+            className={`canvas-edge-label ${isPaperRelation ? 'is-paper-relation' : 'is-canvas-link'} ${selected ? 'is-selected' : ''}`}
             style={{
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
@@ -100,6 +104,25 @@ export default function RelationEdge(props: any) {
           >
             {edgeLabelText}
           </div>
+          {selected && typed.actions?.onDelete && (
+            <button
+              type="button"
+              className="canvas-edge-delete"
+              style={{
+                position: 'absolute',
+                transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY + 28}px)`,
+                ['--edge-color' as string]: stroke,
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+                typed.actions?.onDelete?.(id);
+              }}
+              title="Delete connection"
+              aria-label="Delete selected connection"
+            >
+              Delete
+            </button>
+          )}
         </EdgeLabelRenderer>
       )}
     </>

@@ -37,6 +37,7 @@ function makeNode(): CanvasFlowNode {
       actions: {
         onContentChange: () => {},
         onContentPatch: () => {},
+        onStylePatch: () => {},
         onResize: () => {},
         onDelete: () => {},
       },

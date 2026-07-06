@@ -326,9 +326,10 @@ function LiteratureCanvasInner({ projectId }: Props) {
       handleAddGroup(getCanvasCenterPosition());
       return;
     }
-    const minX = Math.min(...selectedNodes.map((node) => node.position.x));
-    const minY = Math.min(...selectedNodes.map((node) => node.position.y));
-    handleAddGroup({ x: minX - 28, y: minY - 44 });
+    handleAddGroup(
+      undefined,
+      selectedNodes.map((node) => node.id)
+    );
   }, [selectedNodes, handleAddGroup, getCanvasCenterPosition]);
 
   const handleConnectorMode = useCallback(() => {
@@ -388,18 +389,36 @@ function LiteratureCanvasInner({ projectId }: Props) {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <CanvasToolbar
-        onImportPapers={handleImportProjectPapers}
-        onUploadPDF={() => fileInputRef.current?.click()}
-        onAddText={() => handleAddNode('text')}
-        onAddNote={() => handleAddNode('note')}
-        onAddQuestion={() => handleAddNode('question')}
-        onAddShape={() => handleAddNode('shape')}
-        onAddGroup={handleAddGroup}
-        onConnectorMode={handleConnectorMode}
-        onFitView={handleFitView}
-        disabled={!isReady}
-      />
+      <div className="canvas-topbar">
+        <div className="canvas-topbar-tools">
+          <CanvasToolbar
+            onImportPapers={handleImportProjectPapers}
+            onUploadPDF={() => fileInputRef.current?.click()}
+            onAddText={() => handleAddNode('text')}
+            onAddNote={() => handleAddNode('note')}
+            onAddQuestion={() => handleAddNode('question')}
+            onAddShape={() => handleAddNode('shape')}
+            onAddGroup={() => handleAddGroup(getCanvasCenterPosition())}
+            onConnectorMode={handleConnectorMode}
+            onFitView={handleFitView}
+            disabled={!isReady}
+          />
+        </div>
+        <div className="canvas-topbar-search">
+          <CanvasSearch nodes={nodes} disabled={!isReady} onFocusNode={handleFocusNode} />
+        </div>
+        <div className="canvas-topbar-scenes">
+          <CanvasSceneNavigator
+            scenes={scenes}
+            disabled={!isReady}
+            onAddScene={handleCreateScene}
+            onGoToScene={handleFocusScene}
+            onRenameScene={(sceneId, name) => handleUpdateScene(sceneId, { name })}
+            onReplaceScene={(sceneId) => handleUpdateScene(sceneId, { captureCurrentView: true })}
+            onDeleteScene={handleDeleteScene}
+          />
+        </div>
+      </div>
       <input
         ref={fileInputRef}
         type="file"
@@ -411,16 +430,6 @@ function LiteratureCanvasInner({ projectId }: Props) {
           event.target.value = '';
           if (files.length > 0) uploadFilesToCanvas(files, getCanvasCenterPosition());
         }}
-      />
-      <CanvasSearch nodes={nodes} disabled={!isReady} onFocusNode={handleFocusNode} />
-      <CanvasSceneNavigator
-        scenes={scenes}
-        disabled={!isReady}
-        onAddScene={handleCreateScene}
-        onGoToScene={handleFocusScene}
-        onRenameScene={(sceneId, name) => handleUpdateScene(sceneId, { name })}
-        onReplaceScene={(sceneId) => handleUpdateScene(sceneId, { captureCurrentView: true })}
-        onDeleteScene={handleDeleteScene}
       />
       <SelectionToolbar
         selectedNodes={selectedNodes}

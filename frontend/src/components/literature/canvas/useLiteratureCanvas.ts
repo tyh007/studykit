@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  applyNodeChanges,
   useNodesState,
   useEdgesState,
   useReactFlow,
@@ -16,6 +17,7 @@ import type {
 } from '../../../types';
 import type { CanvasFlowNode, CanvasFlowEdge } from './canvas-types';
 import { debounce } from './canvas-utils';
+import { getBoundsForNodes, getGroupChildIds, isTrueGroupNode } from './group-utils';
 
 const VIEWPORT_DEBOUNCE_MS = 1000;
 const CONTENT_DEBOUNCE_MS = 600;
@@ -32,7 +34,7 @@ export function useLiteratureCanvas(projectId: string) {
   const [openPaper, setOpenPaper] = useState<LiteraturePaper | null>(null);
   const { fitView, getViewport, screenToFlowPosition, setCenter, setViewport } = useReactFlow();
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<CanvasFlowNode>([]);
+  const [nodes, setNodes] = useNodesState<CanvasFlowNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<CanvasFlowEdge>([]);
 
   // Per-node pending content buffers (so debounced PATCHes don't lose typing)
@@ -118,6 +120,7 @@ export function useLiteratureCanvas(projectId: string) {
         const buildNodeActions = () => ({
           onContentChange: (nodeId: string, text: string) => handleContentChange(nodeId, text),
           onContentPatch: (nodeId: string, patch: Record<string, any>) => handleContentPatch(nodeId, patch),
+          onStylePatch: (nodeId: string, patch: Record<string, any>) => handleStylePatch(nodeId, patch),
           onResize: (nodeId: string, width: number, height: number) => handleResizeNode(nodeId, width, height),
           onDelete: (nodeId: string) => handleDeleteNode(nodeId),
           onOpenPaper: (paper: LiteraturePaper) => setOpenPaper(paper),
@@ -187,7 +190,46 @@ export function useLiteratureCanvas(projectId: string) {
   // ---- Drag stop: PATCH x/y (only on dragging === false change) ----
   const handleNodesChange = useCallback(
     (changes: NodeChange<CanvasFlowNode>[]) => {
-      onNodesChange(changes);
+      const childMoves: Array<{ id: string; x: number; y: number }> = [];
+      setNodes((curr) => {
+        const changedIds = new Set(
+          changes.flatMap((change) => ('id' in change ? [change.id] : []))
+        );
+        const next = applyNodeChanges(changes, curr);
+
+        for (const ch of changes) {
+          if (ch.type !== 'position' || !ch.position) continue;
+          const prevGroup = curr.find((node) => node.id === ch.id);
+          const nextGroup = next.find((node) => node.id === ch.id);
+          if (!prevGroup || !nextGroup || !isTrueGroupNode(prevGroup)) continue;
+
+          const dx = nextGroup.position.x - prevGroup.position.x;
+          const dy = nextGroup.position.y - prevGroup.position.y;
+          if (dx === 0 && dy === 0) continue;
+
+          const childIds = new Set(getGroupChildIds(prevGroup));
+          for (const node of next) {
+            if (!childIds.has(node.id) || changedIds.has(node.id)) continue;
+            node.position = {
+              x: node.position.x + dx,
+              y: node.position.y + dy,
+            };
+            node.data = {
+              ...node.data,
+              canvasNode: {
+                ...node.data.canvasNode,
+                x: node.position.x,
+                y: node.position.y,
+              },
+            };
+            if (ch.dragging === false) {
+              childMoves.push({ id: node.id, x: node.position.x, y: node.position.y });
+            }
+          }
+        }
+
+        return next;
+      });
       if (!canvasId) return;
       for (const ch of changes) {
         if (ch.type === 'position' && ch.dragging === false && ch.position) {
@@ -203,8 +245,14 @@ export function useLiteratureCanvas(projectId: string) {
             .catch((err) => console.warn('Node delete save failed:', err));
         }
       }
+      for (const child of childMoves) {
+        literatureCanvasApi
+          .updateNode(canvasId, child.id, { x: child.x, y: child.y })
+          .then(() => setLastSavedAt(Date.now()))
+          .catch((err) => console.warn('Grouped node move save failed:', err));
+      }
     },
-    [canvasId, onNodesChange, setEdges]
+    [canvasId, setEdges, setNodes]
   );
 
   const handleEdgesChange = useCallback(
@@ -274,6 +322,46 @@ export function useLiteratureCanvas(projectId: string) {
     [handleContentPatch]
   );
 
+  const handleStylePatch = useCallback(
+    (nodeId: string, patch: Record<string, any>) => {
+      if (!canvasId) return;
+      let nextStyle: Record<string, any> = {};
+      setNodes((curr) =>
+        curr.map((node) => {
+          if (node.id !== nodeId) return node;
+          const prev = (node.data.canvasNode.style_json as Record<string, any>) || {};
+          nextStyle = { ...prev, ...patch };
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              canvasNode: {
+                ...node.data.canvasNode,
+                style_json: nextStyle,
+              },
+            },
+          };
+        })
+      );
+      setSaving(true);
+      literatureCanvasApi
+        .updateNode(canvasId, nodeId, { style_json: nextStyle })
+        .then((updated) => {
+          setNodes((curr) =>
+            curr.map((node) =>
+              node.id === nodeId
+                ? { ...node, data: { ...node.data, canvasNode: updated } }
+                : node
+            )
+          );
+          setLastSavedAt(Date.now());
+        })
+        .catch((err) => console.warn('Style save failed:', err))
+        .finally(() => setSaving(false));
+    },
+    [canvasId, setNodes]
+  );
+
   const handleResizeNode = useCallback(
     (nodeId: string, width: number, height: number) => {
       if (!canvasId) return;
@@ -337,8 +425,11 @@ export function useLiteratureCanvas(projectId: string) {
           content_json: nodeType === 'question'
             ? { prompt: '', text: '', sources: [] }
             : nodeType === 'shape'
-              ? { label: 'Shape' }
+              ? { label: 'Text' }
               : { text: '' },
+          style_json: nodeType === 'shape'
+            ? { shape: 'rounded', fill: '#F8FAFC', stroke: '#7AA68A' }
+            : undefined,
         });
         const flowNode: CanvasFlowNode = {
           id: created.id,
@@ -352,6 +443,7 @@ export function useLiteratureCanvas(projectId: string) {
             actions: {
               onContentChange: (nodeId, text) => handleContentChange(nodeId, text),
               onContentPatch: (nodeId, patch) => handleContentPatch(nodeId, patch),
+              onStylePatch: (nodeId, patch) => handleStylePatch(nodeId, patch),
               onResize: (nodeId, width, height) => handleResizeNode(nodeId, width, height),
               onDelete: (nodeId) => handleDeleteNode(nodeId),
               onOpenPaper: (paper) => setOpenPaper(paper),
@@ -368,23 +460,33 @@ export function useLiteratureCanvas(projectId: string) {
         console.warn('Add node failed:', err);
       }
     },
-    // handleContentChange / handleDeleteNode captured via closure on next render; safe enough for toolbar action
+    // handleDeleteNode is declared later; these action closures are invoked after render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canvasId, getDefaultNodePosition, getViewport, setCenter]
+    [canvasId, getDefaultNodePosition, getViewport, handleContentChange, handleContentPatch, handleResizeNode, handleStylePatch, setCenter, setNodes]
   );
 
-  // ---- Add a group (visual frame) ----
-  const handleAddGroup = useCallback(async (position?: { x: number; y: number }) => {
+  // ---- Add a true group frame ----
+  const handleAddGroup = useCallback(async (position?: { x: number; y: number }, childNodeIds: string[] = []) => {
     if (!canvasId) return;
     try {
-      const pos = position ?? getDefaultNodePosition(360);
+      const childNodes = nodesRef.current.filter((node) => childNodeIds.includes(node.id) && node.type !== 'group');
+      const bounds = getBoundsForNodes(childNodes);
+      const pos = bounds
+        ? { x: bounds.minX - 28, y: bounds.minY - 44 }
+        : position ?? getDefaultNodePosition(360);
+      const width = bounds ? Math.max(260, bounds.width + 56) : 360;
+      const height = bounds ? Math.max(180, bounds.height + 72) : 240;
       const created = await literatureCanvasApi.createNode(canvasId, {
         node_type: 'group',
         x: pos.x,
         y: pos.y,
-        width: 360,
-        height: 240,
-        content_json: { label: 'Group' },
+        width,
+        height,
+        content_json: {
+          label: 'Group',
+          child_node_ids: childNodes.map((node) => node.id),
+          group_mode: 'true_group',
+        },
       });
       const flowNode: CanvasFlowNode = {
         id: created.id,
@@ -398,6 +500,7 @@ export function useLiteratureCanvas(projectId: string) {
           actions: {
             onContentChange: (nodeId, text) => handleContentChange(nodeId, text),
             onContentPatch: (nodeId, patch) => handleContentPatch(nodeId, patch),
+            onStylePatch: (nodeId, patch) => handleStylePatch(nodeId, patch),
             onResize: (nodeId, width, height) => handleResizeNode(nodeId, width, height),
             onDelete: (nodeId) => handleDeleteNode(nodeId),
             onOpenPaper: (paper) => setOpenPaper(paper),
@@ -413,8 +516,9 @@ export function useLiteratureCanvas(projectId: string) {
     } catch (err) {
       console.warn('Add group failed:', err);
     }
+    // handleDeleteNode is declared later; these action closures are invoked after render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvasId, getDefaultNodePosition, getViewport, setCenter]);
+  }, [canvasId, getDefaultNodePosition, getViewport, handleContentChange, handleContentPatch, handleResizeNode, handleStylePatch, setCenter, setNodes]);
 
   // ---- Import papers into canvas (server creates paper nodes in a grid) ----
   const handleImportPapers = useCallback(
@@ -443,6 +547,7 @@ export function useLiteratureCanvas(projectId: string) {
                 actions: {
                   onContentChange: (nodeId, text) => handleContentChange(nodeId, text),
                   onContentPatch: (nodeId, patch) => handleContentPatch(nodeId, patch),
+                  onStylePatch: (nodeId, patch) => handleStylePatch(nodeId, patch),
                   onResize: (nodeId, width, height) => handleResizeNode(nodeId, width, height),
                   onDelete: (nodeId) => handleDeleteNode(nodeId),
                   onOpenPaper: (paper) => setOpenPaper(paper),
@@ -456,8 +561,9 @@ export function useLiteratureCanvas(projectId: string) {
         console.warn('Import papers failed:', err);
       }
     },
+    // handleDeleteNode is declared later; these action closures are invoked after render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canvasId]
+    [canvasId, handleContentChange, handleContentPatch, handleResizeNode, handleStylePatch, setNodes]
   );
 
   // ---- Delete node (and connected edges) ----
@@ -735,6 +841,7 @@ export function useLiteratureCanvas(projectId: string) {
             actions: {
               onContentChange: (nodeId, t) => handleContentChange(nodeId, t),
               onContentPatch: (nodeId, patch) => handleContentPatch(nodeId, patch),
+              onStylePatch: (nodeId, patch) => handleStylePatch(nodeId, patch),
               onResize: (nodeId, width, height) => handleResizeNode(nodeId, width, height),
               onDelete: (nodeId) => handleDeleteNode(nodeId),
               onOpenPaper: (p) => setOpenPaper(p),
@@ -747,7 +854,7 @@ export function useLiteratureCanvas(projectId: string) {
         console.warn('createSummaryNote failed', err);
       }
     },
-    [canvasId, papersById, handleContentChange, handleContentPatch, handleDeleteNode]
+    [canvasId, papersById, handleContentChange, handleContentPatch, handleDeleteNode, handleResizeNode, handleStylePatch, setNodes]
   );
 
   // ---- Create a question/AI node from a prompt + answer, placed at position ----
@@ -785,6 +892,7 @@ export function useLiteratureCanvas(projectId: string) {
             actions: {
               onContentChange: (nodeId, t) => handleContentChange(nodeId, t),
               onContentPatch: (nodeId, patch) => handleContentPatch(nodeId, patch),
+              onStylePatch: (nodeId, patch) => handleStylePatch(nodeId, patch),
               onResize: (nodeId, width, height) => handleResizeNode(nodeId, width, height),
               onDelete: (nodeId) => handleDeleteNode(nodeId),
               onOpenPaper: (p) => setOpenPaper(p),
@@ -797,7 +905,7 @@ export function useLiteratureCanvas(projectId: string) {
         console.warn('Insert AI answer failed', err);
       }
     },
-    [canvasId, handleContentChange, handleContentPatch, handleDeleteNode, handleResizeNode]
+    [canvasId, handleContentChange, handleContentPatch, handleDeleteNode, handleResizeNode, handleStylePatch, setNodes]
   );
 
   return {

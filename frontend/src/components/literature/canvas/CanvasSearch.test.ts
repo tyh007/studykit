@@ -25,6 +25,8 @@ function makeNode(partial: Partial<CanvasFlowNode>): CanvasFlowNode {
       actions: {
         onContentChange: () => {},
         onContentPatch: () => {},
+        onStylePatch: () => {},
+        onResize: () => {},
         onDelete: () => {},
       },
     },
@@ -74,6 +76,7 @@ describe('buildCanvasSearchResults', () => {
             actions: {
               onContentChange: () => {},
               onContentPatch: () => {},
+              onStylePatch: () => {},
               onResize: () => {},
               onDelete: () => {},
             },
@@ -100,6 +103,7 @@ describe('buildCanvasSearchResults', () => {
             actions: {
               onContentChange: () => {},
               onContentPatch: () => {},
+              onStylePatch: () => {},
               onResize: () => {},
               onDelete: () => {},
             },

@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import RelationEdge from './RelationEdge'
 
@@ -59,5 +59,29 @@ describe('RelationEdge', () => {
 
     expect(screen.getByText('Contradicts')).toBeInTheDocument()
     expect(screen.getByTestId('edge-edge-2')).toHaveStyle({ stroke: '#ef4444' })
+  })
+
+  it('renders a delete affordance for selected edges', () => {
+    const onDelete = vi.fn()
+
+    render(
+      <svg>
+        <RelationEdge
+          {...baseProps}
+          selected
+          data={{
+            canvasEdge: {
+              edge_type: 'canvas',
+              content_json: { relation_type: 'link' },
+            },
+            actions: { onDelete },
+          }}
+        />
+      </svg>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete selected connection' }))
+    expect(onDelete).toHaveBeenCalledWith('edge-1')
+    expect(screen.getByTestId('edge-edge-1')).toHaveStyle({ strokeWidth: 2.4 })
   })
 })
