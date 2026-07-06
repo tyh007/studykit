@@ -484,29 +484,40 @@
   stroke-width: 1.5;
   stroke-dasharray: 4 3;
 }
-/* MiniMap: themed to match the Liquid Glass language. The cluster wrapper
-   handles positioning; we just style the inner xyflow element so it sits
-   flush inside its container. */
-.react-flow__minimap {
-  width: 100% !important;
-  height: 100% !important;
-  position: relative !important;
-  inset: auto !important;
-  border: none !important;
-  border-radius: var(--radius-sm, 6px) !important;
-  background: transparent !important;
-  overflow: hidden;
-}
-.react-flow__minimap svg {
+.canvas-minimap-svg {
   display: block;
   width: 100% !important;
   height: 100% !important;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
 }
-.react-flow__minimap-mask {
-  fill: rgba(28, 18, 22, 0.10);
+.canvas-minimap-svg.is-panning {
+  cursor: grabbing;
 }
-.react-flow__minimap-node {
+.canvas-minimap-bg {
+  fill: transparent;
+}
+.canvas-minimap-node {
   fill-opacity: 0.85;
+  stroke: var(--color-border, rgba(200, 160, 160, 0.26));
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.canvas-minimap-node-group {
+  fill-opacity: 0.24;
+  stroke-dasharray: 5 4;
+}
+.canvas-minimap-viewport {
+  fill: rgba(28, 18, 22, 0.10);
+  stroke: var(--color-text-secondary, #6b7280);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.canvas-minimap-empty {
+  fill: var(--color-text-muted, #9ca3af);
+  font-size: 18px;
+  font-weight: 600;
 }
 .canvas-edge-label {
   background: var(--edge-color, #64748b);

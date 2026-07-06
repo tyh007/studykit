@@ -471,7 +471,7 @@ function LiteratureCanvasInner({ projectId }: Props) {
         >
           <Background gap={20} size={1} />
         </ReactFlow>
-        <CanvasMinimapCluster disabled={!isReady} />
+        <CanvasMinimapCluster disabled={!isReady} nodes={nodes} />
         {isDraggingFiles && (
           <div className="literature-canvas-drop-overlay">
             Drop PDF to add as paper card

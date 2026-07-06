@@ -39,6 +39,14 @@ export function useLiteratureCanvas(projectId: string) {
 
   // Per-node pending content buffers (so debounced PATCHes don't lose typing)
   const contentBuffers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  useEffect(() => {
+    return () => {
+      for (const timeout of Object.values(contentBuffers.current)) {
+        clearTimeout(timeout);
+      }
+      contentBuffers.current = {};
+    };
+  }, [projectId]);
 
   // Refs used inside callbacks that should not re-create on every render
   const nodesRef = useRef<CanvasFlowNode[]>([]);
