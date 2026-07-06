@@ -6,6 +6,9 @@ export type PresetRelationType =
   | 'related'
   | 'method'
   | 'dataset'
+  | 'motivates'
+  | 'replicates'
+  | 'background'
   | 'link';
 
 export type RelationTypeId = PresetRelationType | 'custom';
@@ -21,6 +24,7 @@ export interface RelationKind {
   arrowEnd: ArrowSide;
   dashStyle: DashStyle;
   isPaperRelation: boolean;
+  description?: string;
 }
 
 export const RELATION_PRESETS: RelationKind[] = [
@@ -32,6 +36,7 @@ export const RELATION_PRESETS: RelationKind[] = [
     arrowEnd: 'single',
     dashStyle: 'solid',
     isPaperRelation: true,
+    description: 'References prior work',
   },
   {
     id: 'extends',
@@ -41,15 +46,7 @@ export const RELATION_PRESETS: RelationKind[] = [
     arrowEnd: 'single',
     dashStyle: 'solid',
     isPaperRelation: true,
-  },
-  {
-    id: 'contradicts',
-    label: 'Contradicts',
-    color: '#ef4444',
-    arrowStart: 'none',
-    arrowEnd: 'double',
-    dashStyle: 'solid',
-    isPaperRelation: true,
+    description: 'Builds on / improves',
   },
   {
     id: 'supports',
@@ -59,15 +56,47 @@ export const RELATION_PRESETS: RelationKind[] = [
     arrowEnd: 'single',
     dashStyle: 'solid',
     isPaperRelation: true,
+    description: 'Evidence for the claim',
   },
   {
-    id: 'related',
-    label: 'Related',
-    color: '#6b7280',
+    id: 'contradicts',
+    label: 'Contradicts',
+    color: '#ef4444',
+    arrowStart: 'none',
+    arrowEnd: 'double',
+    dashStyle: 'solid',
+    isPaperRelation: true,
+    description: 'Disputes the claim',
+  },
+  {
+    id: 'motivates',
+    label: 'Motivates',
+    color: '#0ea5e9',
     arrowStart: 'none',
     arrowEnd: 'single',
     dashStyle: 'dashed',
     isPaperRelation: true,
+    description: 'Inspired by / motivates',
+  },
+  {
+    id: 'background',
+    label: 'Background',
+    color: '#64748b',
+    arrowStart: 'none',
+    arrowEnd: 'single',
+    dashStyle: 'dotted',
+    isPaperRelation: true,
+    description: 'Context / background reading',
+  },
+  {
+    id: 'replicates',
+    label: 'Replicates',
+    color: '#14b8a6',
+    arrowStart: 'none',
+    arrowEnd: 'double',
+    dashStyle: 'dotted',
+    isPaperRelation: true,
+    description: 'Reproduces results',
   },
   {
     id: 'method',
@@ -77,6 +106,7 @@ export const RELATION_PRESETS: RelationKind[] = [
     arrowEnd: 'double',
     dashStyle: 'dotted',
     isPaperRelation: true,
+    description: 'Shares methodology',
   },
   {
     id: 'dataset',
@@ -86,15 +116,27 @@ export const RELATION_PRESETS: RelationKind[] = [
     arrowEnd: 'double',
     dashStyle: 'dotted',
     isPaperRelation: true,
+    description: 'Uses the same dataset',
+  },
+  {
+    id: 'related',
+    label: 'Related',
+    color: '#6b7280',
+    arrowStart: 'none',
+    arrowEnd: 'single',
+    dashStyle: 'dashed',
+    isPaperRelation: true,
+    description: 'Loosely related',
   },
   {
     id: 'link',
     label: 'Link',
-    color: '#64748b',
+    color: '#475569',
     arrowStart: 'none',
     arrowEnd: 'single',
     dashStyle: 'dashed',
     isPaperRelation: false,
+    description: 'Generic connection',
   },
 ];
 

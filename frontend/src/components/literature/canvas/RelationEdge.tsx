@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import {
-  BaseEdge,
   EdgeLabelRenderer,
   getBezierPath,
   type EdgeProps,
@@ -44,6 +43,69 @@ const SWATCH_COLORS = [
   '#0f172a',
 ];
 
+// Draw an arrow head as a filled triangle pointing in `dir` (unit vector).
+function ArrowHead({
+  tip,
+  dir,
+  size = 9,
+  color = 'currentColor',
+  double = false,
+}: {
+  tip: { x: number; y: number };
+  dir: { x: number; y: number };
+  size?: number;
+  color?: string;
+  double?: boolean;
+}) {
+  // Perpendicular vector for the base of the triangle.
+  const px = -dir.y;
+  const py = dir.x;
+  const back = size; // distance from tip to base
+  const half = size * 0.6; // half base width
+  const baseX = tip.x - dir.x * back;
+  const baseY = tip.y - dir.y * back;
+  const p1 = { x: baseX + px * half, y: baseY + py * half };
+  const p2 = { x: baseX - px * half, y: baseY - py * half };
+  const d1 = `M ${tip.x} ${tip.y} L ${p1.x} ${p1.y} L ${p2.x} ${p2.y} Z`;
+  if (!double) {
+    return (
+      <path
+        d={d1}
+        fill={color}
+        stroke={color}
+        strokeWidth={0.5}
+        strokeLinejoin="round"
+      />
+    );
+  }
+  // Double arrow: small chevron in front of the filled triangle
+  const chevronBack = size * 2.0;
+  const cb = {
+    x: tip.x - dir.x * chevronBack,
+    y: tip.y - dir.y * chevronBack,
+  };
+  const cp1 = { x: cb.x + px * half * 0.6, y: cb.y + py * half * 0.6 };
+  const cp2 = { x: cb.x - px * half * 0.6, y: cb.y - py * half * 0.6 };
+  return (
+    <g>
+      <path
+        d={d1}
+        fill={color}
+        stroke={color}
+        strokeWidth={0.5}
+        strokeLinejoin="round"
+      />
+      <path
+        d={`M ${cb.x} ${cb.y} L ${cp1.x} ${cp1.y} L ${cp2.x} ${cp2.y} Z`}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.2}
+        strokeLinejoin="round"
+      />
+    </g>
+  );
+}
+
 export default function RelationEdge(props: any) {
   const {
     id,
@@ -54,7 +116,6 @@ export default function RelationEdge(props: any) {
     sourcePosition,
     targetPosition,
     data,
-    label,
     selected,
   } = props as EdgeProps & { data?: RelationEdgeData };
 
@@ -69,15 +130,17 @@ export default function RelationEdge(props: any) {
     }
     return {
       id: 'link',
-      label: typeof label === 'string' ? label : 'Link',
+      label: 'Link',
       color: '#64748b',
       arrowStart: 'none',
       arrowEnd: 'single',
       dashStyle: 'dashed',
       isPaperRelation: false,
     };
-  }, [typed.canvasEdge, label]);
+  }, [typed.canvasEdge]);
 
+  // getBezierPath returns the bezier "d" string and the (labelX, labelY) midpoint
+  // in absolute SVG coordinates.
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -89,8 +152,43 @@ export default function RelationEdge(props: any) {
 
   const stroke = kind.color;
   const dashArray = DASH_PATTERNS[kind.dashStyle];
-  const startMarker = markerId(id, 'start', kind.arrowStart);
-  const endMarker = markerId(id, 'end', kind.arrowEnd);
+
+  // Compute arrow tips by trimming a few pixels off the source/target so the
+  // arrowhead doesn't sit underneath a node. We compute the direction along
+  // the bezier by sampling near the endpoint (cubic bezier derivative).
+  const arrowSize = 8;
+  const inset = 2; // how much to pull the arrow tip back from the node edge
+
+  // Derivative of cubic bezier at t: 3(1-t)^2 (P1-P0) + 6(1-t)t (P2-P1) + 3t^2 (P3-P2)
+  // For react-flow's bezier the control points are based on the position and
+  // handle side. Approximate direction at the end by using the segment from
+  // the last control point to the target.
+  function bezierDirAtEnd(): { x: number; y: number } {
+    // getBezierPath doesn't return control points in v12, so we approximate:
+    // The tangent at the target is roughly the direction from targetX,Y back
+    // toward the midpoint of the curve. Use the vector from (target - label).
+    const dx = targetX - labelX;
+    const dy = targetY - labelY;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    return { x: dx / len, y: dy / len };
+  }
+  function bezierDirAtStart(): { x: number; y: number } {
+    const dx = labelX - sourceX;
+    const dy = labelY - sourceY;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    return { x: dx / len, y: dy / len };
+  }
+
+  const endDir = bezierDirAtEnd();
+  const startDir = bezierDirAtStart();
+  const endTip = {
+    x: targetX - endDir.x * inset,
+    y: targetY - endDir.y * inset,
+  };
+  const startTip = {
+    x: sourceX + startDir.x * inset,
+    y: sourceY + startDir.y * inset,
+  };
 
   const commitLabelEdit = () => {
     const next = draftLabel.trim();
@@ -111,69 +209,46 @@ export default function RelationEdge(props: any) {
 
   return (
     <>
-      <svg style={{ position: 'absolute', width: 0, height: 0 }} aria-hidden>
-        <defs>
-          <marker
-            id={markerId(id, 'start', 'single')}
-            viewBox="0 0 10 10"
-            refX="9"
-            refY="5"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto-start-reverse"
-          >
-            <path d="M0 0 L10 5 L0 10 z" fill={stroke} />
-          </marker>
-          <marker
-            id={markerId(id, 'start', 'double')}
-            viewBox="0 0 12 10"
-            refX="11"
-            refY="5"
-            markerWidth="7"
-            markerHeight="7"
-            orient="auto-start-reverse"
-          >
-            <path d="M0 0 L10 5 L0 10" fill="none" stroke={stroke} strokeWidth="1.4" />
-            <path d="M4 0 L12 5 L4 10 z" fill={stroke} />
-          </marker>
-          <marker
-            id={markerId(id, 'end', 'single')}
-            viewBox="0 0 10 10"
-            refX="9"
-            refY="5"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto-start-reverse"
-          >
-            <path d="M0 0 L10 5 L0 10 z" fill={stroke} />
-          </marker>
-          <marker
-            id={markerId(id, 'end', 'double')}
-            viewBox="0 0 12 10"
-            refX="11"
-            refY="5"
-            markerWidth="7"
-            markerHeight="7"
-            orient="auto-start-reverse"
-          >
-            <path d="M0 0 L10 5 L0 10" fill="none" stroke={stroke} strokeWidth="1.4" />
-            <path d="M4 0 L12 5 L4 10 z" fill={stroke} />
-          </marker>
-        </defs>
-      </svg>
-
-      <BaseEdge
-        id={id}
-        path={edgePath}
-        markerStart={startMarker}
-        markerEnd={endMarker}
-        style={{
-          stroke,
-          strokeWidth: selected ? 2.6 : 2,
-          strokeDasharray: dashArray,
-        }}
-        interactionWidth={20}
-      />
+      <g
+        className={`react-flow__edge-pathgroup ${selected ? 'is-selected' : ''}`}
+        style={{ color: stroke }}
+      >
+        <path
+          d={edgePath}
+          fill="none"
+          stroke={stroke}
+          strokeWidth={selected ? 2.6 : 2}
+          strokeDasharray={dashArray}
+          strokeLinecap="round"
+          style={{ pointerEvents: 'stroke' }}
+        />
+        {/* Transparent interaction overlay so the line is easy to click. */}
+        <path
+          d={edgePath}
+          fill="none"
+          stroke="transparent"
+          strokeWidth={16}
+          style={{ cursor: 'pointer' }}
+        />
+        {kind.arrowStart !== 'none' && (
+          <ArrowHead
+            tip={startTip}
+            dir={startDir}
+            color={stroke}
+            size={arrowSize}
+            double={kind.arrowStart === 'double'}
+          />
+        )}
+        {kind.arrowEnd !== 'none' && (
+          <ArrowHead
+            tip={endTip}
+            dir={endDir}
+            color={stroke}
+            size={arrowSize}
+            double={kind.arrowEnd === 'double'}
+          />
+        )}
+      </g>
 
       <EdgeLabelRenderer>
         <div
@@ -194,6 +269,7 @@ export default function RelationEdge(props: any) {
             boxShadow: '0 2px 8px rgba(15, 23, 42, 0.18)',
             border: '1px solid color-mix(in srgb, #fff 45%, transparent)',
             cursor: 'pointer',
+            userSelect: 'none',
           }}
           title={kind.label}
           onDoubleClick={(event) => {
@@ -290,11 +366,6 @@ export default function RelationEdge(props: any) {
   );
 }
 
-function markerId(edgeId: string, side: 'start' | 'end', kind: ArrowSide): string | undefined {
-  if (kind === 'none') return undefined;
-  return `marker-${edgeId}-${side}-${kind}`;
-}
-
 function actionBtnStyle(color: string, isDelete = false): React.CSSProperties {
   return {
     background: isDelete ? color : 'var(--glass-liquid-floating, #fff)',
@@ -369,7 +440,9 @@ function EdgeStylePopover({ x, y, kind, onChange, onClose }: EdgeStylePopoverPro
               borderRadius: 4,
               background: swatch,
               border:
-                kind.color === swatch ? '2px solid currentColor' : '1px solid var(--color-border, #e5e7eb)',
+                kind.color === swatch
+                  ? '2px solid currentColor'
+                  : '1px solid var(--color-border, #e5e7eb)',
               cursor: 'pointer',
               padding: 0,
             }}

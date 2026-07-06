@@ -406,51 +406,87 @@ export function useLiteratureCanvas(projectId: string) {
       const isRemove = (id: string) =>
         changes.some((ch) => ch.type === 'remove' && 'id' in ch && ch.id === id);
 
+      // First pass: compute deltas from the position changes for true_groups.
+      // When a true_group is dragged, its children need to follow by the same
+      // delta. We collect the deltas here so the next pass can apply them.
+      const groupDeltas = new Map<string, { dx: number; dy: number }>();
+      for (const ch of changes) {
+        if (ch.type !== 'position' || !ch.position) continue;
+        const prev = (nodesRef.current as CanvasFlowNode[]).find((n) => n.id === ch.id);
+        if (!prev || !isTrueGroupNode(prev)) continue;
+        const dx = ch.position.x - prev.position.x;
+        const dy = ch.position.y - prev.position.y;
+        if (dx === 0 && dy === 0) continue;
+        groupDeltas.set(ch.id, { dx, dy });
+      }
+
       setNodes((curr) => {
         const changedIds = new Set(
           changes.flatMap((change) => ('id' in change ? [change.id] : []))
         );
-        const next = applyNodeChanges(changes, curr);
 
-        for (const ch of changes) {
-          if (ch.type !== 'position' || !ch.position) continue;
-          const prevGroup = curr.find((node) => node.id === ch.id);
-          const nextGroup = next.find((node) => node.id === ch.id);
-          if (!prevGroup || !nextGroup || !isTrueGroupNode(prevGroup)) continue;
-
-          const dx = nextGroup.position.x - prevGroup.position.x;
-          const dy = nextGroup.position.y - prevGroup.position.y;
-          if (dx === 0 && dy === 0) continue;
-
-          const childIds = new Set(getGroupChildIds(prevGroup));
-          for (const node of next) {
-            if (!childIds.has(node.id) || changedIds.has(node.id)) continue;
-            node.position = {
-              x: node.position.x + dx,
-              y: node.position.y + dy,
-            };
-            node.data = {
-              ...node.data,
-              canvasNode: {
-                ...node.data.canvasNode,
-                x: node.position.x,
-                y: node.position.y,
-              },
-            };
-            if (ch.dragging === false) {
-              childMoves.push({ id: node.id, x: node.position.x, y: node.position.y });
+        // Build a child-move map: childId -> { dx, dy } from any group delta
+        // that includes the child in its child_node_ids.
+        const childMove = new Map<string, { dx: number; dy: number }>();
+        for (const node of curr) {
+          if (node.type === 'group' || changedIds.has(node.id)) continue;
+          for (const [groupId, delta] of groupDeltas) {
+            const group = curr.find((n) => n.id === groupId);
+            if (!group) continue;
+            if (getGroupChildIds(group).includes(node.id)) {
+              childMove.set(node.id, delta);
+              break;
             }
           }
         }
 
-        for (const ch of changes) {
-          if (ch.type === 'position' && ch.dragging === false && ch.position) {
-            stopDragIds.push(ch.id);
+        // Apply changes via React Flow's reducer, then build an immutable
+        // result so that moved children get new object references (so
+        // React Flow's store notices and re-renders them).
+        const next = applyNodeChanges(changes, curr);
+        return next.map((node) => {
+          const delta = childMove.get(node.id);
+          if (!delta) return node;
+          const newX = node.position.x + delta.dx;
+          const newY = node.position.y + delta.dy;
+          const dragChange = changes.find(
+            (ch) =>
+              ch.type === 'position' &&
+              'id' in ch &&
+              ch.id === node.id &&
+              (ch as any).dragging === false
+          );
+          if (dragChange && (dragChange as any).position) {
+            childMoves.push({
+              id: node.id,
+              x: (dragChange as any).position.x,
+              y: (dragChange as any).position.y,
+            });
+          } else {
+            childMoves.push({ id: node.id, x: newX, y: newY });
           }
-        }
-
-        return next;
+          return {
+            ...node,
+            position: { x: newX, y: newY },
+            data: {
+              ...node.data,
+              canvasNode: {
+                ...node.data.canvasNode,
+                x: newX,
+                y: newY,
+              },
+            },
+          };
+        });
       });
+
+      // Collect ids that finished dragging (for membership refit/z-index)
+      for (const ch of changes) {
+        if (ch.type === 'position' && ch.dragging === false && ch.position) {
+          stopDragIds.push(ch.id);
+        }
+      }
+
       if (!canvasId) return;
       for (const ch of changes) {
         if (ch.type === 'position' && ch.dragging === false && ch.position) {

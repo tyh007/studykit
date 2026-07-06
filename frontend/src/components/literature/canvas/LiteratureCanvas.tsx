@@ -45,7 +45,7 @@ interface Props {
 
 const defaultEdgeOptions: DefaultEdgeOptions = {
   type: 'relation',
-  style: { stroke: '#9ca3af', strokeWidth: 1.5 },
+  style: { strokeWidth: 2 },
 };
 
 function LiteratureCanvasInner({ projectId }: Props) {

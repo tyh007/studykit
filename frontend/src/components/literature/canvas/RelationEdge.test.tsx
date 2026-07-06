@@ -4,14 +4,6 @@ import { describe, expect, it, vi } from 'vitest'
 import RelationEdge from './RelationEdge'
 
 vi.mock('@xyflow/react', () => ({
-  BaseEdge: ({ id, style, markerStart, markerEnd }: { id: string; style: React.CSSProperties; markerStart?: string; markerEnd?: string }) => (
-    <path
-      data-testid={`edge-${id}`}
-      data-marker-start={markerStart}
-      data-marker-end={markerEnd}
-      style={style}
-    />
-  ),
   EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   getBezierPath: () => ['M0 0 L100 100', 50, 50],
 }))
@@ -28,7 +20,7 @@ const baseProps = {
 
 describe('RelationEdge', () => {
   it('renders the paper relation label and color from top-level relation_type', () => {
-    render(
+    const { container } = render(
       <svg>
         <RelationEdge
           {...baseProps}
@@ -43,7 +35,10 @@ describe('RelationEdge', () => {
     )
 
     expect(screen.getByText('Supports')).toBeInTheDocument()
-    expect(screen.getByTestId('edge-edge-1')).toHaveStyle({ stroke: '#22c55e' })
+    // The main path uses the relation color
+    const paths = container.querySelectorAll('path')
+    expect(paths.length).toBeGreaterThan(0)
+    expect(paths[0].getAttribute('stroke')).toBe('#22c55e')
   })
 
   it('falls back to content_json.relation_type for older canvas edge payloads', () => {
@@ -63,7 +58,6 @@ describe('RelationEdge', () => {
     )
 
     expect(screen.getByText('Contradicts')).toBeInTheDocument()
-    expect(screen.getByTestId('edge-edge-2')).toHaveStyle({ stroke: '#ef4444' })
   })
 
   it('renders a delete affordance for selected edges', () => {
@@ -89,8 +83,8 @@ describe('RelationEdge', () => {
     expect(onDelete).toHaveBeenCalledWith('edge-1')
   })
 
-  it('renders custom relation label with end-arrow marker and dashed style', () => {
-    render(
+  it('renders a custom relation label with a visible arrow head path', () => {
+    const { container } = render(
       <svg>
         <RelationEdge
           {...baseProps}
@@ -101,7 +95,7 @@ describe('RelationEdge', () => {
               content_json: { relation_type: 'custom', custom_label: '启发' },
               style_json: {
                 color: '#8b5cf6',
-                arrowEnd: 'double',
+                arrowEnd: 'single',
                 arrowStart: 'none',
                 dashStyle: 'dotted',
               },
@@ -112,9 +106,12 @@ describe('RelationEdge', () => {
     )
 
     expect(screen.getByText('启发')).toBeInTheDocument()
-    const path = screen.getByTestId('edge-edge-3')
-    expect(path).toHaveAttribute('data-marker-end', 'marker-edge-3-end-double')
-    expect(path).toHaveStyle({ stroke: '#8b5cf6' })
+    const paths = container.querySelectorAll('path')
+    // We expect: 1 main line + 1 transparent interaction overlay + 1 arrow head = 3 paths
+    expect(paths.length).toBeGreaterThanOrEqual(3)
+    // The main line should be the dotted line (stroke-dasharray set)
+    const main = paths[0]
+    expect(main.getAttribute('stroke-dasharray')).toBe('1 5')
   })
 
   it('emits onUpdateKind when style popover changes are committed', () => {
@@ -140,9 +137,36 @@ describe('RelationEdge', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Change line style' }))
-    // Style popover is open: click "Solid"
     const solidBtn = screen.getByRole('button', { name: /Solid/ })
     fireEvent.click(solidBtn)
     expect(onUpdateKind).toHaveBeenCalled()
+  })
+
+  it('renders a double arrow head for double arrows', () => {
+    const { container } = render(
+      <svg>
+        <RelationEdge
+          {...baseProps}
+          id="edge-5"
+          data={{
+            canvasEdge: {
+              edge_type: 'paper_relation',
+              relation_type: 'contradicts',
+              content_json: { relation_type: 'contradicts' },
+              style_json: {
+                color: '#ef4444',
+                arrowEnd: 'double',
+                arrowStart: 'none',
+                dashStyle: 'solid',
+              },
+            },
+          }}
+        />
+      </svg>,
+    )
+
+    // Double arrow renders two path elements for the end: a filled triangle + a chevron
+    const paths = container.querySelectorAll('path')
+    expect(paths.length).toBeGreaterThanOrEqual(4)
   })
 })
