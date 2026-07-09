@@ -2,7 +2,6 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   EdgeLabelRenderer,
   getBezierPath,
-  useReactFlow,
   type EdgeProps,
 } from '@xyflow/react';
 import {
@@ -103,7 +102,6 @@ export default function RelationEdge(props: any) {
   } = props as EdgeProps & { data?: RelationEdgeData };
 
   const typed = (data ?? {}) as RelationEdgeData;
-  const { flowToScreenPosition } = useReactFlow();
   const [pickerPos, setPickerPos] = useState<{ x: number; y: number } | null>(null);
   const [editingLabel, setEditingLabel] = useState(false);
   const [draftLabel, setDraftLabel] = useState<string>('');
@@ -176,11 +174,11 @@ export default function RelationEdge(props: any) {
   const openPicker = useCallback(
     (event?: React.MouseEvent) => {
       if (event) event.stopPropagation();
-      // Position picker below the label, in screen coordinates.
-      const screen = flowToScreenPosition({ x: labelX, y: labelY + 48 });
-      setPickerPos({ x: screen.x, y: screen.y });
+      // Position picker in flow space below the label. The viewer's CSS
+      // transform takes care of mapping flow-space to screen-space.
+      setPickerPos({ x: labelX, y: labelY + 60 });
     },
-    [flowToScreenPosition, labelX, labelY]
+    [labelX, labelY]
   );
 
   const closePicker = useCallback(() => {
@@ -376,6 +374,7 @@ export default function RelationEdge(props: any) {
             initialKind={kind}
             bothPaper={true}
             mode="edit"
+            positioning="absolute-flow"
           />
         )}
       </EdgeLabelRenderer>

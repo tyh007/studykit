@@ -3,17 +3,19 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import RelationEdge from './RelationEdge'
 
-const flowToScreenPosition = vi.fn(({ x, y }: { x: number; y: number }) => ({ x, y }))
-
 vi.mock('@xyflow/react', () => ({
   EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   getBezierPath: () => ['M0 0 L100 100', 50, 50],
-  useReactFlow: () => ({ flowToScreenPosition }),
 }))
 
 vi.mock('./RelationTypeMenu', () => ({
-  default: ({ onCancel }: { onCancel: () => void }) => (
-    <div data-testid="relation-picker">
+  default: ({ onCancel, positioning, position }: { onCancel: () => void; positioning?: string; position?: { x: number; y: number } }) => (
+    <div
+      data-testid="relation-picker"
+      data-positioning={positioning}
+      data-x={position?.x}
+      data-y={position?.y}
+    >
       <button onClick={onCancel}>close-picker</button>
     </div>
   ),
@@ -143,13 +145,7 @@ describe('RelationEdge', () => {
     expect(screen.getByTestId('relation-picker')).toBeInTheDocument()
   })
 
-  it('uses flowToScreenPosition to place the picker at the label', () => {
-    flowToScreenPosition.mockClear()
-    flowToScreenPosition.mockImplementation(({ x, y }: { x: number; y: number }) => ({
-      x: x * 2,
-      y: y * 3,
-    }))
-
+  it('places the picker in flow space below the label and uses absolute positioning', () => {
     render(
       <svg>
         <RelationEdge
@@ -167,8 +163,11 @@ describe('RelationEdge', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Change relation' }))
-    // getBezierPath returns labelX=50, labelY=50; we offset by +48 in y.
-    expect(flowToScreenPosition).toHaveBeenCalledWith({ x: 50, y: 50 + 48 })
+    const picker = screen.getByTestId('relation-picker')
+    // getBezierPath returns labelX=50, labelY=50; we offset by +60 in y.
+    expect(picker.getAttribute('data-x')).toBe('50')
+    expect(picker.getAttribute('data-y')).toBe('110')
+    expect(picker.getAttribute('data-positioning')).toBe('absolute-flow')
   })
 
   it('renders a custom relation label with a visible arrow head path', () => {

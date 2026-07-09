@@ -17,6 +17,15 @@ interface Props {
   bothPaper?: boolean;
   /** 'create' shows Apply/Cancel; 'edit' shows Done/Reset. */
   mode?: 'create' | 'edit';
+  /**
+   * How to position the menu:
+   * - 'fixed-screen': `position: fixed` with screen-pixel left/top (used when
+   *   the menu is rendered at the document root, e.g. on connection create).
+   * - 'absolute-flow': `position: absolute` with `transform: translate` using
+   *   flow-space coordinates (used when the menu is rendered inside a
+   *   transformed viewport such as `<EdgeLabelRenderer />`).
+   */
+  positioning?: 'fixed-screen' | 'absolute-flow';
 }
 
 const SWATCH_COLORS = [
@@ -39,6 +48,7 @@ export default function RelationTypeMenu({
   initialKind = DEFAULT_RELATION,
   bothPaper = true,
   mode = 'create',
+  positioning = 'fixed-screen',
 }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [kind, setKind] = useState<RelationKind>(initialKind);
@@ -106,15 +116,27 @@ export default function RelationTypeMenu({
   return (
     <div
       ref={ref}
-      className="relation-type-menu"
+      className="relation-type-menu nopan"
       role="dialog"
       aria-label="Relation type"
-      style={{
-        position: 'fixed',
-        left: position.x,
-        top: position.y,
-        zIndex: 80,
-      }}
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+      style={
+        positioning === 'absolute-flow'
+          ? {
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              transform: `translate(${position.x}px, ${position.y}px)`,
+              zIndex: 80,
+            }
+          : {
+              position: 'fixed',
+              left: position.x,
+              top: position.y,
+              zIndex: 80,
+            }
+      }
     >
       {bothPaper && (
         <>
