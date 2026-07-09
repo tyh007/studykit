@@ -18,6 +18,7 @@ const literatureCustomFieldsRoutes = require('./routes/literature-custom-fields'
 const paperNotesRoutes = require('./routes/paper-notes');
 const paperRelationsRoutes = require('./routes/paper-relations');
 const literatureAIRoutes = require('./routes/literature-ai');
+const literatureCanvasRoutes = require('./routes/literature-canvas');
 const paperAnnotationsRoutes = require('./routes/paper-annotations');
 const zoteroRoutes = require('./routes/zotero');
 const citationsRoutes = require('./routes/citations');
@@ -130,6 +131,7 @@ app.use('/api/literature/custom-fields', authenticateToken, literatureCustomFiel
 app.use('/api/literature/paper-notes', authenticateToken, paperNotesRoutes);
 app.use('/api/literature/paper-relations', authenticateToken, paperRelationsRoutes);
 app.use('/api/literature/ai', authenticateToken, literatureAIRoutes);
+app.use('/api/literature/canvas', authenticateToken, literatureCanvasRoutes);
 app.use('/api/zotero', authenticateToken, zoteroRoutes);
 app.use('/api/citations', authenticateToken, citationsRoutes);
 app.use('/api/reading-lists', authenticateToken, readingListsRoutes);

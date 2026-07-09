@@ -96,6 +96,56 @@ async function migrateDatabase(pool) {
     }
   }
 
+  // Check and create Literature Canvas tables
+  const canvasTables = [
+    'literature_canvases',
+    'literature_canvas_nodes',
+    'literature_canvas_edges',
+    'literature_canvas_scenes',
+  ];
+  for (const table of canvasTables) {
+    const exists = await pool.query(
+      'SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = $1)',
+      [table]
+    );
+    if (!exists.rows[0].exists) {
+      console.log(`📦 Creating missing table: ${table}...`);
+      const schemaPath = path.join(__dirname, 'schema.sql');
+      const schema = fs.readFileSync(schemaPath, 'utf8');
+      const regex = new RegExp(`CREATE TABLE IF NOT EXISTS ${table}\\s*\\([\\s\\S]+?\\);`, '');
+      const match = schema.match(regex);
+      if (match) {
+        await pool.query(match[0]);
+        console.log(`✅ Created table: ${table}`);
+      }
+    }
+  }
+
+  // Canvas indexes (idempotent thanks to IF NOT EXISTS in schema)
+  const canvasIndexes = [
+    'idx_lit_canvases_project',
+    'idx_lit_canvas_nodes_canvas',
+    'idx_lit_canvas_nodes_ref',
+    'idx_lit_canvas_edges_canvas',
+    'idx_lit_canvas_scenes_canvas',
+  ];
+  for (const idx of canvasIndexes) {
+    const exists = await pool.query(
+      'SELECT EXISTS (SELECT FROM pg_indexes WHERE indexname = $1)',
+      [idx]
+    );
+    if (!exists.rows[0].exists) {
+      const schemaPath = path.join(__dirname, 'schema.sql');
+      const schema = fs.readFileSync(schemaPath, 'utf8');
+      const regex = new RegExp(`CREATE INDEX IF NOT EXISTS ${idx}[\\s\\S]+?;`, '');
+      const match = schema.match(regex);
+      if (match) {
+        await pool.query(match[0]);
+        console.log(`✅ Created index: ${idx}`);
+      }
+    }
+  }
+
   // Check for new columns on literature_papers
   const newLitColumns = [
     { name: 'storage_key', type: 'TEXT' },

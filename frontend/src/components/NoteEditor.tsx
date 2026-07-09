@@ -2,7 +2,7 @@ import React, { useEffect, useCallback, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-import { LinkIcon, UnlinkIcon, CiteIcon } from './ui/Icons';
+import { LinkIcon, UnlinkIcon, CiteIcon, Heading1Icon, Heading2Icon, Heading3Icon, BoldIcon, ItalicIcon, UnderlineIcon, HighlightClearIcon, BulletListIcon, OrderedListIcon, QuoteIcon, EquationIcon, ImageIcon, UndoIcon, RedoIcon, SaveIcon, KeyboardIcon, CodeIcon } from './ui/Icons';
 import Underline from '@tiptap/extension-underline';
 import Highlight from '@tiptap/extension-highlight';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
@@ -36,6 +36,16 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
   const isSavingRef = useRef(false);
   const lastSavedJsonRef = useRef<string>('');
 
+  // Save status: 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
+  // 'dirty'  = has unsaved local edits, no save in flight
+  // 'saving' = a save is currently in flight
+  // 'saved'  = last save succeeded, content is in sync
+  // 'error'  = last save attempt failed
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'dirty' | 'saving' | 'saved' | 'error'>('idle');
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  // Tick every 30s so "Saved Xs ago" stays fresh
+  const [, setStatusTick] = useState(0);
+
   // Annotation anchoring (uses stable paragraph index, not block ID)
   const [activeParagraphIndex, setActiveParagraphIndex] = useState<number | null>(null);
   const [activeParagraphPreview, setActiveParagraphPreview] = useState('');
@@ -65,6 +75,13 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
   const [linkUrl, setLinkUrl] = useState('');
   const [linkText, setLinkText] = useState('');
   const [resultMessage, setResultMessage] = useState<string | null>(null);
+
+  // Hold the latest editor + lectureId/moduleId in refs so global listeners
+  // (visibilitychange, beforeunload) can flush even if the component is
+  // unmounted. This is what fixes "write -> switch lecture -> come back = lost".
+  const editorRef = useRef<any>(null);
+  const lectureIdRef = useRef<string>('');
+  const moduleIdRef = useRef<string | null>('');
 
   const editor = useEditor({
     extensions: [
@@ -123,16 +140,29 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
       },
     },
     onUpdate: ({ editor }) => {
+      editorRef.current = editor;
+      if (suppressNextUpdateRef.current) {
+        suppressNextUpdateRef.current = false;
+        return;
+      }
+      setSaveStatus('dirty');
       debouncedSave(editor);
     },
   });
 
   const debouncedSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const usedCitationIdsRef = useRef<string[]>([]);
+  // When set, the next onUpdate is ignored — used to suppress autosave
+  // immediately after setContent() during note loading.
+  const suppressNextUpdateRef = useRef(false);
 
+  // debouncedSave is defined as a ref to avoid circular-dependency issues
+  // with saveBlocks (declared further down). We assign it inside a useEffect
+  // so it always calls the latest saveBlocks.
+  const debouncedSaveRef2 = useRef<(editor: any) => void>(() => {});
   const debouncedSave = useCallback((editor: any) => {
     if (debouncedSaveRef.current) clearTimeout(debouncedSaveRef.current);
-    debouncedSaveRef.current = setTimeout(() => saveBlocks(editor), 800);
+    debouncedSaveRef.current = setTimeout(() => debouncedSaveRef2.current(editor), 1500);
   }, []);
 
   // Track cursor position to determine which paragraph the user is in
@@ -170,46 +200,39 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
 
     const loadNotes = async () => {
       try {
-        // First try to load from server (PostgreSQL)
-        let blocks: NoteBlock[] = [];
-        try {
-          const token = getAuthToken();
-          if (token) {
-            const response = await fetch(`/api/note-blocks?lecture_id=${lectureId}`, {
-              headers: { 'Authorization': `Bearer ${token}` },
-            });
-            if (response.ok) {
-              const serverBlocks = await response.json();
-              if (serverBlocks && serverBlocks.length > 0) {
-                blocks = serverBlocks;
-                // Sync server blocks to local Dexie for offline access
-                const existingLocal = await db.noteBlocks
-                  .where('lecture_id')
-                  .equals(lectureId)
-                  .filter((b: any) => !b.deleted_at)
-                  .toArray();
-                // Clear old local blocks for this lecture
-                for (const b of existingLocal) {
-                  await db.noteBlocks.update(b.id, { deleted_at: new Date().toISOString() });
-                }
-                // Save server blocks locally
-                for (const block of blocks) {
-                  await db.noteBlocks.add(block as any);
-                }
-              }
-            }
-          }
-        } catch (err) {
-          console.warn('Failed to load from server, falling back to local:', err);
-        }
-
-        // If no server data, load from local Dexie
-        if (blocks.length === 0) {
-          blocks = await db.noteBlocks
+        // Local-first: prefer local Dexie (the source of truth for this
+        // device) over the server. The server is only used to seed an empty
+        // local DB on first visit or after a full data wipe. This avoids
+        // a race where a fire-and-forget keepalive save (from a recent
+        // lecture switch) hasn't reached the server yet, and the server
+        // returns stale content.
+        let blocks: NoteBlock[] = await db.noteBlocks
           .where('lecture_id')
           .equals(lectureId)
           .filter((b) => !b.deleted_at && b.block_type !== 'cue' && b.block_type !== 'summary' && b.block_type !== 'annotation')
           .sortBy('sort_order');
+
+        // If local is empty, try the server to seed the DB.
+        if (blocks.length === 0) {
+          try {
+            const token = getAuthToken();
+            if (token) {
+              const response = await fetch(`/api/note-blocks?lecture_id=${lectureId}`, {
+                headers: { 'Authorization': `Bearer ${token}` },
+              });
+              if (response.ok) {
+                const serverBlocks: NoteBlock[] = await response.json();
+                if (serverBlocks && serverBlocks.length > 0) {
+                  blocks = serverBlocks;
+                  for (const block of blocks) {
+                    try { await db.noteBlocks.put(block as any); } catch {}
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            console.warn('Failed to seed from server (staying local-only):', err);
+          }
         }
 
         if (cancelled) return;
@@ -234,12 +257,17 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
 
         if (blocks.length > 0) {
           const doc = blocksToProseMirror(blocks);
+          suppressNextUpdateRef.current = true;
           editor.commands.setContent(doc);
           lastSavedJsonRef.current = JSON.stringify(doc);
         } else {
+          suppressNextUpdateRef.current = true;
           editor.commands.setContent('');
           lastSavedJsonRef.current = '';
         }
+        // After loading, the editor content matches the persisted state.
+        setSaveStatus('saved');
+        setLastSavedAt(Date.now());
       } catch (err) {
         console.error('Failed to load notes:', err);
       }
@@ -277,35 +305,47 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
     return () => window.removeEventListener('studykit:annotation:changed', reload);
   }, [lectureId]);
 
-  // Save ALL blocks for the lecture (replace all non-cue/non-summary/non-annotation blocks)
-  const saveBlocks = useCallback(async (editor: any) => {
-    if (!lectureId || !selectedModuleId || isSavingRef.current) return;
-    if (!editor) return;
+  // Save ALL blocks for the lecture (replace all non-cue/non-summary/non-annotation blocks).
+  // Reads lectureId/moduleId from refs so it can be called from global listeners
+  // (visibilitychange, beforeunload) where the closure-captured values are stale.
+  //
+  // `silent` — when true, the server call uses navigator.sendBeacon (best-effort,
+  // no awaiting, no console noise) instead of fetch. Used for page-unload paths
+  // where the browser will tear down the request before fetch can complete.
+  const saveBlocks = useCallback(async (editorOverride?: any, silent = false) => {
+    const ed = editorOverride || editorRef.current;
+    const lid = lectureIdRef.current;
+    const mid = moduleIdRef.current;
+    if (!ed || !lid || !mid) return;
+    if (isSavingRef.current) return;
 
-    const json = editor.getJSON();
+    const json = ed.getJSON();
     const jsonStr = JSON.stringify(json);
     if (jsonStr === lastSavedJsonRef.current) return;
 
     isSavingRef.current = true;
+    setSaveStatus('saving');
     useStore.getState().setSyncStatus('pending');
 
     try {
-      // Soft-delete all existing non-cue/non-summary/non-annotation blocks
+      // Diff-based save: figure out which existing blocks survive, which are
+      // gone, and which are new. This avoids the destructive "soft-delete
+      // everything then reinsert" path that races with concurrent saves.
       const existingBlocks = await db.noteBlocks
         .where('lecture_id')
-        .equals(lectureId)
+        .equals(lid)
         .filter((b) => !b.deleted_at && b.block_type !== 'cue' && b.block_type !== 'summary' && b.block_type !== 'annotation')
         .toArray();
-
-      const now = new Date().toISOString();
-      for (const block of existingBlocks) {
-        await db.noteBlocks.update(block.id, { deleted_at: now });
+      const existingByJson = new Map<string, NoteBlock>();
+      for (const b of existingBlocks) {
+        // Key by content signature so identical content from a previous save
+        // is reused instead of being churned.
+        const sig = `${b.block_type}::${JSON.stringify(b.content_json)}::${b.sort_order}`;
+        existingByJson.set(sig, b);
       }
 
-      // Create new blocks (without page association - notes are continuous)
-      const newBlocks = proseMirrorToBlocks(
-        json, lectureId, selectedModuleId, deviceId, now
-      );
+      const now = new Date().toISOString();
+      const newBlocks = proseMirrorToBlocks(json, lid, mid, deviceId, now);
 
       // Attach citation references from current session
       if (usedCitationIdsRef.current.length > 0) {
@@ -317,55 +357,196 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
         }
       }
 
+      // Compute survivors vs. dropped. A block survives if its content signature
+      // matches an existing block — we keep its id so external references
+      // (annotations, citations linked by block id) stay valid.
+      const newSigs = new Set<string>();
+      const survivingIds = new Set<string>();
       for (const block of newBlocks) {
-        await db.noteBlocks.add(block);
+        const sig = `${block.block_type}::${JSON.stringify(block.content_json)}::${block.sort_order}`;
+        newSigs.add(sig);
+        const match = existingByJson.get(sig);
+        if (match) {
+          block.id = match.id;        // reuse id
+          block.created_at = match.created_at;
+          block.version = (match.version || 1) + 1;
+          block.updated_at = now;
+          survivingIds.add(match.id);
+        }
       }
 
-      // Also save to backend PostgreSQL for persistence
-      try {
-        const token = getAuthToken();
-        if (token) {
-          await fetch('/api/note-blocks', {
+      // Soft-delete blocks that didn't survive
+      for (const b of existingBlocks) {
+        if (!survivingIds.has(b.id)) {
+          try { await db.noteBlocks.update(b.id, { deleted_at: now }); } catch {}
+        }
+      }
+
+      // Upsert all new blocks (idempotent)
+      for (const block of newBlocks) {
+        try { await db.noteBlocks.put(block); } catch {}
+      }
+
+      // Push to backend. Two paths:
+      //   - silent (page unloading / lecture change): fire the fetch in the
+      //     background WITHOUT awaiting. `await` is what surfaces "Failed to
+      //     fetch" during unload — the request is going out fine, but the
+      //     browser tears down the response channel before we can read it.
+      //     Dropping the await and adding `keepalive: true` lets the request
+      //     complete server-side even after the page is gone. If the payload
+      //     is too big for keepalive, the browser rejects synchronously and
+      //     we just rely on local Dexie (next session resyncs).
+      //   - normal: awaited fetch so we can surface real errors to the user.
+      const payload = JSON.stringify(newBlocks.map(b => ({
+        id: b.id,
+        lecture_id: b.lecture_id,
+        module_id: b.module_id,
+        block_type: b.block_type,
+        content_json: b.content_json,
+        source_links_json: b.source_links_json || {},
+        sort_order: b.sort_order,
+        created_by_device_id: b.created_by_device_id,
+        version: b.version || 1,
+      })));
+
+      const token = getAuthToken();
+      if (token) {
+        if (silent) {
+          // Fire-and-forget. The catch is just to keep the promise chain
+          // silent — we don't care about the response, only that the request
+          // was sent. If it fails (offline, payload too big), the local Dexie
+          // write is the source of truth.
+          fetch('/api/note-blocks', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${token}`,
             },
-            body: JSON.stringify(newBlocks.map(b => ({
-              id: b.id,
-              lecture_id: b.lecture_id,
-              module_id: b.module_id,
-              block_type: b.block_type,
-              content_json: b.content_json,
-              source_links_json: b.source_links_json || {},
-              sort_order: b.sort_order,
-              created_by_device_id: b.created_by_device_id,
-              version: b.version || 1,
-            }))),
-          });
+            body: payload,
+            keepalive: true,
+          }).catch(() => { /* best-effort, ignore */ });
+        } else {
+          try {
+            const res = await fetch('/api/note-blocks', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+              },
+              body: payload,
+            });
+            if (!res.ok) {
+              console.warn(`Server save returned ${res.status} (will resync from local on next load)`);
+            }
+          } catch (err: any) {
+            // Genuine network error (offline, DNS, etc.). Local Dexie has the
+            // data; next session resyncs. Use console.debug so it doesn't
+            // fill the console.
+            console.debug('Server save failed (will resync from local):', err?.message || err);
+          }
         }
-      } catch (err) {
-        console.warn('Failed to save blocks to server (offline?):', err);
-        // Silent fail — local save succeeded, will sync later
       }
 
       setNoteBlocks(newBlocks);
       lastSavedJsonRef.current = jsonStr;
+      setSaveStatus('saved');
+      setLastSavedAt(Date.now());
       useStore.getState().setSyncStatus('synced');
       window.dispatchEvent(new CustomEvent('studykit:notes:saved'));
     } catch (err) {
       console.error('Save failed:', err);
+      setSaveStatus('error');
       useStore.getState().setSyncStatus('error');
     } finally {
       isSavingRef.current = false;
     }
-  }, [lectureId, selectedModuleId, deviceId]);
+  }, [deviceId]);
 
-  // Cleanup
+  // Keep refs in sync with current props — used by global flush paths
+  useEffect(() => {
+    lectureIdRef.current = lectureId;
+    moduleIdRef.current = selectedModuleId;
+  }, [lectureId, selectedModuleId]);
+
+  useEffect(() => {
+    editorRef.current = editor;
+  }, [editor]);
+
+  // Wire the latest saveBlocks into the debounced dispatcher
+  useEffect(() => {
+    debouncedSaveRef2.current = (ed: any) => { void saveBlocks(ed); };
+  }, [saveBlocks]);
+
+  // Manual save: clears the debounce timer first so we don't double-save
+  const saveNow = useCallback(async () => {
+    if (debouncedSaveRef.current) {
+      clearTimeout(debouncedSaveRef.current);
+      debouncedSaveRef.current = null;
+    }
+    await saveBlocks();
+  }, [saveBlocks]);
+
+  // Ctrl/Cmd + S = manual save
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        saveNow();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [saveNow]);
+
+  // Immediate flush on lecture change / unmount. This is the fix for
+  // "write -> switch page -> come back = notes reverted".
+  // Silent: the component is about to unmount, so a server fetch would
+  // race with React's cleanup and surface as a "Failed to fetch" warning.
   useEffect(() => {
     return () => {
-      if (debouncedSaveRef.current) clearTimeout(debouncedSaveRef.current);
+      if (debouncedSaveRef.current) {
+        clearTimeout(debouncedSaveRef.current);
+        debouncedSaveRef.current = null;
+      }
+      // Fire-and-forget: must NOT be awaited, otherwise React warns about
+      // state updates on an unmounted component. saveBlocks is idempotent.
+      void saveBlocks(undefined, true);
     };
+  }, [lectureId, saveBlocks]);
+
+  // Immediate flush when the tab is hidden or the page is being unloaded.
+  // Silent for the same reason: the browser will tear down the request
+  // before fetch can complete, and we don't want console noise for a
+  // local-first write that already succeeded.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        if (debouncedSaveRef.current) {
+          clearTimeout(debouncedSaveRef.current);
+          debouncedSaveRef.current = null;
+        }
+        void saveBlocks(undefined, true);
+      }
+    };
+    const onBeforeUnload = () => {
+      if (debouncedSaveRef.current) {
+        clearTimeout(debouncedSaveRef.current);
+        debouncedSaveRef.current = null;
+      }
+      void saveBlocks(undefined, true);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+    };
+  }, [saveBlocks]);
+
+  // Tick the "Saved Xs ago" display every 30s
+  useEffect(() => {
+    const id = setInterval(() => setStatusTick((n) => n + 1), 30000);
+    return () => clearInterval(id);
   }, []);
 
   // Handles image file upload via API and inserts into editor
@@ -392,15 +573,15 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
   return (
     <div>
       <div role="toolbar" aria-label="Note formatting tools" style={{ marginBottom: '0.5rem', display: 'flex', gap: '0.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
-        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} title="Heading 1" aria-label="Heading 1" aria-pressed={editor.isActive('heading', { level: 1 })}>H1</button>
-        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} title="Heading 2" aria-label="Heading 2" aria-pressed={editor.isActive('heading', { level: 2 })}>H2</button>
-        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} title="Heading 3" aria-label="Heading 3" aria-pressed={editor.isActive('heading', { level: 3 })}>H3</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} title="Heading 1 (Ctrl+Alt+1)" aria-label="Heading 1" aria-pressed={editor.isActive('heading', { level: 1 })}><Heading1Icon size="sm" /></button>
+        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} title="Heading 2 (Ctrl+Alt+2)" aria-label="Heading 2" aria-pressed={editor.isActive('heading', { level: 2 })}><Heading2Icon size="sm" /></button>
+        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} title="Heading 3 (Ctrl+Alt+3)" aria-label="Heading 3" aria-pressed={editor.isActive('heading', { level: 3 })}><Heading3Icon size="sm" /></button>
         <span role="separator" aria-orientation="vertical" style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
-        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleBold().run()} title="Bold (Ctrl+B)" aria-label="Bold" aria-pressed={editor.isActive('bold')}><strong>B</strong></button>
-        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleItalic().run()} title="Italic (Ctrl+I)" aria-label="Italic" aria-pressed={editor.isActive('italic')}><em>I</em></button>
-        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleUnderline().run()} title="Underline (Ctrl+U)" aria-label="Underline" aria-pressed={editor.isActive('underline')}><span style={{ textDecoration: 'underline' }}>U</span></button>
+        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleBold().run()} title="Bold (Ctrl+B)" aria-label="Bold" aria-pressed={editor.isActive('bold')}><BoldIcon size="sm" /></button>
+        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleItalic().run()} title="Italic (Ctrl+I)" aria-label="Italic" aria-pressed={editor.isActive('italic')}><ItalicIcon size="sm" /></button>
+        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleUnderline().run()} title="Underline (Ctrl+U)" aria-label="Underline" aria-pressed={editor.isActive('underline')}><UnderlineIcon size="sm" /></button>
         <span className="highlight-colors" role="group" aria-label="Highlight colours">
-          <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleHighlight().run()} title="Remove highlight" aria-label="Remove highlight">🖍</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleHighlight().run()} title="Remove highlight" aria-label="Remove highlight"><HighlightClearIcon size="sm" /></button>
           <button className="hl-btn hl-yellow" onClick={() => editor.chain().focus().toggleHighlight({ color: '#fef08a' }).run()} title="Yellow highlight" aria-label="Yellow highlight" />
           <button className="hl-btn hl-green" onClick={() => editor.chain().focus().toggleHighlight({ color: '#bbf7d0' }).run()} title="Green highlight" aria-label="Green highlight" />
           <button className="hl-btn hl-blue" onClick={() => editor.chain().focus().toggleHighlight({ color: '#bfdbfe' }).run()} title="Blue highlight" aria-label="Blue highlight" />
@@ -409,12 +590,12 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
           <button className="hl-btn hl-purple" onClick={() => editor.chain().focus().toggleHighlight({ color: '#d8b4fe' }).run()} title="Purple highlight" aria-label="Purple highlight" />
         </span>
         <span role="separator" aria-orientation="vertical" style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
-        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleBulletList().run()} title="Bullet list" aria-label="Bullet list" aria-pressed={editor.isActive('bulletList')}>• List</button>
-        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleOrderedList().run()} title="Ordered list" aria-label="Ordered list" aria-pressed={editor.isActive('orderedList')}>1. List</button>
-        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleBlockquote().run()} title="Callout/quote" aria-label="Callout or quote block" aria-pressed={editor.isActive('blockquote')}>❝ Quote</button>
-        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleCodeBlock().run()} title="Code block" aria-label="Code block" aria-pressed={editor.isActive('codeBlock')}>{'</>'} Code</button>
-        <button className="btn btn-ghost btn-sm" onClick={() => { setEquationLatex(''); setShowEquationInput(true); }} title="Insert equation (LaTeX)" aria-label="Insert equation using LaTeX">∑ Equation</button>
-        <button className="btn btn-ghost btn-sm" onClick={() => { setImageUrl(''); setImageCaption(''); setShowImageInput(true); }} title="Insert image" aria-label="Insert image">🖼 Image</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleBulletList().run()} title="Bullet list (Ctrl+Shift+8)" aria-label="Bullet list" aria-pressed={editor.isActive('bulletList')}><BulletListIcon size="sm" /></button>
+        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleOrderedList().run()} title="Ordered list (Ctrl+Shift+7)" aria-label="Ordered list" aria-pressed={editor.isActive('orderedList')}><OrderedListIcon size="sm" /></button>
+        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleBlockquote().run()} title="Callout/quote" aria-label="Callout or quote block" aria-pressed={editor.isActive('blockquote')}><QuoteIcon size="sm" /></button>
+        <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleCodeBlock().run()} title="Code block (Ctrl+Alt+C)" aria-label="Code block" aria-pressed={editor.isActive('codeBlock')}><CodeIcon size="sm" /></button>
+        <button className="btn btn-ghost btn-sm" onClick={() => { setEquationLatex(''); setShowEquationInput(true); }} title="Insert equation (LaTeX)" aria-label="Insert equation using LaTeX"><EquationIcon size="sm" /></button>
+        <button className="btn btn-ghost btn-sm" onClick={() => { setImageUrl(''); setImageCaption(''); setShowImageInput(true); }} title="Insert image" aria-label="Insert image"><ImageIcon size="sm" /></button>
         <button
           className="btn btn-ghost btn-sm"
           onClick={() => {
@@ -439,11 +620,35 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
           title="Insert or remove link"
           aria-label="Insert or remove hyperlink"
           aria-pressed={editor?.isActive('link') ?? false}
-        >{editor?.isActive("link") ? <><UnlinkIcon size="sm" /> Unlink</> : <><LinkIcon size="sm" /> Link</>}</button>
+        >{editor?.isActive("link") ? <><UnlinkIcon size="sm" /> <span style={{ marginLeft: '0.25rem' }}>Unlink</span></> : <><LinkIcon size="sm" /> <span style={{ marginLeft: '0.25rem' }}>Link</span></>}</button>
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
-        <button className="btn btn-ghost btn-sm" onClick={() => setShowCitationPicker(true)} title="Insert citation" aria-label="Insert citation"><CiteIcon size="sm" /> Cite</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => setShowCitationPicker(true)} title="Insert citation" aria-label="Insert citation"><CiteIcon size="sm" /> <span style={{ marginLeft: '0.25rem' }}>Cite</span></button>
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
-        <button className="btn btn-ghost btn-sm" onClick={() => setShowShortcuts(true)} title="Keyboard shortcuts" aria-label="Show keyboard shortcuts">⌨</button>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => editor.chain().focus().undo().run()}
+          disabled={!editor.can().undo()}
+          title="Undo (Ctrl+Z)"
+          aria-label="Undo"
+        ><UndoIcon size="sm" /></button>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => editor.chain().focus().redo().run()}
+          disabled={!editor.can().redo()}
+          title="Redo (Ctrl+Shift+Z)"
+          aria-label="Redo"
+        ><RedoIcon size="sm" /></button>
+        <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={saveNow}
+          disabled={saveStatus === 'saving' || saveStatus === 'saved'}
+          title="Save now (Ctrl+S)"
+          aria-label="Save notes"
+        ><SaveIcon size="sm" /> <span style={{ marginLeft: '0.25rem' }}>{saveStatus === 'saving' ? 'Saving…' : 'Save'}</span></button>
+        <SaveStatusIndicator status={saveStatus} lastSavedAt={lastSavedAt} />
+        <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
+        <button className="btn btn-ghost btn-sm" onClick={() => setShowShortcuts(true)} title="Keyboard shortcuts" aria-label="Show keyboard shortcuts"><KeyboardIcon size="sm" /></button>
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
         {activeParagraphIndex !== null && (
           <AddAnnotationButton
@@ -705,7 +910,9 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
                     </div>
                   ) : (
                     <div>
-                      <p style={{ fontSize: '2rem', marginBottom: '0.5rem', opacity: 0.5 }}>🖼</p>
+                      <div style={{ marginBottom: '0.5rem', opacity: 0.5, display: 'flex', justifyContent: 'center' }}>
+                        <ImageIcon size="2xl" />
+                      </div>
                       <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>
                         Click to select an image, or drag & drop one here
                       </p>
@@ -831,7 +1038,8 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
               <span>Code block</span><span className="shortcut-key">⌘⌥C / Ctrl+Alt+C</span>
               <span>Undo</span><span className="shortcut-key">⌘Z / Ctrl+Z</span>
               <span>Redo</span><span className="shortcut-key">⌘⇧Z / Ctrl+Shift+Z</span>
-              <span>Save (local)</span><span className="shortcut-key">Auto-saves every 800ms</span>
+              <span>Save now</span><span className="shortcut-key">⌘S / Ctrl+S</span>
+              <span>Auto-save</span><span className="shortcut-key">every 1.5s, flushes on tab switch &amp; page close</span>
             </div>
             <div className="flex gap-2" style={{ justifyContent: 'flex-end', marginTop: '1rem' }}>
               <button className="btn" onClick={() => setShowShortcuts(false)}>Close</button>
@@ -1015,4 +1223,88 @@ function extractPlainText(node: ProsemirrorNode): string {
   if (node.text) return node.text;
   if (!node.content) return '';
   return node.content.map(extractPlainText).join(' ');
+}
+
+// ===== Save status indicator =====
+
+function SaveStatusIndicator({
+  status,
+  lastSavedAt,
+}: {
+  status: 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
+  lastSavedAt: number | null;
+}) {
+  const [, force] = useState(0);
+  // Re-render every 30s so "Saved 2 min ago" stays current
+  useEffect(() => {
+    const id = setInterval(() => force((n) => n + 1), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (status === 'idle' || !lastSavedAt) {
+    return (
+      <span
+        className="text-xs"
+        style={{ color: 'var(--color-text-muted)', marginLeft: '0.25rem', fontStyle: 'italic' }}
+        aria-live="polite"
+      >
+        ●&nbsp;Not saved yet
+      </span>
+    );
+  }
+
+  if (status === 'saving') {
+    return (
+      <span
+        className="text-xs"
+        style={{ color: 'var(--color-warning)', marginLeft: '0.25rem', fontStyle: 'italic' }}
+        aria-live="polite"
+      >
+        ●&nbsp;Saving…
+      </span>
+    );
+  }
+
+  if (status === 'dirty') {
+    return (
+      <span
+        className="text-xs"
+        style={{ color: 'var(--color-warning)', marginLeft: '0.25rem', fontStyle: 'italic' }}
+        aria-live="polite"
+      >
+        ●&nbsp;Unsaved changes
+      </span>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <span
+        className="text-xs"
+        style={{ color: 'var(--color-error)', marginLeft: '0.25rem', fontStyle: 'italic' }}
+        title="Last save failed. Click Save to retry."
+        aria-live="polite"
+      >
+        ●&nbsp;Save failed
+      </span>
+    );
+  }
+
+  // status === 'saved'
+  const ago = Math.max(0, Math.floor((Date.now() - lastSavedAt) / 1000));
+  const label =
+    ago < 5
+      ? 'Saved just now'
+      : ago < 60
+        ? `Saved ${ago}s ago`
+        : `Saved ${Math.floor(ago / 60)} min ago`;
+  return (
+    <span
+      className="text-xs"
+      style={{ color: 'var(--color-text-muted)', marginLeft: '0.25rem', fontStyle: 'italic' }}
+      aria-live="polite"
+    >
+      ●&nbsp;{label}
+    </span>
+  );
 }

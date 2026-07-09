@@ -17,6 +17,7 @@
 html, body, #root {
   height: 100%;
   width: 100%;
+  min-height: 0;
 }
 
 body {
@@ -27,6 +28,7 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
 }
 
 /* ==========================================================================
@@ -247,6 +249,80 @@ background: var(--surface-elevated);
   box-shadow: none;
 }
 
+/* Unified native controls */
+.form-select {
+  appearance: none;
+  min-height: 30px;
+  padding: 0.35rem 2rem 0.35rem 0.625rem;
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-sm);
+  background-color: var(--surface-sunken);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
+    linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 13px) 50%,
+    calc(100% - 9px) 50%;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+  box-shadow: inset 0 1px 0 var(--edge-top-soft);
+}
+
+.form-select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+input[type="checkbox"] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  border: 1px solid var(--border-glass-strong);
+  border-radius: 5px;
+  background: var(--surface-sunken);
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-glass),
+              border-color var(--duration-fast) var(--ease-glass),
+              box-shadow var(--duration-fast) var(--ease-glass);
+}
+
+input[type="checkbox"]::before {
+  content: "";
+  width: 8px;
+  height: 5px;
+  border-left: 2px solid var(--text-inverse);
+  border-bottom: 2px solid var(--text-inverse);
+  transform: rotate(-45deg) scale(0);
+  transform-origin: center;
+  transition: transform var(--duration-fast) var(--ease-glass);
+}
+
+input[type="checkbox"]:checked {
+  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+  border-color: transparent;
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+input[type="checkbox"]:checked::before {
+  transform: rotate(-45deg) scale(1);
+}
+
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 /* ==========================================================================
    5. App Layout
    ========================================================================== */
@@ -254,6 +330,8 @@ background: var(--surface-elevated);
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   overflow: hidden;
   background: var(--bg);
 }
@@ -295,6 +373,8 @@ display: flex;
   flex: 1;
   overflow: hidden;
   position: relative;
+  min-height: 0;
+  min-width: 0;
 }
 
 /* ==========================================================================
@@ -310,6 +390,7 @@ display: flex;
   overflow: hidden;
   position: relative;
   z-index: 5;
+  min-height: 0;
 }
 
 .sidebar.resizing { transition: none; }
@@ -361,6 +442,23 @@ display: flex;
   flex: 1;
   overflow-y: auto;
   padding: 0.5rem;
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+
+.sidebar-literature,
+.sidebar-modules {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.sidebar-literature > .sidebar-content {
+  flex: none;
+  overflow: visible;
 }
 
 /* ==========================================================================
@@ -450,9 +548,116 @@ display: flex;
   flex-direction: column;
   overflow: hidden;
   background: transparent;
+  min-width: 0;
+  min-height: 0;
 }
 
-.main-content.literature-active { overflow-x: auto; }
+.main-content.literature-active {
+  overflow: hidden;
+}
+
+.literature-shell {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.literature-top-tabs {
+  display: flex;
+  flex-shrink: 0;
+  overflow-x: auto;
+  border-bottom: 2px solid var(--color-border);
+  padding: 0 1rem;
+  background: var(--color-bg);
+  gap: 0;
+}
+
+.literature-view-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 1rem;
+  overscroll-behavior: contain;
+}
+
+.literature-canvas-host {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  /* React Flow needs an explicit, non-zero height. */
+  min-height: 400px;
+  overflow: hidden;
+}
+
+.paper-workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.paper-workspace-main {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.paper-preview-pane {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.paper-details-pane {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.paper-details-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.75rem;
+  overscroll-behavior: contain;
+}
+
+.ai-chat-panel {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  min-height: 120px;
+  max-height: min(500px, calc(100% - 150px));
+  flex-direction: column;
+  overflow: hidden;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+.ai-profile-select {
+  width: clamp(120px, 24vw, 240px);
+  font-size: 0.72rem;
+}
+
+.icon-spinning {
+  animation: icon-spin 0.85s linear infinite;
+}
+
+@keyframes icon-spin {
+  to { transform: rotate(360deg); }
+}
 
 .main-content.empty {
   display: flex;
@@ -1542,7 +1747,7 @@ width: 90%;
 /* ---- Sidebar mode toggle ---- */
 .lit-mode-toggle {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.25rem;
   padding: 0.5rem;
   border-bottom: 1px solid var(--border-glass);

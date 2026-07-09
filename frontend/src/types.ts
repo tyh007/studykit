@@ -366,6 +366,71 @@ export const RELATION_OPTIONS = [
   { value: 'dataset', label: 'Same Dataset' },
 ];
 
+// ===== Literature Canvas =====
+export interface LiteratureCanvas {
+  id: string;
+  project_id: string;
+  workspace_id: string;
+  title: string;
+  viewport_json: { x?: number; y?: number; zoom?: number };
+  settings_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export type LiteratureCanvasNodeType =
+  | 'paper' | 'note' | 'text' | 'question' | 'group' | 'shape';
+
+export interface LiteratureCanvasNode {
+  id: string;
+  canvas_id: string;
+  node_type: LiteratureCanvasNodeType;
+  ref_type?: string | null;
+  ref_id?: string | null;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  z_index: number;
+  content_json: Record<string, any>;
+  style_json: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LiteratureCanvasEdge {
+  id: string;
+  canvas_id: string;
+  source_node_id: string;
+  target_node_id: string;
+  relation_id?: string | null;
+  edge_type: 'canvas' | 'paper_relation';
+  relation_type?: 'cites' | 'extends' | 'contradicts' | 'supports' | 'related' | 'method' | 'dataset' | null;
+  label?: string | null;
+  content_json: Record<string, any>;
+  style_json: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LiteratureCanvasScene {
+  id: string;
+  canvas_id: string;
+  name: string;
+  viewport_json: { x: number; y: number; zoom: number };
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LiteratureCanvasState {
+  canvas: LiteratureCanvas;
+  nodes: LiteratureCanvasNode[];
+  edges: LiteratureCanvasEdge[];
+  scenes: LiteratureCanvasScene[];
+  papers: LiteraturePaper[];
+}
+
 // ===== Stage Two: Zotero Integration =====
 
 export interface ExternalAccount {

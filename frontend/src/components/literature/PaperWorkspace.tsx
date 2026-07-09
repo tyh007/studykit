@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { literaturePapersApi, paperNotesApi, paperRelationsApi } from '../../lib/literature-api';
 import { createAIExtractionService } from '../../lib/literature/ai-extraction';
 import { PromptBuilder } from '../../lib/literature/prompt-builder';
-import { StarIcon, CloseIcon } from '../ui/Icons';
+import { StarIcon, CloseIcon, SyncIcon } from '../ui/Icons';
 import LiteraturePDFViewer from './LiteraturePDFViewer';
 import PaperAnnotationLayer from './PaperAnnotationLayer';
 import AIChatPanel from './AIChatPanel';
@@ -299,7 +299,7 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
   const hasExtraction = Object.values(editableData).some(v => v && v !== 'Not mentioned');
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div className="paper-workspace">
       {/* Header bar */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.75rem',
@@ -342,9 +342,9 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
       </div>
 
       {/* Main content: split pane */}
-      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      <div className="paper-workspace-main">
         {/* Left: PDF Viewer */}
-        <div style={{ width: splitPercent + '%', minWidth: 0, overflow: 'auto' }}>
+        <div className="paper-preview-pane" style={{ width: splitPercent + '%' }}>
           {paper.storage_key ? (
             <LiteraturePDFViewer
               paperId={paper.id}
@@ -370,7 +370,7 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
 
         {/* Right: Tabs */}
               <div onMouseDown={handleSplitDragStart} style={{ width: 6, cursor: 'col-resize', background: 'var(--color-bg-secondary)', flexShrink: 0, position: 'relative', zIndex: 5 }} />
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="paper-details-pane">
           {/* Tab bar */}
           <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
             {(['summary', 'notes', 'metadata', 'relations'] as const).map(t => (
@@ -391,7 +391,7 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
           </div>
 
           {/* Tab content */}
-          <div style={{ flex: 1, overflow: 'auto', padding: '0.75rem' }}>
+          <div className="paper-details-scroll">
 
             {/* === SUMMARY TAB === */}
             {tab === 'summary' && (
@@ -424,13 +424,13 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
                               {FIELD_LABELS[field]}
                             </label>
                             <button
-                              className="btn btn-ghost btn-sm"
+                              className="btn btn-ghost btn-icon btn-xs"
                               onClick={() => handleReExtractField(field)}
                               disabled={extracting || !paper.full_text}
-                              style={{ fontSize: '0.65rem', padding: '0.125rem 0.375rem' }}
                               title="Re-extract this field from AI"
+                              aria-label={`Re-extract ${FIELD_LABELS[field]}`}
                             >
-                              {extracting ? '...' : '🔄'}
+                              <SyncIcon size="sm" className={extracting ? 'icon-spinning' : ''} />
                             </button>
                           </div>
                           <textarea

@@ -1,3 +1,6 @@
+// @deprecated PaperRelationsGraph is replaced by LiteratureCanvas (see
+// frontend/src/components/literature/canvas/LiteratureCanvas.tsx). This file
+// is kept temporarily so its test can still compile; remove in a later phase.
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 
 interface GraphNode {
@@ -211,7 +214,11 @@ export default function PaperRelationsGraph({
                 fontWeight={isHovered ? 600 : 400}
                 style={{ pointerEvents: 'none' }}
               >
-                {node.title.length > 25 ? node.title.substring(0, 24) + '…' : node.title}
+                {(() => {
+                  const raw = node.title || node.authors || 'Untitled';
+                  const title = typeof raw === 'string' ? raw : String(raw);
+                  return title.length > 25 ? title.substring(0, 24) + '…' : title;
+                })()}
               </text>
             </g>
           );
