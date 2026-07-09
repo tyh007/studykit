@@ -15,6 +15,8 @@ interface Props {
   onCancel: () => void;
   initialKind?: RelationKind;
   bothPaper?: boolean;
+  /** 'create' shows Apply/Cancel; 'edit' shows Done/Reset. */
+  mode?: 'create' | 'edit';
 }
 
 const SWATCH_COLORS = [
@@ -36,6 +38,7 @@ export default function RelationTypeMenu({
   onCancel,
   initialKind = DEFAULT_RELATION,
   bothPaper = true,
+  mode = 'create',
 }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [kind, setKind] = useState<RelationKind>(initialKind);
@@ -302,21 +305,54 @@ export default function RelationTypeMenu({
       )}
 
       <div className="relation-type-menu-footer">
-        <button type="button" className="relation-type-menu-cancel" onClick={onCancel}>
-          Cancel
-        </button>
-        <button
-          type="button"
-          className="relation-type-menu-apply"
-          onClick={() => onPick(kind)}
-          style={
-            {
-              ['--preset-color' as string]: kind.color,
-            } as React.CSSProperties
-          }
-        >
-          Apply
-        </button>
+        {mode === 'create' ? (
+          <>
+            <button type="button" className="relation-type-menu-cancel" onClick={onCancel}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="relation-type-menu-apply"
+              onClick={() => onPick(kind)}
+              style={
+                {
+                  ['--preset-color' as string]: kind.color,
+                } as React.CSSProperties
+              }
+            >
+              Apply
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="relation-type-menu-cancel"
+              onClick={() => {
+                // Revert any in-progress changes by re-applying the original kind,
+                // then close.
+                onPick(initialKind);
+                onCancel();
+              }}
+              title="Revert to the original and close"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="relation-type-menu-apply"
+              onClick={onCancel}
+              style={
+                {
+                  ['--preset-color' as string]: kind.color,
+                } as React.CSSProperties
+              }
+              title="Close"
+            >
+              Done
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

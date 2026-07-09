@@ -3,9 +3,20 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import RelationEdge from './RelationEdge'
 
+const flowToScreenPosition = vi.fn(({ x, y }: { x: number; y: number }) => ({ x, y }))
+
 vi.mock('@xyflow/react', () => ({
   EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   getBezierPath: () => ['M0 0 L100 100', 50, 50],
+  useReactFlow: () => ({ flowToScreenPosition }),
+}))
+
+vi.mock('./RelationTypeMenu', () => ({
+  default: ({ onCancel }: { onCancel: () => void }) => (
+    <div data-testid="relation-picker">
+      <button onClick={onCancel}>close-picker</button>
+    </div>
+  ),
 }))
 
 const baseProps = {
@@ -35,7 +46,6 @@ describe('RelationEdge', () => {
     )
 
     expect(screen.getByText('Supports')).toBeInTheDocument()
-    // The main path uses the relation color
     const paths = container.querySelectorAll('path')
     expect(paths.length).toBeGreaterThan(0)
     expect(paths[0].getAttribute('stroke')).toBe('#22c55e')
@@ -83,6 +93,84 @@ describe('RelationEdge', () => {
     expect(onDelete).toHaveBeenCalledWith('edge-1')
   })
 
+  it('opens the full relation picker when "Change" is clicked', () => {
+    const onUpdateKind = vi.fn()
+
+    render(
+      <svg>
+        <RelationEdge
+          {...baseProps}
+          selected
+          data={{
+            canvasEdge: {
+              edge_type: 'paper_relation',
+              relation_type: 'cites',
+              content_json: { relation_type: 'cites' },
+            },
+            actions: { onUpdateKind },
+          }}
+        />
+      </svg>,
+    )
+
+    expect(screen.queryByTestId('relation-picker')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Change relation' }))
+    expect(screen.getByTestId('relation-picker')).toBeInTheDocument()
+  })
+
+  it('opens the picker when the label is clicked', () => {
+    const onUpdateKind = vi.fn()
+
+    render(
+      <svg>
+        <RelationEdge
+          {...baseProps}
+          selected
+          data={{
+            canvasEdge: {
+              edge_type: 'paper_relation',
+              relation_type: 'extends',
+              content_json: { relation_type: 'extends' },
+            },
+            actions: { onUpdateKind },
+          }}
+        />
+      </svg>,
+    )
+
+    expect(screen.queryByTestId('relation-picker')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('Extends'))
+    expect(screen.getByTestId('relation-picker')).toBeInTheDocument()
+  })
+
+  it('uses flowToScreenPosition to place the picker at the label', () => {
+    flowToScreenPosition.mockClear()
+    flowToScreenPosition.mockImplementation(({ x, y }: { x: number; y: number }) => ({
+      x: x * 2,
+      y: y * 3,
+    }))
+
+    render(
+      <svg>
+        <RelationEdge
+          {...baseProps}
+          selected
+          data={{
+            canvasEdge: {
+              edge_type: 'paper_relation',
+              relation_type: 'cites',
+              content_json: { relation_type: 'cites' },
+            },
+          }}
+        />
+      </svg>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Change relation' }))
+    // getBezierPath returns labelX=50, labelY=50; we offset by +48 in y.
+    expect(flowToScreenPosition).toHaveBeenCalledWith({ x: 50, y: 50 + 48 })
+  })
+
   it('renders a custom relation label with a visible arrow head path', () => {
     const { container } = render(
       <svg>
@@ -107,39 +195,9 @@ describe('RelationEdge', () => {
 
     expect(screen.getByText('启发')).toBeInTheDocument()
     const paths = container.querySelectorAll('path')
-    // We expect: 1 main line + 1 transparent interaction overlay + 1 arrow head = 3 paths
     expect(paths.length).toBeGreaterThanOrEqual(3)
-    // The main line should be the dotted line (stroke-dasharray set)
     const main = paths[0]
     expect(main.getAttribute('stroke-dasharray')).toBe('1 5')
-  })
-
-  it('emits onUpdateKind when style popover changes are committed', () => {
-    const onUpdateKind = vi.fn()
-
-    render(
-      <svg>
-        <RelationEdge
-          {...baseProps}
-          id="edge-4"
-          selected
-          data={{
-            canvasEdge: {
-              edge_type: 'paper_relation',
-              relation_type: 'related',
-              content_json: { relation_type: 'related' },
-              style_json: { color: '#6b7280', arrowEnd: 'single', dashStyle: 'dashed' },
-            },
-            actions: { onUpdateKind },
-          }}
-        />
-      </svg>,
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: 'Change line style' }))
-    const solidBtn = screen.getByRole('button', { name: /Solid/ })
-    fireEvent.click(solidBtn)
-    expect(onUpdateKind).toHaveBeenCalled()
   })
 
   it('renders a double arrow head for double arrows', () => {
@@ -165,7 +223,6 @@ describe('RelationEdge', () => {
       </svg>,
     )
 
-    // Double arrow renders two path elements for the end: a filled triangle + a chevron
     const paths = container.querySelectorAll('path')
     expect(paths.length).toBeGreaterThanOrEqual(4)
   })

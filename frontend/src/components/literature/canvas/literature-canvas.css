@@ -541,6 +541,14 @@
   outline: 2px solid color-mix(in srgb, var(--edge-color, #64748b) 34%, #fff);
   outline-offset: 2px;
 }
+.canvas-edge-label.is-editing {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.28);
+}
+.canvas-edge-label:hover {
+  filter: brightness(1.06);
+}
 .canvas-edge-label input {
   background: transparent;
   color: #fff;

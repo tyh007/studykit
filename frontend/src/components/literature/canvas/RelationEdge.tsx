@@ -1,19 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   EdgeLabelRenderer,
   getBezierPath,
+  useReactFlow,
   type EdgeProps,
 } from '@xyflow/react';
 import {
-  ARROW_OPTIONS,
-  DASH_OPTIONS,
   DASH_PATTERNS,
-  kindToEdgePayload,
   readRelationKindFromEdge,
-  type ArrowSide,
-  type DashStyle,
   type RelationKind,
 } from './relation-types';
+import RelationTypeMenu from './RelationTypeMenu';
 
 interface CanvasEdgePayload {
   edge_type?: 'canvas' | 'paper_relation' | null;
@@ -32,18 +29,6 @@ interface RelationEdgeData {
   };
 }
 
-const SWATCH_COLORS = [
-  '#64748b',
-  '#3b82f6',
-  '#8b5cf6',
-  '#ef4444',
-  '#22c55e',
-  '#f59e0b',
-  '#06b6d4',
-  '#0f172a',
-];
-
-// Draw an arrow head as a filled triangle pointing in `dir` (unit vector).
 function ArrowHead({
   tip,
   dir,
@@ -57,11 +42,10 @@ function ArrowHead({
   color?: string;
   double?: boolean;
 }) {
-  // Perpendicular vector for the base of the triangle.
   const px = -dir.y;
   const py = dir.x;
-  const back = size; // distance from tip to base
-  const half = size * 0.6; // half base width
+  const back = size;
+  const half = size * 0.6;
   const baseX = tip.x - dir.x * back;
   const baseY = tip.y - dir.y * back;
   const p1 = { x: baseX + px * half, y: baseY + py * half };
@@ -78,7 +62,6 @@ function ArrowHead({
       />
     );
   }
-  // Double arrow: small chevron in front of the filled triangle
   const chevronBack = size * 2.0;
   const cb = {
     x: tip.x - dir.x * chevronBack,
@@ -120,7 +103,8 @@ export default function RelationEdge(props: any) {
   } = props as EdgeProps & { data?: RelationEdgeData };
 
   const typed = (data ?? {}) as RelationEdgeData;
-  const [showStyle, setShowStyle] = useState(false);
+  const { flowToScreenPosition } = useReactFlow();
+  const [pickerPos, setPickerPos] = useState<{ x: number; y: number } | null>(null);
   const [editingLabel, setEditingLabel] = useState(false);
   const [draftLabel, setDraftLabel] = useState<string>('');
 
@@ -139,8 +123,6 @@ export default function RelationEdge(props: any) {
     };
   }, [typed.canvasEdge]);
 
-  // getBezierPath returns the bezier "d" string and the (labelX, labelY) midpoint
-  // in absolute SVG coordinates.
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -152,21 +134,10 @@ export default function RelationEdge(props: any) {
 
   const stroke = kind.color;
   const dashArray = DASH_PATTERNS[kind.dashStyle];
-
-  // Compute arrow tips by trimming a few pixels off the source/target so the
-  // arrowhead doesn't sit underneath a node. We compute the direction along
-  // the bezier by sampling near the endpoint (cubic bezier derivative).
   const arrowSize = 8;
-  const inset = 2; // how much to pull the arrow tip back from the node edge
+  const inset = 2;
 
-  // Derivative of cubic bezier at t: 3(1-t)^2 (P1-P0) + 6(1-t)t (P2-P1) + 3t^2 (P3-P2)
-  // For react-flow's bezier the control points are based on the position and
-  // handle side. Approximate direction at the end by using the segment from
-  // the last control point to the target.
   function bezierDirAtEnd(): { x: number; y: number } {
-    // getBezierPath doesn't return control points in v12, so we approximate:
-    // The tangent at the target is roughly the direction from targetX,Y back
-    // toward the midpoint of the curve. Use the vector from (target - label).
     const dx = targetX - labelX;
     const dy = targetY - labelY;
     const len = Math.sqrt(dx * dx + dy * dy) || 1;
@@ -190,7 +161,7 @@ export default function RelationEdge(props: any) {
     y: sourceY + startDir.y * inset,
   };
 
-  const commitLabelEdit = () => {
+  const commitLabelEdit = useCallback(() => {
     const next = draftLabel.trim();
     if (!next) {
       setEditingLabel(false);
@@ -200,12 +171,32 @@ export default function RelationEdge(props: any) {
       typed.actions.onUpdateKind(id, { ...kind, label: next });
     }
     setEditingLabel(false);
-  };
+  }, [draftLabel, typed.actions, id, kind]);
 
-  const updateKind = (patch: Partial<RelationKind>) => {
-    if (!typed.actions?.onUpdateKind) return;
-    typed.actions.onUpdateKind(id, { ...kind, ...patch });
-  };
+  const openPicker = useCallback(
+    (event?: React.MouseEvent) => {
+      if (event) event.stopPropagation();
+      // Position picker below the label, in screen coordinates.
+      const screen = flowToScreenPosition({ x: labelX, y: labelY + 48 });
+      setPickerPos({ x: screen.x, y: screen.y });
+    },
+    [flowToScreenPosition, labelX, labelY]
+  );
+
+  const closePicker = useCallback(() => {
+    setPickerPos(null);
+  }, []);
+
+  const onPickerPick = useCallback(
+    (next: RelationKind) => {
+      if (typed.actions?.onUpdateKind) {
+        typed.actions.onUpdateKind(id, next);
+      }
+      // Keep the picker open so the user can continue tweaking.
+      // They click "Done" or outside to close.
+    },
+    [typed.actions, id]
+  );
 
   return (
     <>
@@ -222,7 +213,6 @@ export default function RelationEdge(props: any) {
           strokeLinecap="round"
           style={{ pointerEvents: 'stroke' }}
         />
-        {/* Transparent interaction overlay so the line is easy to click. */}
         <path
           d={edgePath}
           fill="none"
@@ -252,7 +242,7 @@ export default function RelationEdge(props: any) {
 
       <EdgeLabelRenderer>
         <div
-          className={`canvas-edge-label ${kind.isPaperRelation ? 'is-paper-relation' : 'is-canvas-link'} ${selected ? 'is-selected' : ''}`}
+          className={`canvas-edge-label ${kind.isPaperRelation ? 'is-paper-relation' : 'is-canvas-link'} ${selected ? 'is-selected' : ''} ${pickerPos ? 'is-editing' : ''}`}
           style={{
             position: 'absolute',
             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
@@ -270,10 +260,18 @@ export default function RelationEdge(props: any) {
             border: '1px solid color-mix(in srgb, #fff 45%, transparent)',
             cursor: 'pointer',
             userSelect: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.3rem',
           }}
-          title={kind.label}
+          title="Click to change relation · Double-click to rename"
+          onClick={(event) => {
+            event.stopPropagation();
+            if (!editingLabel) openPicker(event);
+          }}
           onDoubleClick={(event) => {
             event.stopPropagation();
+            event.preventDefault();
             setEditingLabel(true);
             setDraftLabel(kind.label);
           }}
@@ -306,11 +304,29 @@ export default function RelationEdge(props: any) {
               }}
             />
           ) : (
-            kind.label
+            <>
+              <span>{kind.label}</span>
+              {selected && (
+                <span
+                  aria-hidden
+                  style={{
+                    display: 'inline-block',
+                    width: 0,
+                    height: 0,
+                    borderLeft: '4px solid transparent',
+                    borderRight: '4px solid transparent',
+                    borderTop: '5px solid currentColor',
+                    opacity: 0.85,
+                    marginLeft: 2,
+                    flexShrink: 0,
+                  }}
+                />
+              )}
+            </>
           )}
         </div>
 
-        {selected && (
+        {selected && !editingLabel && (
           <div
             className="canvas-edge-actions"
             style={{
@@ -326,13 +342,13 @@ export default function RelationEdge(props: any) {
               className="canvas-edge-action-btn"
               onClick={(event) => {
                 event.stopPropagation();
-                setShowStyle((v) => !v);
+                openPicker(event);
               }}
-              title="Change line style"
-              aria-label="Change line style"
+              title="Change relation type or style"
+              aria-label="Change relation"
               style={actionBtnStyle(stroke)}
             >
-              Style
+              Change
             </button>
             {typed.actions?.onDelete && (
               <button
@@ -352,13 +368,14 @@ export default function RelationEdge(props: any) {
           </div>
         )}
 
-        {selected && showStyle && (
-          <EdgeStylePopover
-            x={labelX}
-            y={labelY + 70}
-            kind={kind}
-            onChange={updateKind}
-            onClose={() => setShowStyle(false)}
+        {pickerPos && (
+          <RelationTypeMenu
+            position={pickerPos}
+            onPick={onPickerPick}
+            onCancel={closePicker}
+            initialKind={kind}
+            bothPaper={true}
+            mode="edit"
           />
         )}
       </EdgeLabelRenderer>
@@ -382,183 +399,4 @@ function actionBtnStyle(color: string, isDelete = false): React.CSSProperties {
   };
 }
 
-interface EdgeStylePopoverProps {
-  x: number;
-  y: number;
-  kind: RelationKind;
-  onChange: (patch: Partial<RelationKind>) => void;
-  onClose: () => void;
-}
-
-function EdgeStylePopover({ x, y, kind, onChange, onClose }: EdgeStylePopoverProps) {
-  return (
-    <div
-      className="canvas-edge-style-popover"
-      style={{
-        position: 'absolute',
-        transform: `translate(-50%, 0) translate(${x}px, ${y}px)`,
-        background: 'var(--glass-liquid-floating, #fff)',
-        border: '1px solid var(--color-border, #e5e7eb)',
-        borderRadius: 8,
-        padding: '0.4rem',
-        boxShadow: '0 8px 24px rgba(15, 23, 42, 0.18)',
-        pointerEvents: 'all',
-        minWidth: 200,
-        zIndex: 70,
-      }}
-      onClick={(event) => event.stopPropagation()}
-    >
-      <div
-        style={{
-          fontSize: '0.65rem',
-          color: 'var(--color-text-muted, #6b7280)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.04em',
-          marginBottom: 4,
-        }}
-      >
-        Color
-      </div>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(8, 1fr)',
-          gap: 4,
-          marginBottom: 8,
-        }}
-      >
-        {SWATCH_COLORS.map((swatch) => (
-          <button
-            key={swatch}
-            type="button"
-            onClick={() => onChange({ color: swatch })}
-            aria-label={`Color ${swatch}`}
-            title={swatch}
-            style={{
-              width: '100%',
-              aspectRatio: '1 / 1',
-              borderRadius: 4,
-              background: swatch,
-              border:
-                kind.color === swatch
-                  ? '2px solid currentColor'
-                  : '1px solid var(--color-border, #e5e7eb)',
-              cursor: 'pointer',
-              padding: 0,
-            }}
-          />
-        ))}
-      </div>
-
-      <div
-        style={{
-          fontSize: '0.65rem',
-          color: 'var(--color-text-muted, #6b7280)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.04em',
-          marginBottom: 4,
-        }}
-      >
-        End arrow
-      </div>
-      <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
-        {ARROW_OPTIONS.map((opt) => (
-          <button
-            key={opt.value}
-            type="button"
-            onClick={() => onChange({ arrowEnd: opt.value as ArrowSide })}
-            style={pillStyle(kind.arrowEnd === opt.value, kind.color)}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
-
-      <div
-        style={{
-          fontSize: '0.65rem',
-          color: 'var(--color-text-muted, #6b7280)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.04em',
-          marginBottom: 4,
-        }}
-      >
-        Start arrow
-      </div>
-      <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
-        {ARROW_OPTIONS.map((opt) => (
-          <button
-            key={opt.value}
-            type="button"
-            onClick={() => onChange({ arrowStart: opt.value as ArrowSide })}
-            style={pillStyle(kind.arrowStart === opt.value, kind.color)}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
-
-      <div
-        style={{
-          fontSize: '0.65rem',
-          color: 'var(--color-text-muted, #6b7280)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.04em',
-          marginBottom: 4,
-        }}
-      >
-        Line style
-      </div>
-      <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
-        {DASH_OPTIONS.map((opt) => (
-          <button
-            key={opt.value}
-            type="button"
-            onClick={() => onChange({ dashStyle: opt.value as DashStyle })}
-            style={pillStyle(kind.dashStyle === opt.value, kind.color)}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button
-          type="button"
-          onClick={onClose}
-          style={{
-            padding: '0.3rem 0.6rem',
-            border: 'none',
-            background: 'transparent',
-            cursor: 'pointer',
-            font: 'inherit',
-            color: 'var(--color-text-secondary, #6b7280)',
-            borderRadius: 4,
-            fontSize: '0.7rem',
-          }}
-        >
-          Done
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function pillStyle(active: boolean, color: string): React.CSSProperties {
-  return {
-    flex: 1,
-    padding: '0.3rem 0.4rem',
-    border: 'none',
-    borderRadius: 4,
-    cursor: 'pointer',
-    font: 'inherit',
-    fontSize: '0.7rem',
-    background: active
-      ? color
-      : 'color-mix(in srgb, var(--color-bg, #fff) 60%, transparent)',
-    color: active ? '#fff' : 'inherit',
-    fontWeight: active ? 600 : 500,
-  };
-}
-
-export { kindToEdgePayload };
+export { kindToEdgePayload } from './relation-types';
