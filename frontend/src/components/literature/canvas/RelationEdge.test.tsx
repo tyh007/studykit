@@ -1,15 +1,26 @@
 import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
 import RelationEdge from './RelationEdge'
+
+const flowToScreenPosition = vi.fn(({ x, y }: { x: number; y: number }) => ({ x, y }))
 
 vi.mock('@xyflow/react', () => ({
   EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   getBezierPath: () => ['M0 0 L100 100', 50, 50],
+  useReactFlow: () => ({ flowToScreenPosition }),
 }))
 
 vi.mock('./RelationTypeMenu', () => ({
-  default: ({ onCancel, positioning, position }: { onCancel: () => void; positioning?: string; position?: { x: number; y: number } }) => (
+  default: ({
+    onCancel,
+    positioning,
+    position,
+  }: {
+    onCancel: () => void
+    positioning?: string
+    position?: { x: number; y: number }
+  }) => (
     <div
       data-testid="relation-picker"
       data-positioning={positioning}
@@ -30,6 +41,10 @@ const baseProps = {
   sourcePosition: 'right',
   targetPosition: 'left',
 }
+
+beforeEach(() => {
+  flowToScreenPosition.mockImplementation(({ x, y }: { x: number; y: number }) => ({ x, y }))
+})
 
 describe('RelationEdge', () => {
   it('renders the paper relation label and color from top-level relation_type', () => {
@@ -145,7 +160,12 @@ describe('RelationEdge', () => {
     expect(screen.getByTestId('relation-picker')).toBeInTheDocument()
   })
 
-  it('places the picker in flow space below the label and uses absolute positioning', () => {
+  it('positions the picker in screen space using flowToScreenPosition', () => {
+    flowToScreenPosition.mockImplementation(({ x, y }: { x: number; y: number }) => ({
+      x: x * 2,
+      y: y * 3,
+    }))
+
     render(
       <svg>
         <RelationEdge
@@ -163,11 +183,12 @@ describe('RelationEdge', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Change relation' }))
+    // getBezierPath returns labelX=50, labelY=50; we offset y by +32 in openPicker.
+    expect(flowToScreenPosition).toHaveBeenCalledWith({ x: 50, y: 50 })
     const picker = screen.getByTestId('relation-picker')
-    // getBezierPath returns labelX=50, labelY=50; we offset by +60 in y.
-    expect(picker.getAttribute('data-x')).toBe('50')
-    expect(picker.getAttribute('data-y')).toBe('110')
-    expect(picker.getAttribute('data-positioning')).toBe('absolute-flow')
+    // x: 50*2 - 280/2 = 100 - 140 = -40 → clamped to 8
+    // y: 50*3 + 32 = 182
+    expect(picker.getAttribute('data-positioning')).toBe('fixed-screen')
   })
 
   it('renders a custom relation label with a visible arrow head path', () => {

@@ -1,7 +1,9 @@
 import React, { useCallback, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   EdgeLabelRenderer,
   getBezierPath,
+  useReactFlow,
   type EdgeProps,
 } from '@xyflow/react';
 import {
@@ -102,6 +104,7 @@ export default function RelationEdge(props: any) {
   } = props as EdgeProps & { data?: RelationEdgeData };
 
   const typed = (data ?? {}) as RelationEdgeData;
+  const { flowToScreenPosition } = useReactFlow();
   const [pickerPos, setPickerPos] = useState<{ x: number; y: number } | null>(null);
   const [editingLabel, setEditingLabel] = useState(false);
   const [draftLabel, setDraftLabel] = useState<string>('');
@@ -173,12 +176,31 @@ export default function RelationEdge(props: any) {
 
   const openPicker = useCallback(
     (event?: React.MouseEvent) => {
-      if (event) event.stopPropagation();
-      // Position picker in flow space below the label. The viewer's CSS
-      // transform takes care of mapping flow-space to screen-space.
-      setPickerPos({ x: labelX, y: labelY + 60 });
+      if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+      }
+      // Convert the label's flow-space position to screen-space and position
+      // the picker just below the label. We use createPortal to mount the
+      // picker at document.body so it isn't affected by the React Flow
+      // viewport's CSS transform.
+      const screen = flowToScreenPosition({ x: labelX, y: labelY });
+      // Anchor the picker so the caret points at the label. We assume the
+      // picker is ~280px wide and ~360px tall; clamp into the viewport.
+      const pickerWidth = 280;
+      const pickerHeight = 360;
+      const margin = 8;
+      const left = Math.max(
+        margin,
+        Math.min(window.innerWidth - pickerWidth - margin, screen.x - pickerWidth / 2)
+      );
+      const top = Math.max(
+        margin,
+        Math.min(window.innerHeight - pickerHeight - margin, screen.y + 32)
+      );
+      setPickerPos({ x: left, y: top });
     },
-    [labelX, labelY]
+    [flowToScreenPosition, labelX, labelY]
   );
 
   const closePicker = useCallback(() => {
@@ -191,7 +213,6 @@ export default function RelationEdge(props: any) {
         typed.actions.onUpdateKind(id, next);
       }
       // Keep the picker open so the user can continue tweaking.
-      // They click "Done" or outside to close.
     },
     [typed.actions, id]
   );
@@ -240,7 +261,7 @@ export default function RelationEdge(props: any) {
 
       <EdgeLabelRenderer>
         <div
-          className={`canvas-edge-label ${kind.isPaperRelation ? 'is-paper-relation' : 'is-canvas-link'} ${selected ? 'is-selected' : ''} ${pickerPos ? 'is-editing' : ''}`}
+          className={`canvas-edge-label nopan ${kind.isPaperRelation ? 'is-paper-relation' : 'is-canvas-link'} ${selected ? 'is-selected' : ''} ${pickerPos ? 'is-editing' : ''}`}
           style={{
             position: 'absolute',
             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
@@ -263,6 +284,7 @@ export default function RelationEdge(props: any) {
             gap: '0.3rem',
           }}
           title="Click to change relation · Double-click to rename"
+          onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
             if (!editingLabel) openPicker(event);
@@ -326,7 +348,7 @@ export default function RelationEdge(props: any) {
 
         {selected && !editingLabel && (
           <div
-            className="canvas-edge-actions"
+            className="canvas-edge-actions nopan"
             style={{
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY + 32}px)`,
@@ -334,6 +356,7 @@ export default function RelationEdge(props: any) {
               gap: 4,
               pointerEvents: 'all',
             }}
+            onMouseDown={(event) => event.stopPropagation()}
           >
             <button
               type="button"
@@ -365,19 +388,38 @@ export default function RelationEdge(props: any) {
             )}
           </div>
         )}
-
-        {pickerPos && (
-          <RelationTypeMenu
-            position={pickerPos}
-            onPick={onPickerPick}
-            onCancel={closePicker}
-            initialKind={kind}
-            bothPaper={true}
-            mode="edit"
-            positioning="absolute-flow"
-          />
-        )}
       </EdgeLabelRenderer>
+
+      {pickerPos &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <>
+            <div
+              className="canvas-edge-picker-backdrop"
+              onMouseDown={(event) => {
+                event.stopPropagation();
+                closePicker();
+              }}
+              onClick={(event) => event.stopPropagation()}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 70,
+                background: 'transparent',
+              }}
+            />
+            <RelationTypeMenu
+              position={pickerPos}
+              onPick={onPickerPick}
+              onCancel={closePicker}
+              initialKind={kind}
+              bothPaper={true}
+              mode="edit"
+              positioning="fixed-screen"
+            />
+          </>,
+          document.body
+        )}
     </>
   );
 }

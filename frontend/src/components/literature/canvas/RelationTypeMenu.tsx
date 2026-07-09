@@ -65,16 +65,9 @@ export default function RelationTypeMenu({
         onPick(kind);
       }
     };
-    const onClickOutside = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        onCancel();
-      }
-    };
     document.addEventListener('keydown', onKey);
-    document.addEventListener('mousedown', onClickOutside);
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.removeEventListener('mousedown', onClickOutside);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onCancel, kind, showCustom]);
