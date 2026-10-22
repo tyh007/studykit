@@ -12,3 +12,8 @@ zeabur.json
 railway.json
 .continue/
 *.zip
+
+# Generated TypeScript and local environment files
+*.tsbuildinfo
+.env.*
+!.env.example
