@@ -3,9 +3,33 @@ const cors = require('cors');
 const path = require('path');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+
+// WP-08 Round 3: when MOCK_DB=1, swap the
+// real `db` module for an in-memory mock.
+// The smoke uses this so the same Express
+// + auth + routes can run without a live
+// Postgres. The mock implements the SQL
+// fragments the routes use; unhandled SQL
+// throws (so missing coverage surfaces).
+//
+// The swap MUST run BEFORE `require('./auth')`
+// — auth.js captures `db` at module load
+// time. If the mock is installed after,
+// auth.js still holds the real `db`
+// reference and the mock is bypassed.
+if (process.env.MOCK_DB === '1') {
+  const dbPath = require.resolve('./db');
+  const { makeMockDb } = require('./tests/mockDb');
+  const mockDb = makeMockDb();
+  require.cache[dbPath] = { exports: mockDb, loaded: true, id: dbPath, filename: dbPath };
+  // eslint-disable-next-line no-console
+  console.log('[backend] MOCK_DB=1: in-memory mock database installed, JWT_SECRET=' + (process.env.JWT_SECRET || '<default>'));
+}
+
 const { authenticateToken } = require('./auth');
 
 const authRoutes = require('./routes/auth');
+const collabRoutes = require('./routes/collab');
 const modulesRoutes = require('./routes/modules');
 const lecturesRoutes = require('./routes/lectures');
 const sourceDocumentsRoutes = require('./routes/source-documents');
@@ -93,6 +117,12 @@ app.use('/exports', express.static(exportDir));
 
 // Public routes
 app.use('/api/auth', authRoutes);
+
+// WP-08 Round 3: collab API. Every endpoint
+// requires a valid JWT (the router enforces
+// membership per-endpoint). No client ID is
+// trusted for cross-user data.
+app.use('/api/collab', authenticateToken, collabRoutes);
 
 // Health check — enhanced for production
 app.get('/api/health', async (req, res) => {

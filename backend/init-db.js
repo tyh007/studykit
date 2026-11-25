@@ -240,6 +240,38 @@ async function migrateDatabase(pool) {
   } catch (migrateErr) {
     console.warn('⚠️ Literature Hub v2 migration warning (non-fatal):', migrateErr.message);
   }
+
+  // WP-08 Round 3: collab tables. The
+  // tables are added via `CREATE TABLE IF
+  // NOT EXISTS` so re-running the migration
+  // is a no-op. The collab slice is
+  // server-authoritative for membership +
+  // cross-user activity + cross-user op
+  // log; the client may not write these
+  // tables directly.
+  try {
+    const schemaPath = path.join(__dirname, 'schema.sql');
+    const schema = fs.readFileSync(schemaPath, 'utf8');
+    // Pull the collab section by marker so we
+    // don't double-apply the rest of the file.
+    const marker = '-- ===== COLLAB TABLES (WP-08 Round 3) =====';
+    const idx = schema.indexOf(marker);
+    if (idx < 0) throw new Error('collab schema section not found in schema.sql');
+    const section = schema.slice(idx);
+    // The section only contains additive
+    // CREATE TABLE/INDEX IF NOT EXISTS statements.
+    // Never drop collaboration tables during app
+    // startup: those rows are the durable shared
+    // project, membership and operation history.
+    const cleanSection = section
+      .split('\n')
+      .filter((line, i) => !(i === 0 && line.startsWith('-- =====')))
+      .join('\n');
+    await pool.query(cleanSection);
+    console.log('✅ WP-08 Round 3 collab tables applied');
+  } catch (collabErr) {
+    console.warn('⚠️  WP-08 collab migration warning (non-fatal):', collabErr.message);
+  }
 }
 
 // Run if called directly
