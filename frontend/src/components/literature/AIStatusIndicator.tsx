@@ -1,10 +1,16 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { literatureAiApi } from '../../lib/literature-api'
+import { literatureAiApi, useSupports } from '../../application/dataApi'
 import { presetFor, type AIProfile } from '../../lib/literature/ai-profiles'
 
 export default function AIStatusIndicator({ onOpenSettings }: { onOpenSettings?: () => void }) {
   const [profile, setProfile] = useState<AIProfile | null>(null)
   const [checking, setChecking] = useState(true)
+  // Centralised capability check (WP-02 Gate §3 blocker D).
+  // In a local workspace AI is not supported; we MUST NOT
+  // auto-fetch `literatureAiApi.profiles()` on mount, otherwise
+  // the indicator would silently hit `/api`. Render a
+  // "需要 Sync" state instead and skip the effect.
+  const canUseAi = useSupports('ai.status')
 
   const load = useCallback(async () => {
     setChecking(true)
@@ -19,10 +25,35 @@ export default function AIStatusIndicator({ onOpenSettings }: { onOpenSettings?:
   }, [])
 
   useEffect(() => {
+    if (!canUseAi) {
+      // No fetch in local mode — leave the indicator in a
+      // explicit "需要 Sync" state.
+      setChecking(false)
+      setProfile(null)
+      return
+    }
     load()
     window.addEventListener('studykit-ai-config-changed', load)
     return () => window.removeEventListener('studykit-ai-config-changed', load)
-  }, [load])
+  }, [canUseAi, load])
+
+  if (!canUseAi) {
+    return (
+      <button
+        className="lit-ai-status lit-ai-status-local"
+        onClick={onOpenSettings}
+        data-testid="ai-status-local-notice"
+        title="AI 同步需要 Sync workspace"
+        style={{ cursor: 'not-allowed', background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.25rem 0.5rem', fontSize: '0.78rem', color: 'var(--color-text-muted)', maxWidth: 260 }}
+        disabled
+      >
+        <span className="dot offline" />
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          AI 需要 Sync workspace
+        </span>
+      </button>
+    )
+  }
 
   const connected = profile?.local || profile?.lastTestStatus === 'success'
   const label = checking

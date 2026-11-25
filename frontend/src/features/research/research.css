@@ -1,0 +1,194 @@
+/* StudyKit v0.4 — Research slice styles
+ *
+ * Shared design tokens for the Research surface tree.
+ * The CSS variables are scoped under
+ * `[data-testid="research-*"]` so the same names
+ * don't bleed into the legacy v0.3 surface tree.
+ *
+ * Layout uses the project's existing
+ * `--color-border` / `--color-text-secondary` /
+ * `--color-bg-elevated` variables for theme
+ * inheritance. We don't ship a private colour
+ * palette — the Research slice honours Light / Dark
+ * via the global theme tokens.
+ */
+
+[data-testid^="research-"] {
+  --research-gap: 0.5rem;
+  --research-radius: 0.5rem;
+  --research-muted: var(--color-text-secondary, #666);
+  --research-warning: var(--color-warning, #b80);
+  --research-danger: var(--color-danger, #b00);
+  --research-border: var(--color-border, #ccc);
+  --research-bg: var(--color-bg, transparent);
+  --research-text: var(--color-text, inherit);
+  --research-bg-elevated: var(--color-bg-elevated, #fff);
+}
+
+.research-surface {
+  padding: 1rem;
+  max-width: 1024px;
+  margin: 0 auto;
+}
+
+.research-header {
+  display: flex;
+  align-items: center;
+  gap: var(--research-gap);
+}
+
+.research-header-spacer {
+  flex: 1;
+}
+
+.research-h1 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.research-h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.research-toolbar {
+  display: flex;
+  gap: var(--research-gap);
+  align-items: center;
+  margin: 0.75rem 0;
+  flex-wrap: wrap;
+}
+
+.research-input {
+  padding: 0.4rem 0.625rem;
+  border: 1px solid var(--research-border);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--research-bg);
+  color: var(--research-text);
+  font: inherit;
+}
+
+.research-input-grow {
+  flex: 1;
+}
+
+.research-muted {
+  color: var(--research-muted);
+}
+
+.research-error {
+  color: var(--research-danger);
+  font-size: 0.85rem;
+}
+
+.research-warning {
+  color: var(--research-warning);
+  font-size: 0.85rem;
+}
+
+.research-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--research-gap);
+}
+
+.research-list-item {
+  display: flex;
+  align-items: center;
+  gap: var(--research-gap);
+}
+
+.research-identifier-form {
+  display: grid;
+  gap: 0.55rem;
+  max-width: 36rem;
+  margin-top: 0.75rem;
+}
+
+.research-identifier-form label {
+  color: var(--research-muted);
+  font-size: 0.8rem;
+}
+
+.research-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.32);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.research-dialog {
+  width: 100%;
+  max-width: 720px;
+  padding: 1rem;
+  border-radius: var(--research-radius);
+}
+
+.research-library-row {
+  padding: 0.75rem 0.875rem;
+  border-radius: var(--research-radius);
+}
+
+.research-library-row-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--research-gap);
+}
+
+.research-library-row-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.research-library-row-title {
+  font-weight: 600;
+}
+
+.research-library-row-sub {
+  color: var(--research-muted);
+  font-size: 0.85rem;
+}
+
+.research-library-row-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  align-items: flex-end;
+}
+
+/* Evidence Drawer (modal) */
+.evidence-draft-drawer {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.32);
+  z-index: 1100;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.evidence-draft-card {
+  width: 100%;
+  max-width: 720px;
+  padding: 1rem;
+  border-radius: var(--research-radius) var(--research-radius) 0 0;
+}
+
+/* Selection action bar */
+.selection-action-bar {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--research-bg-elevated);
+  border: 1px solid var(--research-border);
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}

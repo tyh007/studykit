@@ -1,14 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ReactFlow,
-  ReactFlowProvider,
-  Background,
-  useReactFlow,
-  type DefaultEdgeOptions,
-  type Viewport,
-  type Connection,
-} from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
 import './literature-canvas.css';
 import { useLiteratureCanvas } from './useLiteratureCanvas';
 import CanvasToolbar from './CanvasToolbar';
@@ -28,8 +18,9 @@ import CanvasAIAssistant from './CanvasAIAssistant';
 import GroupNode from './GroupNode';
 import ShapeNode from './ShapeNode';
 import { SparkIcon } from '../../ui/Icons';
-import { literaturePapersApi } from '../../../lib/literature-api';
+import { literaturePapersApi } from '../../../application/dataApi';
 import { uploadPDFFile, validatePDFFiles } from '../../../lib/literature-pdf-upload';
+import { useCapability } from '../../../app/v04/CapabilityNotice';
 import type { CanvasFlowNode, CanvasFlowEdge } from './canvas-types';
 import type { LiteraturePaper } from '../../../types';
 import {
@@ -38,6 +29,13 @@ import {
   readRelationKindFromEdge,
   type RelationKind,
 } from './relation-types';
+import {
+  CanvasSurface,
+  CanvasSurfaceProvider,
+  useSurfaceFlow,
+  type DefaultEdgeOptions,
+  type Viewport,
+} from './CanvasSurface';
 
 interface Props {
   projectId: string;
@@ -80,7 +78,7 @@ function LiteratureCanvasInner({ projectId }: Props) {
     setOpenPaper,
   } = useLiteratureCanvas(projectId);
 
-  const { screenToFlowPosition, zoomIn, zoomOut } = useReactFlow();
+  const { screenToFlowPosition, zoomIn, zoomOut } = useSurfaceFlow();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
@@ -95,8 +93,14 @@ function LiteratureCanvasInner({ projectId }: Props) {
   const [aiAssistantPrompt, setAiAssistantPrompt] = useState('');
   const [focusedPaperId, setFocusedPaperId] = useState<string | null>(null);
 
+  // Centralised capability check (WP-02 Gate §3 blocker D).
+  // The AI assistant toggle is disabled in a local workspace
+  // so the user cannot reach a submit path that would throw.
+  // The hook is called unconditionally so the rules of
+  // hooks are preserved.
+  const aiAssistantCapability = useCapability('ai.chat');
+
   const isReady = !!canvasId;
-  const proOptions = useMemo(() => ({ hideAttribution: true }), []);
   const fitViewOnLoad = !initialViewport;
 
   const getCanvasCenterPosition = useCallback(() => {
@@ -188,7 +192,7 @@ function LiteratureCanvasInner({ projectId }: Props) {
   }, [focusedPaperId, nodes, screenToFlowPosition]);
 
   const handleConnect = useCallback(
-    (conn: Connection) => {
+    (conn: { source?: string | null; target?: string | null }) => {
       if (!conn.source || !conn.target) return;
       const sourceNode = nodes.find((n) => n.id === conn.source);
       const targetNode = nodes.find((n) => n.id === conn.target);
@@ -441,42 +445,36 @@ function LiteratureCanvasInner({ projectId }: Props) {
         onConnectorMode={handleConnectorMode}
       />
       <div className="literature-canvas-flow">
-        <ReactFlow<CanvasFlowNode, CanvasFlowEdge>
+        <CanvasSurface<CanvasFlowNode, CanvasFlowEdge>
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
-          onConnect={handleConnect}
-          onMoveEnd={(_event, viewport: Viewport) => onViewportChange(viewport)}
-          defaultViewport={initialViewport ?? undefined}
-          proOptions={proOptions}
-          defaultEdgeOptions={defaultEdgeOptions}
-          minZoom={0.1}
-          maxZoom={2}
-          fitView={fitViewOnLoad}
+          onConnect={(conn) => handleConnect(conn)}
+          onViewportChange={onViewportChange}
+          onFitView={handleFitView}
+          fitViewOnLoad={fitViewOnLoad}
           deleteKeyCode={['Backspace', 'Delete']}
-          selectionOnDrag
-          panOnDrag={[1, 2]}
-          nodesDraggable
-          nodesConnectable
-          elementsSelectable
-          multiSelectionKeyCode={['Shift', 'Meta', 'Control']}
-        >
-          <Background gap={20} size={1} />
-        </ReactFlow>
+          initialViewport={initialViewport}
+          defaultEdgeOptions={defaultEdgeOptions}
+          overlay={
+            <>
+              {isDraggingFiles && (
+                <div className="literature-canvas-drop-overlay">
+                  Drop PDF to add as paper card
+                </div>
+              )}
+              {connectorHint && (
+                <div className="canvas-connector-hint" role="status">
+                  Drag from a card handle to another card to connect them.
+                </div>
+              )}
+            </>
+          }
+        />
         <CanvasMinimapCluster disabled={!isReady} nodes={nodes} />
-        {isDraggingFiles && (
-          <div className="literature-canvas-drop-overlay">
-            Drop PDF to add as paper card
-          </div>
-        )}
-        {connectorHint && (
-          <div className="canvas-connector-hint" role="status">
-            Drag from a card handle to another card to connect them.
-          </div>
-        )}
       </div>
       <CanvasStatusBar
         nodeCount={nodes.length}
@@ -502,11 +500,17 @@ function LiteratureCanvasInner({ projectId }: Props) {
       <button
         className="canvas-ai-assistant-toggle"
         onClick={() => {
+          if (!aiAssistantCapability.supported) return;
           setFocusedPaperId(null);
           setAiAssistantOpen((v) => !v);
         }}
-        title="AI assistant"
+        title={aiAssistantCapability.supported ? 'AI assistant' : aiAssistantCapability.tooltip}
         aria-label="Open AI assistant"
+        aria-disabled={!aiAssistantCapability.supported}
+        disabled={!aiAssistantCapability.supported}
+        data-testid="canvas-ai-assistant-toggle"
+        data-capability="ai.chat"
+        style={!aiAssistantCapability.supported ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
       >
         <SparkIcon size="md" />
       </button>
@@ -545,9 +549,26 @@ function LiteratureCanvasInner({ projectId }: Props) {
 }
 
 export default function LiteratureCanvas(props: Props) {
+  // The single `ReactFlowProvider` wraps the parent
+  // (which calls `useSurfaceFlow()` /
+  // `useLiteratureCanvas()` — itself a consumer of
+  // `useReactFlow`) AND the `<CanvasSurface>` below.
+  // Without this outer provider, the parent's
+  // `useReactFlow` would error (no provider) or hit a
+  // different xyflow store from the surface's
+  // `useReactFlow`, breaking `fitView` / `zoom` /
+  // `viewport` propagation. WP-06 Round 6 P0-1.
   return (
-    <ReactFlowProvider>
+    <CanvasSurfaceProvider>
       <LiteratureCanvasInner {...props} />
-    </ReactFlowProvider>
+    </CanvasSurfaceProvider>
   );
 }
+
+// Re-export the legacy `Viewport` type so consumers that imported it
+// from LiteratureCanvas's transitive type surface still compile.
+export type { Viewport };
+// `readRelationKindFromEdge` is consumed by tests and downstream
+// modules that imported it through LiteratureCanvas; we re-export
+// to preserve the public surface.
+export { readRelationKindFromEdge };

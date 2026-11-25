@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { readingListsApi, literaturePapersApi } from '../../lib/literature-api';
+import { readingListsApi, literaturePapersApi } from '../../application/dataApi';
 import { useStore } from '../../store/useStore';
 import { createAIExtractionService } from '../../lib/literature/ai-extraction';
+import { useCapability } from '../../app/v04/CapabilityNotice';
 
 export default function ReadingListsView() {
   const { readingLists, setReadingLists } = useStore();
@@ -13,7 +14,13 @@ export default function ReadingListsView() {
   const [removing, setRemoving] = useState<Set<string>>(new Set());
   const [extractingAll, setExtractingAll] = useState(false);
 
+  // Centralised capability check (WP-02 Gate §3 blocker D).
+  // In a local workspace reading lists live nowhere the
+  // user can read them, so we must NOT auto-fetch.
+  const readingListsCapability = useCapability('readingLists.crud')
+
   const loadLists = useCallback(async () => {
+    if (!readingListsCapability.supported) return
     setLoading(true);
     setError(null);
     try {
@@ -24,7 +31,7 @@ export default function ReadingListsView() {
     } finally {
       setLoading(false);
     }
-  }, [setReadingLists]);
+  }, [setReadingLists, readingListsCapability.supported]);
 
   useEffect(() => {
     loadLists();
@@ -88,6 +95,20 @@ export default function ReadingListsView() {
     const arr = typeof creators === 'string' ? JSON.parse(creators) : creators || [];
     return arr.map((c: any) => c.lastName || c.name || '').filter(Boolean).join(', ');
   };
+
+  // Local workspace: short notice instead of the lists panel.
+  if (!readingListsCapability.supported) {
+    return (
+      <div
+        style={{ padding: '1rem' }}
+        data-testid="reading-lists-local-notice"
+        data-capability="readingLists.crud"
+      >
+        <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem' }}>Reading Lists</h2>
+        <p className="text-sm text-muted" style={{ margin: 0 }}>{readingListsCapability.tooltip}</p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: '1rem', display: 'flex', gap: '1rem', height: '100%', minHeight: 400 }}>

@@ -1,0 +1,280 @@
+/* StudyKit v0.4 — Research Design + PM styles
+ *
+ * Scoped semantic tokens for the WP-07 surfaces
+ * (ProjectHome, DesignWorkspace, TaskDetail). The
+ * Research slice's existing `research.css` is the
+ * general style sheet; this one is *only* for the
+ * Design + PM affordances so a project-wide rename
+ * here does not ripple into Discovery / Library /
+ * Evidence.
+ *
+ * All colours are pulled from the global theme
+ * tokens (`--color-text-secondary`, `--color-border`,
+ * `--color-bg`, `--color-warning`, etc.) so the
+ * surfaces honour Light / Dark for free.
+ */
+
+[data-testid^="project-home-"],
+[data-testid^="design-"],
+[data-testid^="task-"] {
+  --rd-gap-xs: 0.25rem;
+  --rd-gap-sm: 0.5rem;
+  --rd-gap-md: 0.75rem;
+  --rd-gap-lg: 1rem;
+  --rd-radius: 0.5rem;
+  --rd-border: 1px solid var(--color-border, #e2e2e2);
+  --rd-muted: var(--color-text-secondary, #666);
+  --rd-bg: var(--color-bg, transparent);
+  --rd-bg-elevated: var(--color-bg-elevated, #fff);
+}
+
+.rd-stack-sm {
+  display: grid;
+  gap: var(--rd-gap-sm);
+}
+.rd-stack-md {
+  display: grid;
+  gap: var(--rd-gap-md);
+}
+.rd-row {
+  display: flex;
+  align-items: center;
+  gap: var(--rd-gap-sm);
+}
+.rd-row-end {
+  display: flex;
+  align-items: center;
+  gap: var(--rd-gap-sm);
+  justify-content: flex-end;
+}
+.rd-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--rd-gap-md);
+}
+.rd-grid-2-360 {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: var(--rd-gap-lg);
+  align-items: start;
+}
+
+.rd-card {
+  padding: var(--rd-gap-md);
+  border-radius: var(--rd-radius);
+  background: var(--rd-bg-elevated);
+}
+
+.rd-h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+.rd-h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+.rd-h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.rd-hint {
+  font-size: 0.8rem;
+  color: var(--rd-muted);
+  margin: 0.25rem 0;
+}
+.rd-muted {
+  color: var(--rd-muted);
+  font-size: 0.85rem;
+}
+.rd-error {
+  color: var(--color-danger, #b00);
+  font-size: 0.85rem;
+}
+
+.rd-input,
+.rd-textarea,
+.rd-select {
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--rd-bg);
+  color: var(--color-text, inherit);
+  font: inherit;
+  resize: vertical;
+}
+.rd-textarea { min-height: 4rem; }
+.rd-row > .rd-textarea,
+.rd-row > .rd-input { width: auto; flex: 1; }
+
+.rd-section {
+  border-bottom: 1px solid var(--color-border, #e2e2e2);
+  padding: var(--rd-gap-md) 0;
+}
+.rd-section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--rd-gap-sm);
+}
+.rd-section-head .rd-grow { flex: 1; }
+.rd-section-body {
+  margin-top: var(--rd-gap-sm);
+  display: grid;
+  gap: var(--rd-gap-sm);
+}
+
+.rd-rail {
+  display: grid;
+  gap: var(--rd-gap-sm);
+}
+.rd-rail-empty {
+  margin: var(--rd-gap-sm) 0 0 0;
+  color: var(--rd-muted);
+}
+
+.rd-list {
+  list-style: none;
+  padding: 0;
+  margin: var(--rd-gap-sm) 0 0 0;
+  display: grid;
+  gap: var(--rd-gap-sm);
+}
+.rd-list-item {
+  padding: var(--rd-gap-sm) 0.625rem;
+  border: 1px solid var(--color-border, #e2e2e2);
+  border-radius: var(--radius-sm, 4px);
+  display: flex;
+  align-items: center;
+  gap: var(--rd-gap-sm);
+}
+.rd-list-item-clickable {
+  cursor: pointer;
+}
+.rd-list-item-grow { flex: 1; }
+.rd-list-item-meta {
+  font-size: 0.8rem;
+  color: var(--rd-muted);
+}
+.rd-list-item-sub {
+  font-size: 0.75rem;
+  color: #999;
+}
+
+.rd-back-btn {
+  align-self: flex-start;
+  margin-bottom: var(--rd-gap-sm);
+}
+
+.rd-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--color-overlay, rgba(0, 0, 0, 0.4));
+  display: grid;
+  place-items: center;
+  z-index: 50;
+}
+.rd-dialog {
+  padding: var(--rd-gap-lg);
+  border-radius: var(--rd-radius);
+  max-width: 640px;
+  width: 92%;
+  background: var(--rd-bg-elevated);
+}
+.rd-dialog-actions {
+  display: flex;
+  gap: var(--rd-gap-sm);
+  justify-content: flex-end;
+  margin-top: var(--rd-gap-md);
+}
+
+.rd-inline-form {
+  display: grid;
+  gap: var(--rd-gap-sm);
+  margin-top: var(--rd-gap-sm);
+}
+.rd-inline-form-actions {
+  display: flex;
+  gap: var(--rd-gap-sm);
+  justify-content: flex-end;
+}
+
+.rd-brief {
+  margin: 0 0 var(--rd-gap-lg) 0;
+  font-size: 0.85rem;
+  color: var(--rd-muted);
+}
+
+.rd-provenance {
+  font-size: 0.75rem;
+  color: var(--rd-muted);
+  display: flex;
+  gap: var(--rd-gap-sm);
+  align-items: center;
+}
+
+.rd-ai-error {
+  color: var(--rd-muted);
+  font-size: 0.85rem;
+  margin: var(--rd-gap-sm) 0 0 0;
+}
+
+.rd-dep-row {
+  display: flex;
+  align-items: center;
+  gap: var(--rd-gap-sm);
+  padding: 0.25rem 0;
+}
+
+.rd-dep-empty {
+  color: var(--rd-muted);
+  font-size: 0.85rem;
+  margin: 0.5rem 0 0 0;
+}
+
+/* Capsule task-suggestion Draft renderer (project home + decision rail) */
+.rd-draft-card {
+  border: 1px solid var(--color-border, #e2e2e2);
+  border-radius: var(--radius-sm, 4px);
+  padding: var(--rd-gap-sm) 0.625rem;
+  margin-bottom: var(--rd-gap-sm);
+}
+.rd-draft-card-title {
+  font-weight: 500;
+}
+.rd-draft-card-meta {
+  font-size: 0.75rem;
+  color: var(--rd-muted);
+  margin-top: 0.25rem;
+}
+.rd-draft-card-actions {
+  display: flex;
+  gap: var(--rd-gap-xs);
+  margin-top: var(--rd-gap-sm);
+  flex-wrap: wrap;
+}
+
+/* WP-11R2: keep Project Home focused on the next intent. */
+.project-momentum {
+  display: grid;
+  gap: var(--rd-gap-md);
+  padding: var(--rd-gap-md);
+}
+
+.project-momentum-primary,
+.project-add-menu,
+.project-next-focus {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--rd-gap-sm);
+}
+
+.project-add-menu {
+  padding-top: var(--rd-gap-sm);
+  border-top: 1px solid var(--color-border, #e2e2e2);
+}
+
+.project-next-focus {
+  padding: var(--rd-gap-sm) var(--rd-gap-md);
+}

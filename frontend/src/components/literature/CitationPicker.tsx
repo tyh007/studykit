@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { citationsApi } from '../../lib/literature-api';
+import { citationsApi } from '../../application/dataApi';
 import { CloseIcon } from '../ui/Icons';
+import { useCapability } from '../../app/v04/CapabilityNotice';
 
 interface CitationPickerProps {
   onSelect: (citation: any) => void;
@@ -13,11 +14,20 @@ export default function CitationPicker({ onSelect, onClose }: CitationPickerProp
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Centralised capability check (WP-02 Gate §3 blocker D).
+  // In a local workspace citations live nowhere the user
+  // can search, so we must NOT auto-fetch the citation
+  // list and we must NOT show a search input that would
+  // call the API. The gate below renders a short notice
+  // and disables the input.
+  const citationsCapability = useCapability('citations.crud');
+
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
   useEffect(() => {
+    if (!citationsCapability.supported) return;
     if (search.length < 2) {
       setCitations([]);
       return;
@@ -34,7 +44,7 @@ export default function CitationPicker({ onSelect, onClose }: CitationPickerProp
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, citationsCapability.supported]);
 
   const formatAuthors = (creators: any[]) => {
     if (!creators || creators.length === 0) return '';
@@ -43,6 +53,29 @@ export default function CitationPicker({ onSelect, onClose }: CitationPickerProp
       .filter(Boolean)
       .join(', ');
   };
+
+  // Local workspace: the picker is a short notice instead of
+  // a search field. The user can still close the modal;
+  // they just cannot search / pick a citation.
+  if (!citationsCapability.supported) {
+    return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div
+          className="modal-content"
+          onClick={(e) => e.stopPropagation()}
+          data-testid="citation-picker-local-notice"
+          data-capability="citations.crud"
+          style={{ maxWidth: 480, padding: '1rem 1.25rem' }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <h3 style={{ margin: 0, fontSize: '1rem' }}>Insert Citation</h3>
+            <button className="btn btn-ghost btn-sm" onClick={onClose}><CloseIcon size="sm" /></button>
+          </div>
+          <p className="text-sm text-muted" style={{ margin: 0 }}>{citationsCapability.tooltip}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="modal-overlay" onClick={onClose}>

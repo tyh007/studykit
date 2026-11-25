@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/db';
-import { exportsApi } from '../lib/api';
+import { exportsApi } from '../application/dataApi';
+import { useCapability } from '../app/v04/CapabilityNotice';
 import type { Lecture, Module, NoteBlock } from '../types';
 
 const EXPIRY_DAYS = 30;
@@ -18,15 +19,23 @@ export default function ExportDialog({ lecture, module, onClose }: ExportDialogP
   const [result, setResult] = useState<{ message: string; isError?: boolean; jobId?: string; expired?: boolean } | null>(null);
   const [recentExports, setRecentExports] = useState<any[]>([]);
 
+  // Centralised capability check (WP-02 Gate §3 blocker D).
+  // In a local workspace the export job lives behind a
+  // Sync workspace, so we must NOT auto-fetch the recent
+  // exports list. The hook is called unconditionally so
+  // the rules of hooks hold.
+  const exportsCapability = useCapability('exports.create');
+
   // Load recent exports for this lecture (for retention info)
   useEffect(() => {
+    if (!exportsCapability.supported) return;
     exportsApi.list()
       .then((jobs) => {
         const lectureExports = (jobs || []).filter((j: any) => j.lecture_id === lecture.id);
         setRecentExports(lectureExports.slice(0, 5));
       })
       .catch(() => {});
-  }, [lecture.id]);
+  }, [lecture.id, exportsCapability.supported]);
 
   // Check if a date is expired (>30 days)
   const isExpired = (dateStr: string) => {
@@ -131,6 +140,28 @@ export default function ExportDialog({ lecture, module, onClose }: ExportDialogP
       setExporting(false);
     }
   };
+
+  // Local workspace: short notice instead of the export
+  // controls. The user can still close the modal; they
+  // just cannot create a server-side export job.
+  if (!exportsCapability.supported) {
+    return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div
+          className="modal-content"
+          onClick={(e) => e.stopPropagation()}
+          data-testid="export-dialog-local-notice"
+          data-capability="exports.create"
+        >
+          <h2>Export Lecture</h2>
+          <p className="text-sm text-muted" style={{ margin: '0.5rem 0 0 0' }}>{exportsCapability.tooltip}</p>
+          <div className="flex gap-2 justify-between" style={{ marginTop: '1rem' }}>
+            <button className="btn" onClick={onClose}>Close</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="modal-overlay" onClick={onClose}>

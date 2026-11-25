@@ -6,12 +6,26 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "quality:bundle": "node scripts/check-performance-budget.mjs",
+    "build:quality": "npm run build && npm run quality:bundle",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "smoke:canvas": "node scripts/smoke-canvas.cjs",
+    "desktop:dev": "npm --prefix src-tauri run dev:desktop",
+    "desktop:build:unsigned": "npm --prefix src-tauri run build:desktop:unsigned",
+    "desktop:bundle": "npm --prefix src-tauri run build:desktop:app",
+    "desktop:dmg": "npm --prefix src-tauri run build:desktop:dmg"
   },
   "dependencies": {
+    "@citation-js/core": "^0.7.18",
+    "@citation-js/plugin-bibtex": "^0.7.18",
+    "@citation-js/plugin-csl": "^0.7.18",
+    "@citation-js/plugin-ris": "^0.7.18",
+    "@citation/csl-style-chicago-author-date": "^1.0.0",
+    "@citation/csl-style-modern-language-association": "^1.0.0",
+    "@tauri-apps/api": "^2.11.1",
     "@tiptap/core": "^2.10.0",
     "@tiptap/extension-code-block-lowlight": "^2.10.0",
     "@tiptap/extension-highlight": "^2.27.2",
@@ -37,12 +51,15 @@
   "devDependencies": {
     "@testing-library/jest-dom": "^6.4.0",
     "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/katex": "^0.16.7",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "fake-indexeddb": "^6.2.5",
     "happy-dom": "^15.0.0",
+    "playwright": "1.61",
     "typescript": "~5.7.0",
     "vite": "^6.0.0",
     "vitest": "^2.0.0"

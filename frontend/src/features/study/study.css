@@ -1,0 +1,434 @@
+/* StudyKit v0.4 — `features/study/study.css`
+ *
+ * Minimal styles for the WP-04 Study surfaces. The visual
+ * direction is governed by the v0.4 theme tokens in
+ * `src/styles/liquid-glass.css` and `src/shared/theme/*`;
+ * this file is a thin layer of layout + component-specific
+ * tokens. Light / Dark / System are all driven by the
+ * shared CSS layer — no per-component colour rules.
+ *
+ * Keep this file small: it is the *minimum* CSS that
+ * makes the Study surfaces legible. Anything more belongs
+ * in a shared primitive.
+ */
+
+/* ----- Study Home ----- */
+
+.v04-study-home {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.v04-study-home-header h1 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.5rem;
+}
+
+.v04-study-home-lede {
+  margin: 0;
+  color: var(--sk-color-text-muted, #6b6b6b);
+  max-width: 64ch;
+}
+
+.v04-study-home-section h2 {
+  font-size: 1rem;
+  margin: 0 0 0.5rem 0;
+}
+
+.v04-study-home-error {
+  padding: 0.75rem 1rem;
+  color: var(--sk-color-text-on-accent, #fff);
+  background: var(--sk-color-danger-surface, #b00020);
+  border-radius: 8px;
+}
+
+.v04-study-home-empty {
+  padding: 1rem;
+  border-radius: 8px;
+}
+
+.v04-study-home-question-list,
+.v04-study-home-course-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.v04-study-home-question-button {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--sk-color-border-subtle, #e0e0e0);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.v04-study-home-question-button:hover {
+  background: var(--sk-color-surface-hover, rgba(0, 0, 0, 0.04));
+}
+
+.v04-study-home-question-body {
+  flex: 1 1 auto;
+}
+
+.v04-study-home-actions {
+  margin-top: 0.5rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.v04-study-home-course {
+  padding: 0.75rem 1rem;
+}
+
+.v04-study-home-course-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.v04-study-home-course-title {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+}
+
+.v04-study-home-course-meta {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* ----- Course Home ----- */
+
+.v04-course-home {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.v04-course-home-header h1 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.5rem;
+}
+
+.v04-course-home-lede {
+  margin: 0;
+  color: var(--sk-color-text-muted, #6b6b6b);
+}
+
+.v04-course-home-section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.v04-course-home-section h2 {
+  font-size: 1rem;
+  margin: 0 0 0.5rem 0;
+}
+
+.v04-course-home-empty,
+.v04-course-home-error {
+  padding: 1rem;
+  border-radius: 8px;
+}
+
+.v04-course-home-question-list,
+.v04-course-home-lecture-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.v04-course-home-question-button,
+.v04-course-home-lecture-button {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--sk-color-border-subtle, #e0e0e0);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.v04-course-home-question-body,
+.v04-course-home-lecture-title {
+  flex: 1 1 auto;
+}
+
+.v04-course-home-lecture {
+  padding: 0.5rem 0.75rem;
+}
+
+/* ----- Lecture Focus Adapter ----- */
+
+.v04-lecture-focus-adapter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.v04-lecture-focus-cta {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ----- Understand Drawer ----- */
+
+.v04-understand-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 12px;
+  max-width: 640px;
+  margin: 1rem auto;
+}
+
+.v04-understand-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.v04-understand-drawer-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.v04-understand-drawer-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--sk-color-text-muted, #6b6b6b);
+}
+
+.v04-understand-drawer-textarea {
+  font: inherit;
+  font-size: 0.95rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--sk-color-border-subtle, #e0e0e0);
+  border-radius: 6px;
+  background: var(--sk-color-input-bg, #fff);
+  color: var(--sk-color-input-fg, #111);
+  resize: vertical;
+}
+
+.v04-understand-drawer-textarea:focus {
+  outline: 2px solid var(--sk-color-focus-ring, #3b82f6);
+  outline-offset: 1px;
+}
+
+.v04-understand-drawer-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.v04-understand-drawer-status,
+.v04-understand-drawer-error {
+  margin: 0;
+}
+
+.v04-understand-drawer-error {
+  color: var(--sk-color-text-on-accent, #fff);
+  background: var(--sk-color-danger-surface, #b00020);
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+}
+
+.v04-understand-drawer-draft {
+  font: inherit;
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+  background: var(--sk-color-surface-sunken, #f5f5f5);
+  border: 1px dashed var(--sk-color-border-subtle, #e0e0e0);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  margin: 0;
+}
+
+.v04-understand-drawer-ask {
+  border-top: 1px solid var(--sk-color-border-subtle, #e0e0e0);
+  padding-top: 0.75rem;
+}
+
+.v04-understand-drawer-failed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.v04-understand-drawer-review {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* ----- Review Workspace ----- */
+
+.v04-review-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.v04-review-workspace-header h1 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.5rem;
+}
+
+.v04-review-workspace-lede {
+  margin: 0 0 0.5rem 0;
+  color: var(--sk-color-text-muted, #6b6b6b);
+  max-width: 64ch;
+}
+
+.v04-review-workspace-status,
+.v04-review-workspace-empty,
+.v04-review-card-empty {
+  padding: 1rem;
+  border-radius: 8px;
+}
+
+.v04-review-workspace-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 2fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.v04-review-workspace-queue ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.v04-review-queue-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--sk-color-border-subtle, #e0e0e0);
+  border-radius: 6px;
+  padding: 0.4rem 0.5rem;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.v04-review-queue-button.active {
+  border-color: var(--sk-color-accent, #3b82f6);
+  background: var(--sk-color-surface-hover, rgba(59, 130, 246, 0.08));
+}
+
+.v04-review-queue-body {
+  flex: 1 1 auto;
+}
+
+.v04-review-workspace-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 12px;
+}
+
+.v04-review-card-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.v04-review-card-meta {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
+}
+
+.v04-review-card-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--sk-color-text-muted, #6b6b6b);
+}
+
+.v04-review-card-textarea {
+  font: inherit;
+  font-size: 0.95rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--sk-color-border-subtle, #e0e0e0);
+  border-radius: 6px;
+  background: var(--sk-color-input-bg, #fff);
+  color: var(--sk-color-input-fg, #111);
+  resize: vertical;
+}
+
+.v04-review-card-actions,
+.v04-review-card-mark {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.v04-review-card-attempts h3,
+.v04-review-card-feedback h3 {
+  font-size: 0.95rem;
+  margin: 0.5rem 0 0.25rem 0;
+}
+
+.v04-review-card-feedback-item {
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  margin-top: 0.25rem;
+}
+
+.v04-review-card-feedback-header {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}

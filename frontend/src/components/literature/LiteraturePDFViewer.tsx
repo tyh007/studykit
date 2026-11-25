@@ -1,14 +1,42 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
-import { getAuthToken } from '../../lib/api';
+import { getAuthToken } from '../../application/dataApi';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url
 ).toString();
 
+export type LiteraturePDFSource =
+  | {
+      kind: 'remote';
+      paperId: string;
+      /**
+       * Optional canonical asset id. The Research slice
+       * threads this into the Evidence locator so a
+       * `paper-page` locator carries the same id the
+       * `WorkAsset` row uses. The legacy v0.3 paper id
+       * (the `paperId`) is also valid for round-trip via
+       * `dataApi.literaturePapers.list`, but a
+       * `WorkAsset.id` is the preferred key.
+       */
+      assetId?: string;
+    }
+  | { kind: 'local-blob'; blob: Blob; assetId: string }
+  | { kind: 'local-url'; url: string; assetId: string };
+
 interface LiteraturePDFViewerProps {
-  paperId: string;
+  /**
+   * The PDF source. When `kind === 'remote'` the v0.3
+   * `/api/literature/papers/{paperId}/download` path is
+   * used (sync workspace only). When `kind === 'local-*'`
+   * the PDF is loaded from a Blob / object URL — the
+   * local workspace path used by the Research Reader.
+   *
+   * `paperId` is preserved as a backward-compatible
+   * shortcut for the v0.3 surface tree.
+   */
+  source: LiteraturePDFSource;
   currentPageIndex: number;
   totalPages: number;
   onPageChange: (index: number) => void;
@@ -19,7 +47,7 @@ interface LiteraturePDFViewerProps {
 }
 
 export default function LiteraturePDFViewer({
-  paperId,
+  source,
   currentPageIndex,
   totalPages,
   onPageChange,
@@ -39,35 +67,39 @@ export default function LiteraturePDFViewer({
     setError(null);
     setPdfDoc(null);
 
-    const apiBase = (typeof window !== 'undefined' && (window as any).__ENV?.VITE_API_URL)
-      ? (window as any).__ENV.VITE_API_URL
-      : import.meta.env.VITE_API_URL || '';
-    const pdfUrl = `${apiBase}/api/literature/papers/${paperId}/download`;
-
-    const token = getAuthToken();
-    const httpHeaders: Record<string, string> = {};
-    if (token) httpHeaders['Authorization'] = `Bearer ${token}`;
-
-    pdfjsLib.getDocument({
-      url: pdfUrl,
-      httpHeaders,
-    }).promise
-      .then((pdf) => {
+    (async (): Promise<void> => {
+      try {
+        let pdf: pdfjsLib.PDFDocumentProxy;
+        if (source.kind === 'remote') {
+          const apiBase = (typeof window !== 'undefined' && (window as any).__ENV?.VITE_API_URL)
+            ? (window as any).__ENV.VITE_API_URL
+            : import.meta.env.VITE_API_URL || '';
+          const pdfUrl = `${apiBase}/api/literature/papers/${source.paperId}/download`;
+          const token = getAuthToken();
+          const httpHeaders: Record<string, string> = {};
+          if (token) httpHeaders['Authorization'] = `Bearer ${token}`;
+          pdf = await pdfjsLib.getDocument({ url: pdfUrl, httpHeaders }).promise;
+        } else if (source.kind === 'local-url') {
+          pdf = await pdfjsLib.getDocument({ url: source.url }).promise;
+        } else {
+          const bytes = new Uint8Array(await source.blob.arrayBuffer());
+          pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+        }
         if (!cancelled) {
           setPdfDoc(pdf);
           onTotalPagesChange(pdf.numPages);
           setLoading(false);
         }
-      })
-      .catch((err) => {
+      } catch (err) {
         if (!cancelled) {
-          setError(err?.message || 'Failed to load PDF');
+          setError(err instanceof Error ? err.message : 'Failed to load PDF');
           setLoading(false);
         }
-      });
+      }
+    })();
 
     return () => { cancelled = true; };
-  }, [paperId, onTotalPagesChange]);
+  }, [source, onTotalPagesChange]);
 
   // Render current page
   useEffect(() => {

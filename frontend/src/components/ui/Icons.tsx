@@ -852,6 +852,52 @@ export function MaximizeIcon(props: IconProps) {
   );
 }
 
+/* ---- Theme: sun (Light) ---- */
+export function SunIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" strokeWidth="1.75" />
+      <g stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
+        <line x1="12" y1="3" x2="12" y2="5" />
+        <line x1="12" y1="19" x2="12" y2="21" />
+        <line x1="3" y1="12" x2="5" y2="12" />
+        <line x1="19" y1="12" x2="21" y2="12" />
+        <line x1="5.6" y1="5.6" x2="7" y2="7" />
+        <line x1="17" y1="17" x2="18.4" y2="18.4" />
+        <line x1="5.6" y1="18.4" x2="7" y2="17" />
+        <line x1="17" y1="7" x2="18.4" y2="5.6" />
+      </g>
+    </IconWrap>
+  );
+}
+
+/* ---- Theme: moon (Dark) ---- */
+export function MoonIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <path
+        d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </IconWrap>
+  );
+}
+
+/* ---- Theme: monitor (System) ---- */
+export function SystemIcon(props: IconProps) {
+  return (
+    <IconWrap {...props}>
+      <rect x="3" y="4" width="18" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="1.75" />
+      <line x1="8" y1="20" x2="16" y2="20" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      <line x1="12" y1="16" x2="12" y2="20" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+    </IconWrap>
+  );
+}
+
 /* ==========================================================================
    Combined icon component for dynamic rendering
    ========================================================================== */
@@ -922,6 +968,9 @@ const iconMap: Record<string, React.ComponentType<IconProps>> = {
   zoomIn: ZoomInIcon,
   zoomOut: ZoomOutIcon,
   maximize: MaximizeIcon,
+  sun: SunIcon,
+  moon: MoonIcon,
+  system: SystemIcon,
 };
 
 export type IconName = keyof typeof iconMap;

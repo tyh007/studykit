@@ -8,7 +8,7 @@ import {
   type EdgeChange,
   type Viewport,
 } from '@xyflow/react';
-import { literatureCanvasApi } from '../../../lib/literature-canvas-api';
+import { literatureCanvasApi } from '../../../application/dataApi';
 import type {
   LiteratureCanvasNode,
   LiteratureCanvasEdge,
@@ -1096,7 +1096,10 @@ export function useLiteratureCanvas(projectId: string) {
         // Lazy imports to avoid pulling these modules in for users who never use the canvas.
         const { createAIExtractionService } = await import('../../../lib/literature/ai-extraction');
         const { smartExtract } = await import('../../../lib/literature/multimodal-extraction');
-        const { literaturePapersApi } = await import('../../../lib/literature-api');
+        // Go through the dataApi gateway so the local workspace
+        // throws `UnsupportedInLocalWorkspaceError` before any
+        // `/api` request is made (WP-02 Gate §3 blocker D).
+        const { literaturePapersApi } = await import('../../../application/dataApi');
         let extractedData: any = null;
         const useVision = !paper.full_text || paper.full_text.length < 200;
         if (useVision && paper.storage_key) {
@@ -1124,7 +1127,10 @@ export function useLiteratureCanvas(projectId: string) {
       } catch (err) {
         console.warn('runSummary failed', err);
         try {
-          const { literaturePapersApi } = await import('../../../lib/literature-api');
+          // Same gateway import — local workspace throws here
+          // too, and the catch swallow keeps the UI from
+          // double-erroring.
+          const { literaturePapersApi } = await import('../../../application/dataApi');
           await literaturePapersApi.update(paperId, {
             error_message: err instanceof Error ? err.message : 'Extraction failed',
             processing_status: 'error',
