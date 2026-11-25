@@ -93,3 +93,12 @@ This is an academic/product prototype. It is not a finished institutional learni
 Authentication uses browser-held tokens. Uploaded files and exports are served through static paths; authentication on API routes alone does not make those file URLs private. Do not use confidential lecture or participant material on a public deployment without reviewing file access, retention, backup and user isolation. Cloud AI sends selected content to the configured provider; local AI availability depends on the user's local service and network setup.
 
 No reuse license or collaborator role has been inferred by this documentation. Source and original product documents are retained; generated build caches are excluded.
+
+## Literature Hub branch
+
+This branch adds the Literature Hub canvas changes. Run its frontend tests with
+`npm --prefix frontend test`. On Node 25, run the command with
+`NODE_OPTIONS=--no-experimental-webstorage` so the tests use browser-emulated storage.
+
+Desktop packaging is available in the v0.4 checkout that includes
+`frontend/src-tauri/package.json`.

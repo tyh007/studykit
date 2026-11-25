@@ -1,6 +1,6 @@
 import React from 'react';
 import { Node, mergeAttributes } from '@tiptap/core';
-import { ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react';
+import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react';
 import katex from 'katex';
 
 /**
@@ -97,8 +97,8 @@ function EquationNodeView(props: NodeViewProps) {
   }, [latex, display]);
 
   return (
-    <div
-      contentEditable={false}
+    <NodeViewWrapper
+      as="div"
       style={{
         position: 'relative',
         padding: '0.75rem 1rem',
@@ -122,6 +122,6 @@ function EquationNodeView(props: NodeViewProps) {
           Empty equation. Double-click to edit.
         </span>
       )}
-    </div>
+    </NodeViewWrapper>
   );
 }

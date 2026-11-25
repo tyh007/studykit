@@ -2,9 +2,10 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from './lib/auth';
 import { useStore } from './store/useStore';
 import { modulesApi, lecturesApi, sourceDocumentsApi } from './lib/api';
-import { literaturePapersApi, paperRelationsApi } from './lib/literature-api';
-import PaperRelationsGraph from './components/literature/PaperRelationsGraph';
-import { SidebarIcon, LiteratureIcon, ReadingListIcon, GraphIcon } from './components/ui/Icons';
+import { literaturePapersApi } from './lib/literature-api';
+// @deprecated PaperRelationsGraph is replaced by LiteratureCanvas; kept on disk for later cleanup.
+import LiteratureCanvas from './components/literature/canvas/LiteratureCanvas';
+import { SidebarIcon, LiteratureIcon, ReadingListIcon } from './components/ui/Icons';
 import { LogoMarkWithWordmark } from './components/ui/Logo';
 import { db } from './lib/db';
 import PDFViewer from './components/PDFViewer';
@@ -173,15 +174,6 @@ function StudyKitApp() {
     activeLiteratureTab, setActiveLiteratureTab,
   } = useStore();
 
-  const [graphData, setGraphData] = useState<{nodes: any[]; edges: any[]}>({nodes: [], edges: []});
-  
-  // Fetch graph data when graph tab is active
-  useEffect(() => {
-    if (activeLiteratureTab === 'graph' && selectedLitProjectId) {
-      paperRelationsApi.graph(selectedLitProjectId).then(setGraphData).catch(() => {});
-    }
-  }, [activeLiteratureTab, selectedLitProjectId]);
-
   const { user, workspace_id: authWorkspaceId, logout } = useAuth();
   const setWorkspaceId = useStore((s) => s.setWorkspaceId);
   const [showNewModule, setShowNewModule] = useState(false);
@@ -299,7 +291,19 @@ function StudyKitApp() {
             <span className={`dot ${syncStatus}`} />
             <span>{syncStatus === 'synced' ? 'Saved' : syncStatus === 'pending' ? 'Saving...' : syncStatus === 'error' ? 'Error' : 'Offline'}</span>
           </div>
-          <button className="btn btn-sm" onClick={() => setShowExport(true)} disabled={!selectedLecture}>
+          <button
+            className="btn btn-sm"
+            onClick={() => setShowExport(true)}
+            // Export dialog is lecture-scoped today, so it only makes sense in
+            // modules mode with a selected lecture. Literature projects use
+            // their own per-paper export in PaperWorkspace.
+            disabled={sidebarMode !== 'modules' || !selectedLecture}
+            title={sidebarMode !== 'modules'
+              ? 'Switch to Modules and pick a lecture to export'
+              : !selectedLecture
+                ? 'Select a lecture to export'
+                : 'Export this lecture'}
+          >
             Export
           </button>
           <span className="text-sm text-muted">{user?.display_name || user?.email}</span>
@@ -358,20 +362,29 @@ function StudyKitApp() {
           )}
         </aside>
 
-        {/* Main content */}
-        <main id="main-content" className={`main-content ${!selectedLecture ? (sidebarMode === 'literature' && selectedLitProjectId ? 'literature-active' : 'empty') : ''}`}>
-          {!selectedLecture ? (
-            sidebarMode === 'literature' && selectedLitProjectId ? (
-              <div>
+        {/* Main content — fully branched on sidebarMode so each mode only
+            ever shows its own content, never stale lecture context. */}
+        <main id="main-content" className={`main-content ${sidebarMode}`}>
+          {sidebarMode === 'canvas' ? (
+            selectedLitProjectId ? (
+              <div className="literature-canvas-host">
+                <LiteratureCanvas projectId={selectedLitProjectId} />
+              </div>
+            ) : (
+              <div className="empty-state">
+                <h2>Research Canvas</h2>
+                <p>
+                  Pick or create a literature project in the sidebar to start a
+                  freeform AI research canvas for its papers.
+                </p>
+              </div>
+            )
+          ) : sidebarMode === 'literature' ? (
+            selectedLitProjectId ? (
+              <div className="literature-shell">
                 {/* Literature tab bar */}
-                <div style={{
-                  display: 'flex',
-                  borderBottom: '2px solid var(--color-border)',
-                  padding: '0 1rem',
-                  background: 'var(--color-bg)',
-                  gap: 0,
-                }}>
-                  {(['papers', 'readingLists', 'graph'] as const).map((tab) => (
+                <div className="literature-top-tabs">
+                  {(['papers', 'readingLists'] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setActiveLiteratureTab(tab)}
@@ -388,7 +401,7 @@ function StudyKitApp() {
                         transition: 'color 0.15s, border-color 0.15s',
                       }}
                     >
-                      {tab === 'papers' ? <><LiteratureIcon size="sm" /> Papers</> : tab === 'readingLists' ? <><ReadingListIcon size="sm" /> Reading Lists</> : <><GraphIcon size="sm" /> Graph</>}
+                      {tab === 'papers' ? <><LiteratureIcon size="sm" /> Papers</> : <><ReadingListIcon size="sm" /> Reading Lists</>}
                     </button>
                   ))}
                 </div>
@@ -408,20 +421,30 @@ function StudyKitApp() {
                   <>
                     {activeLiteratureTab === 'papers' && <SummaryTable projectId={selectedLitProjectId} />}
                     {activeLiteratureTab === 'readingLists' && <ReadingListsView />}
-                    {activeLiteratureTab === 'graph' && (
-                      <div style={{ padding: '1rem', overflow: 'auto' }}>
-                        <PaperRelationsGraph
-                          nodes={graphData.nodes}
-                          edges={graphData.edges}
-                          onNodeClick={(id) => selectLitPaper(id)}
-                          width={800}
-                          height={500}
-                        />
-                      </div>
-                    )}
                   </>
                 )}
               </div>
+            ) : (
+              <div className="empty-state">
+                <h2>Literature Library</h2>
+                <p>
+                  Create a literature project to collect papers, build reading lists,
+                  and visualize how they reference each other.
+                </p>
+                <p className="text-sm text-muted" style={{ marginTop: '0.5rem' }}>
+                  Use <strong>New Project</strong> in the sidebar to get started,
+                  or import from Zotero on the left.
+                </p>
+              </div>
+            )
+          ) : (
+            selectedLecture ? (
+              <LectureView
+                lecture={selectedLecture}
+                document={currentDocument}
+                pages={currentPages}
+                currentPageIndex={selectedPageIndex}
+              />
             ) : (
               <div className="empty-state">
                 <h2>Welcome to StudyKit</h2>
@@ -436,13 +459,6 @@ function StudyKitApp() {
                 )}
               </div>
             )
-          ) : (
-            <LectureView
-              lecture={selectedLecture}
-              document={currentDocument}
-              pages={currentPages}
-              currentPageIndex={selectedPageIndex}
-            />
           )}
         </main>
       </div>
@@ -630,12 +646,27 @@ function LectureView({
               onClick={() => setActiveLectureTab('notes')}
             >Notes</div>
             <div
-              className={`note-panel-tab glass-tab ${activeLectureTab === 'literature' ? 'active' : ''}`}
-              onClick={() => setActiveLectureTab('literature')}
-            >Literature Review</div>
+              className={`note-panel-tab glass-tab ${activeLectureTab === 'citations' ? 'active' : ''}`}
+              onClick={() => setActiveLectureTab('citations')}
+            >Citations</div>
           </div>
           {activeLectureTab === 'notes' && (
           <div className="flex gap-1">
+            <button
+              className={`btn btn-ghost btn-sm ${currentLayout === 'slide_top_notes_below' ? 'active' : ''}`}
+              onClick={() => useStore.getState().setCurrentLayout(
+                currentLayout === 'slide_left_notes_right'
+                  ? 'slide_top_notes_below'
+                  : 'slide_left_notes_right',
+              )}
+              title={currentLayout === 'slide_left_notes_right'
+                ? 'Switch to slides on top, notes below'
+                : 'Switch to slides on left, notes on right'}
+              aria-pressed={currentLayout === 'slide_top_notes_below'}
+              style={currentLayout === 'slide_top_notes_below' ? { color: 'var(--color-primary)', fontWeight: 600 } : {}}
+            >
+              {currentLayout === 'slide_left_notes_right' ? '⬆ Stacked' : '⬅ Side-by-side'}
+            </button>
             <button
               className={`btn btn-ghost btn-sm ${cornellMode ? 'active' : ''}`}
               onClick={() => useStore.getState().setCornellMode(!cornellMode)}

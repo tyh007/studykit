@@ -10,13 +10,13 @@
 
 ### Database Credentials
 
-- [X]  `DB_PASSWORD` has been changed from default (✓ Set to: `+PQslJlF/6Nw3j2JErwZftxBKBmLUx5VJ/yaIOItAkA=`)
+- [ ]  `DB_PASSWORD` has been changed from the default
   - Generated via: `openssl rand -base64 32`
   - **Store this in a password manager** — if lost, you'll need to reset PostgreSQL password in the running container
 
 ### JWT Secret
 
-- [X]  `JWT_SECRET` is at least 64 characters (✓ Set to: `GIYpK80TMZF8m/3liD4qGk0mhpeqypszrkt3zn0h2jLjnCvf2RihFTr9RqsX7J26`)
+- [ ]  `JWT_SECRET` is at least 64 characters
   - Generated via: `openssl rand -base64 48 | head -c 64`
   - **Store this in a password manager** — if lost, all existing login tokens become invalid
 

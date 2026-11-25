@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { getAuthToken } from '../lib/api'
 import { PDFProcessor } from '../lib/literature/pdf-processor'
+import { uploadPDFFile, validatePDFFiles } from '../lib/literature-pdf-upload'
 
 export interface UploadProgress {
   fileName: string
@@ -20,30 +20,7 @@ export function useLiteratureFileUpload() {
   const [isUploading, setIsUploading] = useState(false)
 
   const processPDFFile = async (file: File, projectId: string): Promise<any> => {
-    const validation = PDFProcessor.validatePDFFile(file)
-    if (!validation.valid) throw new Error(validation.error)
-
-    // Upload PDF to server (server extracts text, creates paper record, stores file)
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('project_id', projectId)
-
-    const token = getAuthToken()
-    const headers: Record<string, string> = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
-
-    const response = await fetch('/api/literature/papers/upload', {
-      method: 'POST',
-      headers,
-      body: formData,
-    })
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({ error: 'Upload failed' }))
-      throw new Error(err.error || `HTTP ${response.status}`)
-    }
-
-    return response.json()
+    return uploadPDFFile(file, projectId)
   }
 
   const uploadFiles = async (files: File[], projectId: string): Promise<FileUploadResult> => {
@@ -55,7 +32,7 @@ export function useLiteratureFileUpload() {
         setUploadProgress(prev => [...prev, { fileName: file.name, status: 'processing', progress: 0 }])
 
         try {
-          await processPDFFile(file, projectId)
+          await uploadPDFFile(file, projectId)
           result.success++
           setUploadProgress(prev =>
             prev.map(p => p.fileName === file.name ? { ...p, status: 'completed', progress: 100 } : p)
@@ -76,18 +53,5 @@ export function useLiteratureFileUpload() {
     return result
   }
 
-  const validateFiles = (files: File[]): { valid: File[]; invalid: Array<{ file: File; error: string }> } => {
-    const valid: File[] = []
-    const invalid: Array<{ file: File; error: string }> = []
-
-    for (const file of files) {
-      const validation = PDFProcessor.validatePDFFile(file)
-      if (validation.valid) valid.push(file)
-      else invalid.push({ file, error: validation.error || 'Invalid file' })
-    }
-
-    return { valid, invalid }
-  }
-
-  return { uploadFiles, validateFiles, uploadProgress, isUploading }
+  return { uploadFiles, validateFiles: validatePDFFiles, uploadProgress, isUploading }
 }

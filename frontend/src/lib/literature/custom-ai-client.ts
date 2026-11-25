@@ -172,9 +172,11 @@ export class CustomAIClient {
     if (cleaned.startsWith('```')) {
       cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '')
     }
-    // Scan forward to find every valid JSON object, return the first one that parses
+    // Scan forward to find useful JSON, but cap attempts so malformed output
+    // with many brace pairs cannot spend too long here.
     let depth = 0
     let start = -1
+    let attempts = 0
     for (let i = 0; i < cleaned.length; i++) {
       if (cleaned[i] === '{') {
         if (depth === 0) start = i
@@ -183,13 +185,22 @@ export class CustomAIClient {
         depth--
         if (depth === 0 && start !== -1) {
           const candidate = cleaned.substring(start, i + 1)
+          attempts++
           try {
-            JSON.parse(candidate)
-            return candidate
+            const parsed = JSON.parse(candidate)
+            if (
+              parsed &&
+              typeof parsed === 'object' &&
+              !Array.isArray(parsed) &&
+              Object.keys(parsed).length > 0
+            ) {
+              return candidate
+            }
           } catch {
             // This wasn't a valid JSON object, keep scanning
-            start = -1
           }
+          if (attempts >= 20) return cleaned
+          start = -1
         }
       }
     }

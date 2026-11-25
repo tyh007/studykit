@@ -19,8 +19,8 @@ import { db } from '../lib/db';
 
 interface StudyKitState {
   // Sidebar mode
-  sidebarMode: 'modules' | 'literature';
-  setSidebarMode: (mode: 'modules' | 'literature') => void;
+  sidebarMode: 'modules' | 'literature' | 'canvas';
+  setSidebarMode: (mode: 'modules' | 'literature' | 'canvas') => void;
 
   // Literature Projects
   litProjects: LiteratureProject[];
@@ -38,9 +38,11 @@ interface StudyKitState {
   litCustomFields: LiteratureCustomField[];
   setLitCustomFields: (fields: LiteratureCustomField[]) => void;
 
-  // UI: active tab within a lecture
-  activeLectureTab: 'notes' | 'literature';
-  setActiveLectureTab: (tab: 'notes' | 'literature') => void;
+  // UI: active tab within a lecture (Notes | Citations). The previous name
+  // 'literature' overloaded the same word used by sidebarMode, so the
+  // store field is renamed 'citations' to match the UI label.
+  activeLectureTab: 'notes' | 'citations';
+  setActiveLectureTab: (tab: 'notes' | 'citations') => void;
   // Workspace
   workspace_id: string | null;
   setWorkspaceId: (id: string | null) => void;
@@ -96,8 +98,8 @@ interface StudyKitState {
   setCurrentLayout: (layout: 'slide_left_notes_right' | 'slide_top_notes_below') => void;
   zoom: number;
   setZoom: (zoom: number) => void;
-  activeLiteratureTab: 'papers' | 'readingLists' | 'graph';
-  setActiveLiteratureTab: (tab: 'papers' | 'readingLists' | 'graph') => void;
+  activeLiteratureTab: 'papers' | 'readingLists';
+  setActiveLiteratureTab: (tab: 'papers' | 'readingLists') => void;
 
   // Sync status
   syncStatus: 'synced' | 'pending' | 'error' | 'offline';
@@ -149,7 +151,32 @@ export const useStore = create<StudyKitState>((set, get) => ({
 
   // Sidebar mode
   sidebarMode: 'modules',
-  setSidebarMode: (mode) => set({ sidebarMode: mode }),
+  setSidebarMode: (mode) =>
+    set((state) =>
+      // Switching sidebar modes must clear the *opposite* mode's selection,
+      // otherwise stale IDs leak through and the main area renders the
+      // wrong view (e.g. opening a lecture, then clicking 'Literature',
+      // would leave the lecture rendered in the middle).
+      mode === 'modules'
+        ? {
+            sidebarMode: mode,
+            selectedLitProjectId: null,
+            selectedLitPaperId: null,
+            activeLiteratureTab: 'papers',
+            litPapers: [],
+          }
+        : {
+            sidebarMode: mode,
+            selectedModuleId: null,
+            selectedLectureId: null,
+            currentDocument: null,
+            currentPages: [],
+            selectedPageId: null,
+            selectedPageIndex: 0,
+            noteBlocks: [],
+            activeLectureTab: 'notes',
+          },
+    ),
 
   // Literature Projects
   litProjects: [],

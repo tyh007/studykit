@@ -87,6 +87,65 @@ router.post('/', async (req, res) => {
   }
 });
 
+// POST /api/literature/papers/upload — upload PDF and create paper
+// NOTE: This route is declared BEFORE the /:id routes below to avoid Express
+// matching `POST /upload` against the parameterized path on future refactors.
+router.post('/upload', (req, res) => {
+  parsePdfUpload(req, res, async (err) => {
+    if (err) {
+      return res.status(400).json({ error: err.message || 'Upload failed' });
+    }
+    try {
+      const file = req.file;
+      if (!file) return res.status(400).json({ error: 'No PDF file uploaded' });
+
+      const { project_id } = req.body;
+      if (!project_id) {
+        fs.unlinkSync(file.path);
+        return res.status(400).json({ error: 'project_id is required' });
+      }
+
+      const ws = await db.query(
+        'SELECT id FROM workspaces WHERE owner_user_id = $1 AND deleted_at IS NULL LIMIT 1',
+        [req.user.id]
+      );
+      if (ws.rows.length === 0) return res.status(400).json({ error: 'No workspace found' });
+
+      // Extract text from PDF
+      let fullText = null;
+      try {
+        const pdfParse = require('pdf-parse');
+        const pdfBuffer = fs.readFileSync(file.path);
+        const pdfData = await pdfParse(pdfBuffer);
+        fullText = pdfData.text;
+      } catch (parseErr) {
+        console.warn('PDF text extraction failed:', parseErr.message);
+      }
+
+      const id = uuidv4();
+      const storageKey = file.filename;
+
+      await db.query(
+        `INSERT INTO literature_papers (id, project_id, workspace_id, file_name, file_size, file_type,
+          storage_key, title, full_text, processing_status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [id, project_id, ws.rows[0].id, file.originalname, file.size, 'application/pdf',
+         storageKey, file.originalname.replace('.pdf', ''), fullText, fullText ? 'pending' : 'completed']
+      );
+
+      const result = await db.query('SELECT * FROM literature_papers WHERE id = $1', [id]);
+      res.status(201).json(result.rows[0]);
+    } catch (err) {
+      console.error('Upload error:', err);
+      // Clean up uploaded file on error
+      if (req.file?.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      res.status(500).json({ error: 'Failed to upload paper' });
+    }
+  });
+});
+
 // GET /api/literature/papers/:id
 router.get('/:id', async (req, res) => {
   try {
@@ -208,66 +267,6 @@ router.get('/:id/download', async (req, res) => {
     console.error('Paper download error:', err);
     res.status(500).json({ error: 'Failed to download paper' });
   }
-});
-
-
-/**
- * POST /api/literature/papers/upload — upload PDF and create paper
- */
-router.post('/upload', (req, res) => {
-  parsePdfUpload(req, res, async (err) => {
-    if (err) {
-      return res.status(400).json({ error: err.message || 'Upload failed' });
-    }
-    try {
-      const file = req.file;
-      if (!file) return res.status(400).json({ error: 'No PDF file uploaded' });
-
-      const { project_id } = req.body;
-      if (!project_id) {
-        fs.unlinkSync(file.path);
-        return res.status(400).json({ error: 'project_id is required' });
-      }
-
-      const ws = await db.query(
-        'SELECT id FROM workspaces WHERE owner_user_id = $1 AND deleted_at IS NULL LIMIT 1',
-        [req.user.id]
-      );
-      if (ws.rows.length === 0) return res.status(400).json({ error: 'No workspace found' });
-
-      // Extract text from PDF
-      let fullText = null;
-      try {
-        const pdfParse = require('pdf-parse');
-        const pdfBuffer = fs.readFileSync(file.path);
-        const pdfData = await pdfParse(pdfBuffer);
-        fullText = pdfData.text;
-      } catch (parseErr) {
-        console.warn('PDF text extraction failed:', parseErr.message);
-      }
-
-      const id = uuidv4();
-      const storageKey = file.filename;
-
-      await db.query(
-        `INSERT INTO literature_papers (id, project_id, workspace_id, file_name, file_size, file_type,
-          storage_key, title, full_text, processing_status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-        [id, project_id, ws.rows[0].id, file.originalname, file.size, 'application/pdf',
-         storageKey, file.originalname.replace('.pdf', ''), fullText, fullText ? 'pending' : 'completed']
-      );
-
-      const result = await db.query('SELECT * FROM literature_papers WHERE id = $1', [id]);
-      res.status(201).json(result.rows[0]);
-    } catch (err) {
-      console.error('Upload error:', err);
-      // Clean up uploaded file on error
-      if (req.file?.path && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
-      res.status(500).json({ error: 'Failed to upload paper' });
-    }
-  });
 });
 
 

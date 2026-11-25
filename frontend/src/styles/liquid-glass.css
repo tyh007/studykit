@@ -606,6 +606,7 @@
 .sk-icon.sk-icon-sm { width: 16px; height: 16px; }
 .sk-icon.sk-icon-lg { width: 20px; height: 20px; }
 .sk-icon.sk-icon-xl { width: 24px; height: 24px; }
+.sk-icon.sk-icon-2xl { width: 40px; height: 40px; }
 
 .sk-icon.sk-icon-logo svg {
   stroke-width: initial;

@@ -17,3 +17,6 @@ railway.json
 *.tsbuildinfo
 .env.*
 !.env.example
+/graphify-out/
+/frontend/tmp/smoke-collaboration/
+/frontend/study-smoke.png

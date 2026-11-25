@@ -57,9 +57,10 @@ function formatAuthorsAPA(authors?: string): string {
 }
 
 export default function SummaryTable({ projectId }: { projectId: string }) {
-  const { litPapers, setLitPapers, litCustomFields, readingLists, selectLitPaper } = useStore();
+  const { litPapers, setLitPapers, litCustomFields, readingLists, selectLitPaper, setSidebarMode } = useStore();
   const { uploadFiles, isUploading } = useLiteratureFileUpload();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [sendingToCanvas, setSendingToCanvas] = useState(false);
   
   const [view, setView] = useState<'library' | 'trash'>('library');
   const [searchQuery, setSearchQuery] = useState('');
@@ -168,6 +169,26 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
     }
     setSelectedIds(new Set());
     loadPapers();
+  };
+
+  const handleSendToCanvas = async () => {
+    if (selectedIds.size === 0 || sendingToCanvas) return;
+    setSendingToCanvas(true);
+    try {
+      const { literatureCanvasApi } = await import('../../lib/literature-canvas-api');
+      const list = await literatureCanvasApi.listOrCreate(projectId);
+      const canvas = list[0];
+      if (!canvas) {
+        console.warn('No canvas available for project', projectId);
+        return;
+      }
+      await literatureCanvasApi.importPapers(canvas.id, Array.from(selectedIds));
+      setSidebarMode('canvas');
+    } catch (err) {
+      console.warn('Send to canvas failed:', err);
+    } finally {
+      setSendingToCanvas(false);
+    }
   };
 
   const handleBatchRestore = async () => {
@@ -371,7 +392,17 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
           <button className="btn btn-sm" onClick={handleBatchRestore}>Restore Selected</button>
         )}
         {view === 'library' && selectedIds.size > 0 && (
-          <button className="btn btn-sm btn-danger" onClick={handleBatchTrash}>Move to Trash</button>
+          <>
+            <button
+              className="btn btn-sm"
+              onClick={handleSendToCanvas}
+              disabled={sendingToCanvas}
+              title="Add selected papers to the literature canvas"
+            >
+              {sendingToCanvas ? 'Sending…' : `Send to Canvas (${selectedIds.size})`}
+            </button>
+            <button className="btn btn-sm btn-danger" onClick={handleBatchTrash}>Move to Trash</button>
+          </>
         )}
         {view === 'library' && (
           <div style={{ position: 'relative' }}>
