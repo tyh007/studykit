@@ -12,3 +12,7 @@ zeabur.json
 railway.json
 .continue/
 *.zip
+*.tsbuildinfo
+/graphify-out/
+/frontend/tmp/smoke-collaboration/
+/frontend/study-smoke.png

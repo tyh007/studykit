@@ -8,11 +8,12 @@
 
 ## 🚀 Quick Start (5 minutes)
 
-### Step 1: Generate Secure Credentials ✅ DONE
+### Step 1: Generate deployment credentials
 
-Credentials have already been generated:
-- DB_PASSWORD: `+PQslJlF/6Nw3j2JErwZftxBKBmLUx5VJ/yaIOItAkA=` (44 chars)
-- JWT_SECRET: `GIYpK80TMZF8m/3liD4qGk0mhpeqypszrkt3zn0h2jLjnCvf2RihFTr9RqsX7J26` (64 chars)
+Copy `.env.example` to `.env` for a new installation. Generate each value separately and enter it in `.env`.
+
+- `DB_PASSWORD` can be generated with `openssl rand -base64 32`.
+- `JWT_SECRET` can be generated with `openssl rand -base64 48`.
 
 ⚠️ **CRITICAL:** Save these to a password manager. If you lose them:
 - DB_PASSWORD: Reset in Docker container
