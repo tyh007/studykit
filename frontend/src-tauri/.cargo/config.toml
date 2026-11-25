@@ -1,0 +1,6 @@
+[env]
+# The workspace manager keeps one process-global "open workspace" slot, and
+# its tests open and close workspaces against it. Running them in parallel
+# makes them collide (STUDYKIT_ANOTHER_OPEN), so run tests on one thread.
+# An explicit `--test-threads=N` on the command line still overrides this.
+RUST_TEST_THREADS = "1"
