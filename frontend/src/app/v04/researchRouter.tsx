@@ -35,6 +35,9 @@
  */
 
 import React from 'react';
+// Research surfaces are lazy-loaded directly (no feature barrel), so the
+// shared Research stylesheet must be imported here or it never loads.
+import '../../features/research/research.css';
 import { isFeatureEnabled } from '../feature-flags';
 import { useLocation, locationStore } from './locationStore';
 import { makeAppLocation, type ContainerRef } from '../../domain/workspace';

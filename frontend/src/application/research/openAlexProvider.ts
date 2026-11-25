@@ -500,8 +500,13 @@ export function buildSearchClause(spec: QuerySpec): string {
     const labels = [c.label, ...c.synonyms].filter(Boolean);
     if (labels.length > 0) parts.push(`(${labels.map(quoteOr).join(' OR ')})`);
   }
-  if (spec.question.trim().length > 0) {
-    parts.push(quoteOr(spec.question.trim()));
+  // The question is natural language, so it goes to OpenAlex as plain
+  // free text (relevance-ranked, stemmed). Quoting it would force an
+  // exact-phrase match, which returns zero hits for almost any question.
+  // Stray double quotes are dropped so they cannot open a phrase.
+  const question = spec.question.replace(/"/g, ' ').replace(/\s+/g, ' ').trim();
+  if (question.length > 0) {
+    parts.push(parts.length > 0 ? `(${question})` : question);
   }
   return parts.join(' AND ');
 }

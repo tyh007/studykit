@@ -25,7 +25,7 @@
   --rd-border: 1px solid var(--color-border, #e2e2e2);
   --rd-muted: var(--color-text-secondary, #666);
   --rd-bg: var(--color-bg, transparent);
-  --rd-bg-elevated: var(--color-bg-elevated, #fff);
+  --rd-bg-elevated: var(--surface-elevated, var(--color-surface, transparent));
 }
 
 .rd-stack-sm {

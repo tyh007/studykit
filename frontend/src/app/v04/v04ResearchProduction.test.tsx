@@ -697,7 +697,7 @@ describe('WP-05 invariant: incomplete locator in real UI', () => {
     await screen.findByTestId('research-home');
     // WP-11R2: the new project form is collapsed
     // behind a button. The helper opens it first.
-    await user.click(screen.getByTestId('research-new-project-toggle'));
+    await user.click(await screen.findByTestId('research-new-project-toggle'));
     await user.type(await screen.findByTestId('research-new-project-name'), 'No PDF project');
     await user.click(screen.getByTestId('research-new-project-submit'));
     const projectId = (await repo.listProjects())[0]!.id;
@@ -758,7 +758,7 @@ describe('WP-05 invariant: incomplete locator in real UI', () => {
     await screen.findByTestId('research-home');
     // WP-11R2: the new project form is collapsed
     // behind a button. Open it first.
-    await user.click(screen.getByTestId('research-new-project-toggle'));
+    await user.click(await screen.findByTestId('research-new-project-toggle'));
     await user.type(await screen.findByTestId('research-new-project-name'), 'Drawer disable test');
     await user.click(screen.getByTestId('research-new-project-submit'));
     const projectId = (await repo.listProjects())[0]!.id;

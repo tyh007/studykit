@@ -40,6 +40,7 @@ import { Discovery } from './Discovery';
 import { Button } from '../../shared/ui/Button';
 import { Input } from '../../shared/ui/Input';
 import { useResearchDeps } from './researchContext';
+import { useSupports } from '../../application/dataApi';
 import { addWorkFromIdentifier } from '../../application/research/researchUseCases';
 
 export type SourcesView = 'library' | 'search';
@@ -68,6 +69,9 @@ export function Sources(props: SourcesProps): React.ReactElement {
   const [view, setView] = React.useState<SourcesView>(props.initialView ?? 'library');
   const [showAdd, setShowAdd] = React.useState(props.initialAdd ?? false);
   const [libraryAction, setLibraryAction] = React.useState<'pdf' | 'zotero' | null>(null);
+  // Same capability the Library toolbar uses, so the Add panel never offers
+  // a Zotero import that the Library would then report as unavailable.
+  const canImportZotero = useSupports('zotero.import');
   const [identifierOpen, setIdentifierOpen] = React.useState(false);
   const [identifier, setIdentifier] = React.useState('');
   const [title, setTitle] = React.useState('');
@@ -188,7 +192,7 @@ export function Sources(props: SourcesProps): React.ReactElement {
             </li>
             <li>
               <Button
-                variant="primary"
+                variant="secondary"
                 size="sm"
                 onClick={() => {
                   setView('library');
@@ -202,13 +206,16 @@ export function Sources(props: SourcesProps): React.ReactElement {
             </li>
             <li>
               <Button
-                variant="primary"
+                variant="secondary"
                 size="sm"
                 onClick={() => {
                   setView('library');
                   setLibraryAction('zotero');
                   setShowAdd(false);
                 }}
+                disabled={!canImportZotero}
+                title={canImportZotero ? undefined : 'Zotero import needs a sync workspace with Zotero connected'}
+                aria-describedby={canImportZotero ? undefined : 'research-sources-zotero-note'}
                 data-testid="research-sources-add-zotero-hint"
               >
                 Import from Zotero
@@ -216,7 +223,7 @@ export function Sources(props: SourcesProps): React.ReactElement {
             </li>
             <li>
               <Button
-                variant="primary"
+                variant="secondary"
                 size="sm"
                 onClick={() => {
                   setIdentifierOpen((current) => !current);
@@ -228,6 +235,11 @@ export function Sources(props: SourcesProps): React.ReactElement {
               </Button>
             </li>
           </ul>
+          {!canImportZotero ? (
+            <p id="research-sources-zotero-note" className="research-muted" style={{ margin: 0, fontSize: '0.8rem' }}>
+              Zotero import is unavailable in this workspace.
+            </p>
+          ) : null}
           {identifierOpen ? (
             <form className="research-identifier-form" onSubmit={addIdentifier} data-testid="research-sources-identifier-form">
               <label htmlFor="research-source-identifier">DOI or URL</label>

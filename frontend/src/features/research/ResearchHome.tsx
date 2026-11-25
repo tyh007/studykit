@@ -194,6 +194,9 @@ export function ResearchHome(props: ResearchHomeProps): React.ReactElement {
         Resume first: the most recently updated
         project is the visual primary.
       */}
+      {/* With no projects there is nothing to resume: the projects empty
+          state below carries the single call to action. */}
+      {(loading || projects.length > 0) && (
       <section data-testid="research-home-resume" aria-label="Resume" style={{ marginBottom: '1rem' }}>
         <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem' }}>Resume</h2>
         {loading ? (
@@ -211,19 +214,16 @@ export function ResearchHome(props: ResearchHomeProps): React.ReactElement {
               Open “{resumeProject.name}”
             </Button>
           </div>
-        ) : (
-          <p data-testid="research-projects-empty" style={{ color: 'var(--color-text-secondary, #666)' }}>
-            No projects yet. Start one below when you are ready.
-          </p>
-        )}
+        ) : null}
       </section>
+      )}
 
       <section data-testid="research-projects-list" aria-label="Your projects" style={{ marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem' }}>Your projects</h2>
-          {!showNew && (
+          {!showNew && projects.length > 0 && (
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
               onClick={() => {
                 setShowNew(true);
@@ -235,6 +235,28 @@ export function ResearchHome(props: ResearchHomeProps): React.ReactElement {
             </Button>
           )}
         </div>
+        {!loading && projects.length === 0 && !showNew && (
+          <Surface
+            level="sunken"
+            data-testid="research-projects-empty"
+            style={{ padding: '1rem', borderRadius: '8px' }}
+          >
+            <p style={{ margin: '0 0 0.75rem 0', color: 'var(--color-text-secondary, #666)' }}>
+              No projects yet. A project collects your sources, evidence and claims around one question.
+            </p>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={() => {
+                setShowNew(true);
+                setError(null);
+              }}
+              data-testid="research-new-project-toggle"
+            >
+              New project
+            </Button>
+          </Surface>
+        )}
         {projects.length > 0 && (
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: '0.5rem' }}>
             {projects.map((p) => (

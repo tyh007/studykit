@@ -697,6 +697,30 @@ display: flex;
 /* ==========================================================================
    9. Lecture View
    ========================================================================== */
+.lecture-notes-only {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lecture-source-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border-glass);
+  background: var(--surface);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.lecture-source-bar-message {
+  min-width: 0;
+}
+
 .lecture-view {
   display: flex;
   flex: 1;
@@ -2254,4 +2278,22 @@ a:focus-visible {
   .sk-surface {
     transition: none !important;
   }
+}
+
+/* Suspense fallbacks: stay invisible for fast (cached) chunk loads so route
+   changes do not flash a loading line; fade in only if loading is slow. */
+.sk-delayed-fallback {
+  opacity: 0;
+  animation: sk-delayed-fade-in 0.2s ease 0.4s forwards;
+}
+
+.v04-route-loading {
+  margin: 0;
+  padding: 2rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+@keyframes sk-delayed-fade-in {
+  to { opacity: 1; }
 }

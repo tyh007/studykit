@@ -59,7 +59,7 @@ export function OpenIntentCapsuleButton(props: OpenIntentCapsuleButtonProps): Re
     <button
       type="button"
       id={props.id ?? 'v04-open-intent-capsule'}
-      className={['v04-open-intent-capsule', props.className].filter(Boolean).join(' ')}
+      className={['btn btn-ghost btn-sm v04-open-intent-capsule', props.className].filter(Boolean).join(' ')}
       onClick={handleClick}
       data-testid="v04-open-intent-capsule"
       data-surface={props.surface}

@@ -195,7 +195,7 @@ export function Library(props: LibraryProps): React.ReactElement {
     if (!props.requestedAction) return;
     props.onRequestedActionHandled?.();
     if (props.requestedAction === 'pdf') handleImportClick();
-    else void handleOpenZotero();
+    else if (zoteroImportCapable) void handleOpenZotero();
     // The request is an edge-trigger owned by Sources; handler identities are
     // deliberately excluded so a loading state cannot retrigger a file picker.
     // eslint-disable-next-line react-hooks/exhaustive-deps

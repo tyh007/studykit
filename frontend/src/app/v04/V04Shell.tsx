@@ -443,7 +443,7 @@ export function V04Shell(props: V04ShellProps): React.ReactElement {
                 <div className="v04-workspace-layout">
                   <WorkspaceSidebar />
                   <div className="v04-active-surface" data-testid="v04-active-surface">
-                    <React.Suspense fallback={<p className="v04-route-loading" role="status">Loading workspace…</p>}>
+                    <React.Suspense fallback={<p className="v04-route-loading sk-delayed-fallback" role="status">Loading…</p>}>
                       <StudyRouter />
                       <ResearchRouter />
                     </React.Suspense>

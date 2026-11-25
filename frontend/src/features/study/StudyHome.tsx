@@ -164,16 +164,13 @@ export function StudyHome(props: StudyHomeProps): React.ReactElement {
         the WP-11R2 surface now falls back to the
         most recent lecture.
       */}
+      {/* With no courses there is nothing to resume: the Courses empty
+          state below carries the single call to action instead of two
+          sections repeating "no courses yet". */}
+      {(loading || courses.length > 0) && (
       <section className="v04-study-home-section v04-study-home-resume" aria-label="Resume" data-testid="v04-study-home-resume">
         <h2>Resume</h2>
         {loading && <p className="v04-study-home-empty">Loading…</p>}
-        {!loading && !resumeQuestion && !resumeLecture && courses.length === 0 && (
-          <Surface level="sunken" className="v04-study-home-empty" data-testid="v04-study-home-empty">
-            <p>
-              No courses yet. Create one below to start capturing lecture notes and questions.
-            </p>
-          </Surface>
-        )}
         {!loading && (resumeQuestion || resumeLecture) && (
           <div className="v04-study-home-resume-actions" data-testid="v04-study-home-resume-actions">
             {resumeQuestion && (
@@ -252,14 +249,15 @@ export function StudyHome(props: StudyHomeProps): React.ReactElement {
           </ul>
         )}
       </section>
+      )}
 
       <section className="v04-study-home-section" aria-label="Courses" data-testid="v04-study-home-courses">
         <div className="v04-study-home-section-header">
           <h2>Courses</h2>
-          {!showNewCourse && (
+          {!showNewCourse && courses.length > 0 && (
             <Button
               type="button"
-              variant="ghost"
+              variant="secondary"
               size="sm"
               onClick={() => {
                 setShowNewCourse(true);
@@ -314,8 +312,20 @@ export function StudyHome(props: StudyHomeProps): React.ReactElement {
         {courses.length === 0 && !loading && !showNewCourse && (
           <Surface level="sunken" className="v04-study-home-empty" data-testid="v04-study-home-empty-courses">
             <p>
-              No courses yet. Click "New course" above to start your first one.
+              No courses yet. A course holds your lectures, notes and the questions you capture.
             </p>
+            <Button
+              type="button"
+              variant="primary"
+              size="md"
+              onClick={() => {
+                setShowNewCourse(true);
+                setNewCourseError(null);
+              }}
+              data-testid="v04-study-home-new-course"
+            >
+              New course
+            </Button>
           </Surface>
         )}
         {courses.length > 0 && (

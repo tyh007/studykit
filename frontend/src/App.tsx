@@ -3,7 +3,7 @@ import { useAuth } from './lib/auth';
 import { useStore } from './store/useStore';
 import { isFeatureEnabled } from './app/feature-flags';
 import { useDataApi } from './application/useDataApi';
-import { sourceDocumentsApi } from './application/dataApi';
+import { sourceDocumentsApi, useSupports } from './application/dataApi';
 import { workspaceFlavour } from './application/workspaceFlavour';
 import { V04Shell, V04Entry } from './app/v04/V04Shell';
 import { WorkspaceAuthBridge } from './app/v04/workspaceStore';
@@ -39,8 +39,8 @@ const ReadingListsView = React.lazy(() => import('./components/literature/Readin
 const PaperWorkspace = React.lazy(() => import('./components/literature/PaperWorkspace'));
 
 const SURFACE_LOADING_FALLBACK = (
-  <div className="empty-state" role="status" aria-live="polite">
-    Loading workspace…
+  <div className="empty-state sk-delayed-fallback" role="status" aria-live="polite">
+    Loading…
   </div>
 );
 
@@ -727,7 +727,7 @@ function ResizeHandle({ onResize }: { onResize: (delta: number) => void }) {
 }
 
 // ===== Lecture View =====
-function LectureView({
+export function LectureView({
   lecture,
   document: doc,
   pages,
@@ -745,6 +745,7 @@ function LectureView({
   const { currentLayout, cornellMode, selectPage, setCurrentPages, setCurrentDocument,
     activeLectureTab, setActiveLectureTab, selectedLitProjectId } = useStore();
   const [uploading, setUploading] = useState(false);
+  const canUploadSlides = useSupports('sourceDocuments.upload');
   const [slidePanelWidth, setSlidePanelWidth] = useState<number | null>(null);
   const [annotationPanelWidth, setAnnotationPanelWidth] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -790,29 +791,123 @@ function LectureView({
     }
   };
 
-  // No slides uploaded yet, or processing failed
-  if (!doc || doc.processing_status === 'pending' || doc.processing_status === 'processing' || doc.processing_status === 'failed') {
+  const hasSlides = Boolean(doc)
+    && doc!.processing_status !== 'pending'
+    && doc!.processing_status !== 'processing'
+    && doc!.processing_status !== 'failed';
+
+  const renderNotePanel = (showLayoutToggle: boolean) => (
+    <div className="note-panel">
+      <div className="note-panel-header">
+        <div className="note-panel-tabs">
+          <div
+            className={`note-panel-tab glass-tab ${activeLectureTab === 'notes' ? 'active' : ''}`}
+            onClick={() => setActiveLectureTab('notes')}
+          >Notes</div>
+          <div
+            className={`note-panel-tab glass-tab ${activeLectureTab === 'citations' ? 'active' : ''}`}
+            onClick={() => setActiveLectureTab('citations')}
+          >Citations</div>
+        </div>
+        {activeLectureTab === 'notes' && (
+        <div className="flex gap-1">
+          {showLayoutToggle && (
+          <button
+            className={`btn btn-ghost btn-sm ${currentLayout === 'slide_top_notes_below' ? 'active' : ''}`}
+            onClick={() => useStore.getState().setCurrentLayout(
+              currentLayout === 'slide_left_notes_right'
+                ? 'slide_top_notes_below'
+                : 'slide_left_notes_right',
+            )}
+            title={currentLayout === 'slide_left_notes_right'
+              ? 'Switch to slides on top, notes below'
+              : 'Switch to slides on left, notes on right'}
+            aria-pressed={currentLayout === 'slide_top_notes_below'}
+            style={currentLayout === 'slide_top_notes_below' ? { color: 'var(--color-primary)', fontWeight: 600 } : {}}
+          >
+            {currentLayout === 'slide_left_notes_right' ? '⬆ Stacked' : '⬅ Side-by-side'}
+          </button>
+          )}
+          <button
+            className={`btn btn-ghost btn-sm ${cornellMode ? 'active' : ''}`}
+            onClick={() => useStore.getState().setCornellMode(!cornellMode)}
+            style={cornellMode ? { color: 'var(--color-primary)', fontWeight: 600 } : {}}
+          >
+            Annotation
+          </button>
+        </div>
+        )}
+      </div>
+      <div className="note-editor-container">
+        {activeLectureTab === 'notes' ? (
+          <NoteEditor lectureId={lecture.id} />
+        ) : (
+          selectedLitProjectId ? (
+            <SummaryTable projectId={selectedLitProjectId} />
+          ) : (
+            <div className="empty-state" style={{ padding: '2rem' }}>
+              <p>Select a literature project from the sidebar to view papers.</p>
+            </div>
+          )
+        )}
+      </div>
+    </div>
+  );
+
+  const renderAnnotationPanel = () => (
+    <>
+      {/* Resize handle: notes ↔ annotation */}
+      {cornellMode && <ResizeHandle onResize={handleAnnotationResize} />}
+
+      {/* Annotation panel - margin annotations linked to note positions */}
+      {cornellMode && (
+        <div style={annotationStyle}>
+          <AnnotationPanel lectureId={lecture.id} />
+        </div>
+      )}
+    </>
+  );
+
+  const annotationStyle = annotationPanelWidth
+    ? { width: annotationPanelWidth }
+    : {};
+
+  // No usable slides (none attached, still processing, or failed):
+  // notes stay fully usable; slides are an optional attachment shown
+  // in a slim bar above the notes.
+  if (!hasSlides || !doc) {
+    const status = doc?.processing_status;
+    const message = status === 'failed'
+      ? 'Could not process the slides. The PDF may be corrupt or unreadable — try attaching it again.'
+      : status === 'processing' || status === 'pending'
+        ? 'Processing slides… you can keep taking notes.'
+        : canUploadSlides
+          ? 'No slides attached. Take notes now, or attach a PDF to see slides beside them.'
+          : 'No slides attached. This workspace keeps notes only; import slides from the course page in the desktop app.';
     return (
-      <div className="empty-state">
-        <h2>{lecture.title}</h2>
-        <p>
-          {doc?.processing_status === 'failed'
-            ? 'Failed to process slides. The PDF file may be corrupt or unreadable. Try uploading again.'
-            : doc?.processing_status === 'processing'
-              ? 'Processing slides...'
-              : 'Upload a PDF of your lecture slides to get started.'}
-        </p>
-        <div style={{ marginTop: '1rem' }}>
-          <label className="btn btn-primary" style={{ cursor: 'pointer' }}>
-            {uploading ? 'Uploading...' : doc ? 'Re-upload PDF' : 'Upload PDF Slides'}
-            <input
-              type="file"
-              accept=".pdf,application/pdf"
-              onChange={handleFileUpload}
-              style={{ display: 'none' }}
-              disabled={uploading}
-            />
-          </label>
+      <div className="lecture-notes-only" data-testid="lecture-notes-only">
+        <div className="lecture-source-bar" role="status">
+          <span className="lecture-source-bar-message">{message}</span>
+          {canUploadSlides && status !== 'processing' && status !== 'pending' && (
+            <label className="btn btn-primary btn-sm" style={{ cursor: 'pointer' }}>
+              {uploading ? 'Uploading…' : doc ? 'Attach PDF again' : 'Attach slides (PDF)'}
+              <input
+                type="file"
+                accept=".pdf,application/pdf"
+                onChange={handleFileUpload}
+                style={{ display: 'none' }}
+                disabled={uploading}
+              />
+            </label>
+          )}
+        </div>
+        <div className={`lecture-view slide-left-notes-right${cornellMode ? ' with-cornell' : ''}`}>
+          {renderNotePanel(false)}
+          {renderAnnotationPanel()}
+          <LectureCaptureTrigger
+            courseId={courseId}
+            lectureId={lecture.id}
+          />
         </div>
       </div>
     );
@@ -822,10 +917,6 @@ function LectureView({
 
   const slideStyle = currentLayout === 'slide_left_notes_right' && slidePanelWidth
     ? { flex: `0 0 ${slidePanelWidth}%`, maxWidth: `${slidePanelWidth}%` }
-    : {};
-
-  const annotationStyle = annotationPanelWidth
-    ? { width: annotationPanelWidth }
     : {};
 
   return (
@@ -852,69 +943,9 @@ function LectureView({
       <ResizeHandle onResize={handleSlideResize} />
 
       {/* Note panel - continuous per lecture */}
-      <div className="note-panel">
-        <div className="note-panel-header">
-          <div className="note-panel-tabs">
-            <div
-              className={`note-panel-tab glass-tab ${activeLectureTab === 'notes' ? 'active' : ''}`}
-              onClick={() => setActiveLectureTab('notes')}
-            >Notes</div>
-            <div
-              className={`note-panel-tab glass-tab ${activeLectureTab === 'citations' ? 'active' : ''}`}
-              onClick={() => setActiveLectureTab('citations')}
-            >Citations</div>
-          </div>
-          {activeLectureTab === 'notes' && (
-          <div className="flex gap-1">
-            <button
-              className={`btn btn-ghost btn-sm ${currentLayout === 'slide_top_notes_below' ? 'active' : ''}`}
-              onClick={() => useStore.getState().setCurrentLayout(
-                currentLayout === 'slide_left_notes_right'
-                  ? 'slide_top_notes_below'
-                  : 'slide_left_notes_right',
-              )}
-              title={currentLayout === 'slide_left_notes_right'
-                ? 'Switch to slides on top, notes below'
-                : 'Switch to slides on left, notes on right'}
-              aria-pressed={currentLayout === 'slide_top_notes_below'}
-              style={currentLayout === 'slide_top_notes_below' ? { color: 'var(--color-primary)', fontWeight: 600 } : {}}
-            >
-              {currentLayout === 'slide_left_notes_right' ? '⬆ Stacked' : '⬅ Side-by-side'}
-            </button>
-            <button
-              className={`btn btn-ghost btn-sm ${cornellMode ? 'active' : ''}`}
-              onClick={() => useStore.getState().setCornellMode(!cornellMode)}
-              style={cornellMode ? { color: 'var(--color-primary)', fontWeight: 600 } : {}}
-            >
-              Annotation
-            </button>
-          </div>
-          )}
-        </div>
-        <div className="note-editor-container">
-          {activeLectureTab === 'notes' ? (
-            <NoteEditor lectureId={lecture.id} />
-          ) : (
-            selectedLitProjectId ? (
-              <SummaryTable projectId={selectedLitProjectId} />
-            ) : (
-              <div className="empty-state" style={{ padding: '2rem' }}>
-                <p>Select a literature project from the sidebar to view papers.</p>
-              </div>
-            )
-          )}
-        </div>
-      </div>
+      {renderNotePanel(true)}
 
-      {/* Resize handle: notes ↔ annotation */}
-      {cornellMode && <ResizeHandle onResize={handleAnnotationResize} />}
-
-      {/* Annotation panel - margin annotations linked to note positions */}
-      {cornellMode && (
-        <div style={annotationStyle}>
-          <AnnotationPanel lectureId={lecture.id} />
-        </div>
-      )}
+      {renderAnnotationPanel()}
 
       {/* WP-04 Study capture trigger: a single floating
           "Capture / Understand" button that opens the

@@ -180,7 +180,7 @@ describe('WP-11R2 / Course Home three start actions', () => {
     await waitFor(() => {
       expect(screen.getByTestId('v04-study-home')).toBeInTheDocument();
     });
-    await user.click(screen.getByTestId('v04-study-home-new-course'));
+    await user.click(await screen.findByTestId('v04-study-home-new-course'));
     // The label is "Course name" in both the
     // sidebar (when no container) and the Study
     // Home form. The Study Home form's input is
@@ -223,7 +223,7 @@ describe('WP-11R2 / Course Home three start actions', () => {
     await waitFor(() => {
       expect(screen.getByTestId('v04-study-home')).toBeInTheDocument();
     });
-    await user.click(screen.getByTestId('v04-study-home-new-course'));
+    await user.click(await screen.findByTestId('v04-study-home-new-course'));
     const studyHomeForm = screen.getByTestId('v04-study-home-new-course-form');
     await user.type(within(studyHomeForm).getByLabelText(/Course name/i), 'Memory');
     await user.click(screen.getByTestId('v04-study-home-new-course-submit'));
@@ -263,7 +263,7 @@ describe('WP-11R2 / Project Home noise reduction', () => {
     await waitFor(() => {
       expect(screen.getByTestId('research-home')).toBeInTheDocument();
     });
-    await user.click(screen.getByTestId('research-new-project-toggle'));
+    await user.click(await screen.findByTestId('research-new-project-toggle'));
     await user.type(screen.getByTestId('research-new-project-name'), 'Sleep');
     await user.click(screen.getByTestId('research-new-project-submit'));
     await waitFor(() => {
@@ -305,7 +305,7 @@ describe('WP-11R2 / Sources surface (Library + Discovery merged)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('research-home')).toBeInTheDocument();
     });
-    await user.click(screen.getByTestId('research-new-project-toggle'));
+    await user.click(await screen.findByTestId('research-new-project-toggle'));
     await user.type(screen.getByTestId('research-new-project-name'), 'Sources test');
     await user.click(screen.getByTestId('research-new-project-submit'));
     await waitFor(() => {
@@ -331,6 +331,10 @@ describe('WP-11R2 / Sources surface (Library + Discovery merged)', () => {
     expect(screen.getByTestId('research-sources-add-search')).toBeInTheDocument();
     expect(screen.getByTestId('research-sources-add-pdf-hint')).toBeInTheDocument();
     expect(screen.getByTestId('research-sources-add-zotero-hint')).toBeInTheDocument();
+    // Local workspace: the Add panel must agree with the Library toolbar,
+    // which reports Zotero as unavailable here.
+    expect(screen.getByTestId('research-sources-add-zotero-hint')).toBeDisabled();
+    expect(screen.getByTestId('research-library-zotero-disabled')).toBeInTheDocument();
     expect(screen.getByTestId('research-sources-add-url-doi')).toBeInTheDocument();
 
     // The URL/DOI entry is a real canonical write,
@@ -363,7 +367,7 @@ describe('WP-11R2 / Evidence empty state', () => {
     await waitFor(() => {
       expect(screen.getByTestId('research-home')).toBeInTheDocument();
     });
-    await user.click(screen.getByTestId('research-new-project-toggle'));
+    await user.click(await screen.findByTestId('research-new-project-toggle'));
     await user.type(screen.getByTestId('research-new-project-name'), 'Evidence test');
     await user.click(screen.getByTestId('research-new-project-submit'));
     await waitFor(() => {
