@@ -1,0 +1,68 @@
+[package]
+name = "studykit-desktop"
+version = "0.4.0"
+description = "StudyKit — local-first learning and research workspace."
+authors = ["StudyKit"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "studykit_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.1", features = [] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# WP-09B Round 1 — native workspace + SQLite foundation.
+#
+# We deliberately use `rusqlite` directly rather than the official
+# `tauri-plugin-sql` plugin because the official plugin locks the
+# SQLite path under `tauri::api::path::BaseDirectory::AppConfig`.
+# WP-09B requires the SQLite file to live **at the user-selected
+# workspace directory**, which is an arbitrary absolute path
+# returned by the native folder picker. A narrow `rusqlite`
+# adapter lets us:
+#
+#   - open the SQLite file at exactly the chosen path,
+#   - enforce that the directory already looks like a StudyKit
+#     workspace (manifest + formatVersion check) before any IO,
+#   - run schema migrations inside one BEGIN/COMMIT, with
+#     `PRAGMA integrity_check` after every open,
+#   - reject path traversal, symlink tricks, and foreign
+#     directories with explicit checks,
+#   - keep all file IO inside our own Rust commands so the
+#     WebView never imports rusqlite or the dialog plugin
+#     directly.
+#
+# `tauri-plugin-dialog` is the only extra permission we add. It
+# powers the native folder picker; it does not expose arbitrary
+# filesystem reads to the WebView.
+
+rusqlite = { version = "0.32", features = ["bundled", "backup"] }
+tauri-plugin-dialog = "2.2"
+tauri-plugin-global-shortcut = "2.3"
+once_cell = "1.20"
+thiserror = "1.0"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+uuid = { version = "1.24", features = ["v4"] }
+sha2 = "0.10"
+
+[dev-dependencies]
+tempfile = "3.13"
+
+# Global shortcut registration is owned by Rust; the WebView is
+# not granted plugin registration permissions. Ollama discovery
+# uses a bounded localhost TCP probe and does not add a general
+# HTTP bridge. Updater activation remains gated on release
+# signing credentials because Tauri does not permit unsigned
+# update artifacts.
+
+[features]
+# This feature is used for production builds or when `devUrl` points to the filesystem
+# DO NOT REMOVE!!
+custom-protocol = ["tauri/custom-protocol"]
