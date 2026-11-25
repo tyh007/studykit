@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
-import { literaturePapersApi, readingListsApi, literatureAiApi } from '../../lib/literature-api';
+import { literaturePapersApi, readingListsApi, literatureAiApi, literatureCanvasApi } from '../../application/dataApi';
 import { useLiteratureFileUpload } from '../../hooks/useLiteratureFileUpload';
 
 import { StarIcon, LiteratureIcon, ReadingListIcon, GraphIcon } from '../ui/Icons';
@@ -11,6 +11,7 @@ import { createAIExtractionService } from '../../lib/literature/ai-extraction';
 import { smartExtract } from '../../lib/literature/multimodal-extraction';
 import type { AIProfile } from '../../lib/literature/ai-profiles';
 import type { LiteraturePaper, ExtractedData } from '../../types';
+import { useCapability } from '../../app/v04/CapabilityNotice';
 
 const FIELD_LABELS: Record<string, string> = {
   background: 'Background', theory: 'Theory & Hypotheses', methodology: 'Methodology',
@@ -61,7 +62,7 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
   const { uploadFiles, isUploading } = useLiteratureFileUpload();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sendingToCanvas, setSendingToCanvas] = useState(false);
-  
+
   const [view, setView] = useState<'library' | 'trash'>('library');
   const [searchQuery, setSearchQuery] = useState('');
   const [dragging, setDragging] = useState(false);
@@ -89,6 +90,18 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
   const dragRef = useRef<{ col: string; startX: number; startW: number } | null>(null);
   const rowDragRef = useRef<{ paperId: string; startY: number; startH: number } | null>(null);
 
+  // Centralised capability checks (WP-02 Gate §3 blocker D — 5th round).
+  // Local workspace: the read-only `literaturePapers.list` path is the
+  // ONLY thing still usable. AI / upload / trash / canvas / status /
+  // importance / reading-list filter all sit behind a Sync workspace
+  // and must NOT be reachable from a local click.
+  const aiChat = useCapability('ai.chat');
+  const aiSettingsCap = useCapability('ai.settings');
+  const readingListsCap = useCapability('readingLists.crud');
+  const uploadCap = useCapability('sourceDocuments.upload');
+  const papersCrudCap = useCapability('literaturePapers.crud');
+  const canvasCap = useCapability('literatureCanvas.crud');
+
   useEffect(() => {
     localStorage.setItem('lit-column-widths', JSON.stringify(columnWidths));
   }, [columnWidths]);
@@ -97,9 +110,15 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
     localStorage.setItem(ROW_HEIGHT_STORAGE_KEY, JSON.stringify(rowHeights));
   }, [rowHeights]);
 
-  // When reading list filter changes, load its citation IDs
+  // When reading list filter changes, load its citation IDs. In a
+  // local workspace the reading list itself is not visible, so the
+  // effect must short-circuit BEFORE `readingListsApi.get()` fires.
   useEffect(() => {
     if (!filterReadingListId) {
+      setFilterCitationIds(new Set());
+      return;
+    }
+    if (!readingListsCap.supported) {
       setFilterCitationIds(new Set());
       return;
     }
@@ -107,15 +126,26 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
       const ids = new Set<string>((list.items || []).map((i: any) => i.citation_item_id || i.id));
       setFilterCitationIds(ids);
     }).catch(console.error);
-  }, [filterReadingListId]);
+  }, [filterReadingListId, readingListsCap.supported]);
 
   const loadPapers = useCallback(() => {
+    // `literaturePapers.list` is a local-port-backed read in the
+    // gateway; the call is always safe and never hits /api.
     literaturePapersApi.list(projectId, view).then(setLitPapers).catch(console.error);
   }, [projectId, view]);
 
   useEffect(() => { loadPapers(); }, [loadPapers]);
 
+  // AI profiles are sync-only configuration. In a local workspace
+  // we must NOT auto-fetch the list; the AI entry points (the AI
+  // button, the settings button, the extract button) are
+  // disabled with a tooltip in the JSX below.
   const loadAIProfiles = useCallback(() => {
+    if (!aiSettingsCap.supported) {
+      setAIProfiles([]);
+      setExtractionProfileId('');
+      return;
+    }
     literatureAiApi.profiles().then(result => {
       const compatible = result.profiles.filter((profile: AIProfile) => profile.capabilities.structured);
       setAIProfiles(compatible);
@@ -128,13 +158,14 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
       setAIProfiles([]);
       setExtractionProfileId('');
     });
-  }, []);
+  }, [aiSettingsCap.supported]);
 
   useEffect(() => { loadAIProfiles(); }, [loadAIProfiles]);
 
   const handleFileDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setDragging(false);
+    if (!uploadCap.supported) return; // second line of defence
     const files = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf');
     if (files.length > 0) {
       await uploadFiles(files, projectId);
@@ -143,6 +174,7 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!uploadCap.supported) return;
     const files = Array.from(e.target.files || []).filter(f => f.type === 'application/pdf');
     if (files.length > 0) {
       await uploadFiles(files, projectId);
@@ -164,6 +196,7 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
   };
 
   const handleBatchTrash = async () => {
+    if (!papersCrudCap.supported) return;
     for (const id of selectedIds) {
       await literaturePapersApi.moveToTrash(id).catch(console.error);
     }
@@ -172,10 +205,10 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
   };
 
   const handleSendToCanvas = async () => {
+    if (!canvasCap.supported) return;
     if (selectedIds.size === 0 || sendingToCanvas) return;
     setSendingToCanvas(true);
     try {
-      const { literatureCanvasApi } = await import('../../lib/literature-canvas-api');
       const list = await literatureCanvasApi.listOrCreate(projectId);
       const canvas = list[0];
       if (!canvas) {
@@ -192,6 +225,7 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
   };
 
   const handleBatchRestore = async () => {
+    if (!papersCrudCap.supported) return;
     for (const id of selectedIds) {
       await literaturePapersApi.restoreFromTrash(id).catch(console.error);
     }
@@ -200,6 +234,8 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
   };
 
   const handleBatchExtract = async (mode: 'text' | 'vision' | 'auto' = extractMode) => {
+    if (!aiChat.supported) return;
+    if (!papersCrudCap.supported) return;
     const targetPapers = selectedIds.size > 0
       ? filteredPapers.filter(p => selectedIds.has(p.id))
       : filteredPapers.filter(p => !p.extracted_data && p.processing_status !== 'processing');
@@ -242,6 +278,8 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
   };
 
   const handleSingleExtract = async (paperId: string) => {
+    if (!aiChat.supported) return;
+    if (!papersCrudCap.supported) return;
     setExtractingSingle(prev => new Set(prev).add(paperId));
     const paper = litPapers.find(p => p.id === paperId);
     if (!paper) return;
@@ -389,19 +427,35 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
           onClick={() => { setView('trash'); setSelectedIds(new Set()); }}
         >Trash</button>
         {view === 'trash' && selectedIds.size > 0 && (
-          <button className="btn btn-sm" onClick={handleBatchRestore}>Restore Selected</button>
+          <button
+            className="btn btn-sm"
+            onClick={handleBatchRestore}
+            disabled={!papersCrudCap.supported}
+            title={papersCrudCap.supported ? '' : papersCrudCap.tooltip}
+            aria-disabled={!papersCrudCap.supported}
+            data-capability="literaturePapers.crud"
+          >Restore Selected</button>
         )}
         {view === 'library' && selectedIds.size > 0 && (
           <>
             <button
               className="btn btn-sm"
               onClick={handleSendToCanvas}
-              disabled={sendingToCanvas}
-              title="Add selected papers to the literature canvas"
+              disabled={sendingToCanvas || !canvasCap.supported}
+              title={canvasCap.supported ? 'Add selected papers to the literature canvas' : canvasCap.tooltip}
+              aria-disabled={!canvasCap.supported}
+              data-capability="literatureCanvas.crud"
             >
               {sendingToCanvas ? 'Sending…' : `Send to Canvas (${selectedIds.size})`}
             </button>
-            <button className="btn btn-sm btn-danger" onClick={handleBatchTrash}>Move to Trash</button>
+            <button
+              className="btn btn-sm btn-danger"
+              onClick={handleBatchTrash}
+              disabled={!papersCrudCap.supported}
+              title={papersCrudCap.supported ? '' : papersCrudCap.tooltip}
+              aria-disabled={!papersCrudCap.supported}
+              data-capability="literaturePapers.crud"
+            >Move to Trash</button>
           </>
         )}
         {view === 'library' && (
@@ -409,13 +463,15 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
             <button
               className="btn btn-sm"
               onClick={() => setShowExtractMenu(!showExtractMenu)}
-              disabled={extractingBatch}
-              title="Run AI extraction on selected papers, or all unextracted papers if none selected"
+              disabled={extractingBatch || !aiChat.supported}
+              title={aiChat.supported ? 'Run AI extraction on selected papers, or all unextracted papers if none selected' : aiChat.tooltip}
+              aria-disabled={!aiChat.supported}
+              data-capability="ai.chat"
               style={{ fontSize: '0.78rem' }}
             >
               {extractingBatch ? 'Extracting...' : `AI ${extractMode === 'vision' ? '👁' : extractMode === 'auto' ? '⚡' : '📝'}`}
             </button>
-            {showExtractMenu && (
+            {showExtractMenu && aiChat.supported && (
               <div style={{
                 position: 'absolute', top: '100%', right: 0, zIndex: 100,
                 background: 'var(--color-bg)', border: '1px solid var(--color-border)',
@@ -446,15 +502,21 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
                   onClick={() => { setExtractMode('vision'); setShowExtractMenu(false); handleBatchExtract('vision'); }}>
                   👁 Vision (page images)
                 </button>
-                <button className="btn btn-ghost btn-sm" style={{ display: 'block', width: '100%', textAlign: 'left', fontSize: '0.72rem', marginTop: '0.2rem' }}
-                  onClick={() => { setShowExtractMenu(false); setShowSettings(true); }}>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  style={{ display: 'block', width: '100%', textAlign: 'left', fontSize: '0.72rem', marginTop: '0.2rem' }}
+                  disabled={!aiSettingsCap.supported}
+                  onClick={() => { setShowExtractMenu(false); setShowSettings(true); }}
+                  title={aiSettingsCap.supported ? '管理 AI 配置' : aiSettingsCap.tooltip}
+                  data-capability="ai.settings"
+                >
                   管理 AI 配置…
                 </button>
               </div>
             )}
           </div>
         )}
-        {view === 'library' && readingLists.length > 0 && (
+        {view === 'library' && readingLists.length > 0 && readingListsCap.supported && (
           <select
             value={filterReadingListId || ''}
             onChange={e => setFilterReadingListId(e.target.value || null)}
@@ -479,7 +541,7 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
             onDragOver={e => e.preventDefault()}
           >
             <h3>{view === 'trash' ? 'Trash is empty' : 'No papers yet'}</h3>
-            {view === 'library' && (
+            {view === 'library' && uploadCap.supported && (
               <>
                 <p style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', margin: '0.5rem 0' }}>
                   Drop PDF files here or click to browse
@@ -489,6 +551,11 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
                   <input type="file" accept=".pdf" multiple onChange={handleFileSelect} style={{ display: 'none' }} />
                 </label>
               </>
+            )}
+            {view === 'library' && !uploadCap.supported && (
+              <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', margin: '0.5rem 0' }}>
+                {uploadCap.tooltip}
+              </p>
             )}
           </div>
         ) : (
@@ -573,13 +640,15 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
                           </span>
                         </span>
                       )}
-                      {!paper.extracted_data && paper.full_text && (
+                      {!paper.extracted_data && paper.full_text && aiChat.supported && papersCrudCap.supported && (
                         <button
                           className="btn btn-ghost btn-sm"
                           style={{ fontSize: '0.65rem', marginLeft: '0.25rem', padding: '0 0.25rem' }}
                           onClick={(e) => { e.stopPropagation(); handleSingleExtract(paper.id); }}
                           disabled={extractingSingle.has(paper.id)}
                           title="Extract AI summary"
+                          data-testid="summary-table-single-extract"
+                          data-capability="ai.chat"
                         >
                           {extractingSingle.has(paper.id) ? '...' : 'Extract'}
                         </button>
@@ -593,6 +662,7 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
                       <span
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (!papersCrudCap.supported) return;
                           const cycle = ['unread','reading','read','reviewed'];
                           const current = paper.reading_status || 'unread';
                           const next = cycle[(cycle.indexOf(current) + 1) % cycle.length];
@@ -600,7 +670,8 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
                         }}
                         style={{
                           display: 'inline-block', padding: '0.1rem 0.4rem', borderRadius: '10px',
-                          fontSize: '0.7rem', fontWeight: 500, cursor: 'pointer',
+                          fontSize: '0.7rem', fontWeight: 500,
+                          cursor: papersCrudCap.supported ? 'pointer' : 'not-allowed',
                           background: (() => {
                             const colors = { unread: '#f1f5f9', reading: '#eff6ff', read: '#f0fdf4', reviewed: '#f5f3ff' };
                             return colors[paper.reading_status as keyof typeof colors] || colors.unread;
@@ -610,7 +681,9 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
                             return colors[paper.reading_status as keyof typeof colors] || colors.unread;
                           })(),
                         }}
-                        title="Click to cycle: Unread → Reading → Read → Reviewed"
+                        title={papersCrudCap.supported ? 'Click to cycle: Unread → Reading → Read → Reviewed' : papersCrudCap.tooltip}
+                        data-capability="literaturePapers.crud"
+                        aria-disabled={!papersCrudCap.supported}
                       >
                         {({ unread: 'Unread', reading: 'Reading', read: 'Read', reviewed: 'Reviewed' })[paper.reading_status || 'unread'] || 'Unread'}
                       </span>
@@ -621,14 +694,18 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
                           key={n}
                           onClick={(e) => {
                             e.stopPropagation();
+                            if (!papersCrudCap.supported) return;
                             const val = n === (paper.importance || 0) ? 0 : n;
                             literaturePapersApi.update(paper.id, { importance: val }).then(() => loadPapers());
                           }}
                           style={{
-                            cursor: 'pointer',
+                            cursor: papersCrudCap.supported ? 'pointer' : 'not-allowed',
                             color: n <= (paper.importance || 0) ? '#f59e0b' : 'var(--color-border)',
                             transition: 'color 0.1s',
                           }}
+                          title={papersCrudCap.supported ? undefined : papersCrudCap.tooltip}
+                          data-capability="literaturePapers.crud"
+                          aria-disabled={!papersCrudCap.supported}
                         >
                           <StarIcon size="sm" />
                         </span>
@@ -651,7 +728,7 @@ export default function SummaryTable({ projectId }: { projectId: string }) {
 
 
       {/* AI Settings dialog */}
-      {showSettings && (
+      {showSettings && aiSettingsCap.supported && (
         <AISettingsPanel
           onClose={() => setShowSettings(false)}
           onSave={() => {

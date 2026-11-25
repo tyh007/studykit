@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { RenameIcon, CloseIcon } from '../ui/Icons';
-import { literatureProjectsApi } from '../../lib/literature-api';
-import { literaturePapersApi, literatureCustomFieldsApi } from '../../lib/literature-api';
+import { literatureProjectsApi, literaturePapersApi, literatureCustomFieldsApi } from '../../application/dataApi';
 
 export default function ProjectSidebar() {
   const {

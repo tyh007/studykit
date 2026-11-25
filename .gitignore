@@ -20,3 +20,7 @@ railway.json
 /graphify-out/
 /frontend/tmp/smoke-collaboration/
 /frontend/study-smoke.png
+
+# Local scratch and smoke-test artifacts
+/frontend/canvas-smoke.png
+/frontend/test.txt

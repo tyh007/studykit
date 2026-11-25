@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { CloseIcon, ExportIcon, UploadIcon } from '../ui/Icons';
-import { zoteroApi, readingListsApi, literatureProjectsApi, literaturePapersApi } from '../../lib/literature-api';
+import { zoteroApi, readingListsApi, literatureProjectsApi, literaturePapersApi } from '../../application/dataApi';
+import { useCapability } from '../../app/v04/CapabilityNotice';
 
 export default function ZoteroImportPanel() {
   const {
@@ -10,6 +11,14 @@ export default function ZoteroImportPanel() {
     setActiveLiteratureTab,
     selectedLitProjectId, setLitProjects, selectLitProject, setLitPapers,
   } = useStore();
+
+  // Centralised capability check (WP-02 Gate §3 blocker D — 5th round).
+  // Importing Zotero collections lives in a Sync workspace; the
+  // mount effect MUST short-circuit BEFORE `readingListsApi.list`
+  // is called. We also need `readingLists.crud` because the panel
+  // surfaces reading-list items the user can re-import.
+  const importCap = useCapability('zotero.import');
+  const readingListsCap = useCapability('readingLists.crud');
 
   const [expanded, setExpanded] = useState(false);
   const [collections, setCollections] = useState<any[]>([]);
@@ -21,14 +30,31 @@ export default function ZoteroImportPanel() {
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    if (zoteroConnectionStatus === 'connected') {
-      readingListsApi.list().then(setReadingLists).catch(console.error);
-    }
-  }, [zoteroConnectionStatus]);
+    if (zoteroConnectionStatus !== 'connected') return;
+    if (!importCap.supported || !readingListsCap.supported) return;
+    readingListsApi.list().then(setReadingLists).catch(console.error);
+  }, [zoteroConnectionStatus, importCap.supported, readingListsCap.supported]);
+
+  // Local workspace: the entire panel is a "需要 Sync" notice.
+  // The user can still see the connection status from
+  // `ZoteroConnectionPanel`; import is a different capability.
+  if (zoteroConnectionStatus === 'connected' && !importCap.supported) {
+    return (
+      <div
+        className="zotero-import-panel"
+        data-testid="zotero-import-local-notice"
+        data-capability="zotero.import"
+        style={{ padding: '0.25rem 0.5rem 0.5rem', borderBottom: '1px solid var(--color-border)' }}
+      >
+        <p className="text-sm text-muted" style={{ margin: 0 }}>{importCap.tooltip}</p>
+      </div>
+    );
+  }
 
   if (zoteroConnectionStatus !== 'connected') return null;
 
   const handleFetchCollections = async () => {
+    if (!importCap.supported) return;
     setLoading(true);
     setError(null);
     try {
@@ -43,6 +69,7 @@ export default function ZoteroImportPanel() {
   };
 
   const handleImportCollections = async () => {
+    if (!importCap.supported) return;
     if (selectedCollections.size === 0) return;
     setImporting(true);
     setError(null);
@@ -64,6 +91,7 @@ export default function ZoteroImportPanel() {
   };
 
   const handleImportItems = async (collectionId: string) => {
+    if (!importCap.supported) return;
     setImportingItems((prev) => new Set(prev).add(collectionId));
     setError(null);
     setImportSuccess(null);

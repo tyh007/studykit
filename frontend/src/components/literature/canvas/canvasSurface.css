@@ -1,0 +1,42 @@
+/* StudyKit v0.4 — `components/literature/canvas/canvasSurface`
+ *
+ * Layout for the shared `<CanvasSurface>` element so it
+ * fills its parent. The literature canvas wraps the
+ * surface in a `<div className="literature-canvas-flow">`
+ * (absolute, inset 0) for the same purpose; this file
+ * provides the same fill-the-parent behaviour for the
+ * cognitive canvas (which mounts `<CanvasSurface>`
+ * directly, not through the wrapper).
+ *
+ * Without these rules, `.canvas-surface` collapses to
+ * 0 height in a flex column parent (the
+ * `<main class="v04-body">` from `V04Shell`), and
+ * xyflow's `ReactFlow` renders 0x0 because its
+ * `ResizeObserver` sees zero size. The result is a
+ * "Loading canvas…" state with 0 visible nodes — or
+ * nodes rendered but invisible to the user and to
+ * the headless smoke test.
+ *
+ * The rules here are intentionally minimal: make the
+ * surface fill the parent (height: 100%) and the inner
+ * flow div match. They do NOT change the look, the
+ * theme tokens, or the toolbar layout — those are
+ * owned by `literature-canvas.css` (the cognitive
+ * canvas's `.cognitive-canvas-flow` parent already
+ * carries `position: relative` via
+ * `.literature-canvas`).
+ */
+.canvas-surface {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.canvas-surface__flow {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}

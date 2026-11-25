@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { literatureAiApi } from '../../lib/literature-api'
+import { literatureAiApi } from '../../application/dataApi'
+import { useCapability, CapabilityNotice } from '../../app/v04/CapabilityNotice'
 import {
   PROVIDER_PRESETS,
   hasLegacyAIConfiguration,
@@ -88,12 +89,20 @@ export default function AISettingsPanel({ onClose, onSave }: { onClose: () => vo
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [legacyAvailable, setLegacyAvailable] = useState(hasLegacyAIConfiguration)
 
+  // Centralised capability check (WP-02 Gate §3 blocker D).
+  // In a local workspace we MUST NOT auto-fetch the AI
+  // profiles list (which would call /api) and we MUST NOT
+  // show the configuration modal. The hook is called
+  // unconditionally so the rules of hooks are preserved.
+  const aiSettings = useCapability('ai.settings')
+
   const selected = useMemo(
     () => profiles.find(profile => profile.id === selectedId) || null,
     [profiles, selectedId],
   )
 
   const load = useCallback(async () => {
+    if (!aiSettings.supported) return;
     setLoading(true)
     try {
       const result = await literatureAiApi.profiles()
@@ -108,9 +117,9 @@ export default function AISettingsPanel({ onClose, onSave }: { onClose: () => vo
     } finally {
       setLoading(false)
     }
-  }, [selectedId])
+  }, [selectedId, aiSettings.supported])
 
-  useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load() }, [load]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectProfile = (profile: AIProfile) => {
     setSelectedId(profile.id)
@@ -290,6 +299,32 @@ export default function AISettingsPanel({ onClose, onSave }: { onClose: () => vo
 
   const inputStyle: React.CSSProperties = { width: '100%' }
   const activeProvider = presetFor(draft.provider)
+
+  // Local workspace: the entire modal is gated. The user
+  // still sees the chrome (so they can close it) plus a
+  // short notice explaining why the configuration UI is
+  // empty. No AI / /api calls happen before this branch.
+  if (!aiSettings.supported) {
+    return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div
+          className="modal-content"
+          onClick={event => event.stopPropagation()}
+          data-testid="ai-settings-local-notice"
+          data-capability="ai.settings"
+          style={{ width: 'min(560px, 92vw)', maxWidth: 560, padding: '1.25rem 1.5rem' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
+            <div>
+              <h2 style={{ marginBottom: '0.25rem' }}>Literature AI 配置中心</h2>
+              <p className="text-sm text-muted">{aiSettings.tooltip}</p>
+            </div>
+            <button className="btn btn-sm" onClick={onClose}>关闭</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="modal-overlay" onClick={onClose}>

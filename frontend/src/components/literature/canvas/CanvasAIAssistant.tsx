@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { CloseIcon } from '../../ui/Icons';
+import { useCapability } from '../../../app/v04/CapabilityNotice';
+import { OpenIntentCapsuleButton } from '../../../features/ai';
 
 interface Props {
   open: boolean;
@@ -40,6 +42,13 @@ export default function CanvasAIAssistant({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Centralised capability check (WP-02 Gate §3 blocker D).
+  // In a local workspace we MUST NOT show the input / submit
+  // path. The toggle in `LiteratureCanvas` is the gate; the
+  // assistant panel itself short-circuits the submit path
+  // as a second line of defence.
+  const aiCapability = useCapability('ai.chat');
+
   React.useEffect(() => {
     setValue(prompt);
   }, [prompt]);
@@ -47,12 +56,16 @@ export default function CanvasAIAssistant({
   if (!open) return null;
 
   const handleSubmit = async () => {
+    if (!aiCapability.supported) return;
     const text = value.trim();
     if (!text) return;
     setLoading(true);
     setError(null);
     try {
-      const { literatureAiApi } = await import('../../../lib/literature-api');
+      // Go through the dataApi gateway so the local workspace
+      // throws `UnsupportedInLocalWorkspaceError` before any
+      // `/api` request is made (WP-02 Gate §3 blocker D).
+      const { literatureAiApi } = await import('../../../application/dataApi');
       const messages = [{ role: 'user' as const, content: text }];
       let res;
       if (paperIds.length >= 2) {
@@ -74,6 +87,35 @@ export default function CanvasAIAssistant({
     }
   };
 
+  // Local workspace: render a short notice instead of the
+  // input / shortcuts. The user can close the panel; they
+  // just cannot submit a question.
+  if (!aiCapability.supported) {
+    return (
+      <div
+        className="canvas-ai-assistant"
+        data-testid="canvas-ai-assistant-local-notice"
+        data-capability="ai.chat"
+        role="dialog"
+        aria-label="AI assistant"
+      >
+        <div className="canvas-ai-assistant-header">
+          <span>AI assistant</span>
+          <button
+            className="canvas-ai-assistant-close"
+            onClick={onClose}
+            aria-label="Close AI assistant"
+          >
+            <CloseIcon size="sm" />
+          </button>
+        </div>
+        <div className="canvas-ai-assistant-body">
+          <p className="text-sm text-muted" style={{ margin: 0 }}>{aiCapability.tooltip}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="canvas-ai-assistant" role="dialog" aria-label="AI assistant">
       <div className="canvas-ai-assistant-header">
@@ -87,6 +129,19 @@ export default function CanvasAIAssistant({
         </button>
       </div>
       <div className="canvas-ai-assistant-body">
+        <div className="canvas-ai-assistant-open-capsule">
+          <OpenIntentCapsuleButton
+            surface="selection"
+            label="Open in Intent Capsule"
+            selectedObjects={
+              paperIds.length > 0
+                ? paperIds.map((id) => ({ id, kind: 'paper' as const }))
+                : paperId
+                  ? [{ id: paperId, kind: 'paper' as const }]
+                  : []
+            }
+          />
+        </div>
         <div className="canvas-ai-assistant-context">
           {paperIds.length >= 2
             ? `${paperIds.length} papers selected`

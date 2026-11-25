@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useStore } from '../store/useStore';
-import { modulesApi, lecturesApi } from '../lib/api';
+import { modulesApi, lecturesApi } from '../application/dataApi';
 import { db } from '../lib/db';
-import ProjectSidebar from './literature/ProjectSidebar';
 import { ModulesIcon, LiteratureIcon, GraphIcon, RenameIcon, CopyIcon, TrashIcon, CloseIcon, ChevronUpIcon, ChevronDownIcon, RestoreIcon, DragIcon, BackIcon, AddIcon, MoreIcon } from '../components/ui/Icons';
 import { LogoMarkWithWordmark } from './ui/Logo';
-import ZoteroConnectionPanel from './literature/ZoteroConnectionPanel';
-import ZoteroImportPanel from './literature/ZoteroImportPanel';
 import type { Module, Lecture } from '../types';
+
+const ProjectSidebar = React.lazy(() => import('./literature/ProjectSidebar'));
+const ZoteroConnectionPanel = React.lazy(() => import('./literature/ZoteroConnectionPanel'));
+const ZoteroImportPanel = React.lazy(() => import('./literature/ZoteroImportPanel'));
 
 interface SidebarContentProps {
   onShowNewModule: () => void;
@@ -406,22 +407,9 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
       </div>
 
       {sidebarMode === 'literature'
-        ? <div className="sidebar-literature">
-            <div style={{ padding: '0.375rem 0.5rem 0.25rem', fontSize: '0.65rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)' }}>
-              Zotero
-            </div>
-            <ZoteroConnectionPanel />
-            <ZoteroImportPanel />
-            <div style={{ margin: '0.25rem 0.5rem', borderTop: '1px solid var(--color-border)' }} />
-            <ProjectSidebar />
-          </div>
+        ? <LiteratureNavigation mode="literature" />
         : sidebarMode === 'canvas'
-          ? <div className="sidebar-literature">
-              <div style={{ padding: '0.5rem 0.5rem 0.25rem', fontSize: '0.65rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)' }}>
-                Canvas Project
-              </div>
-              <ProjectSidebar />
-            </div>
+          ? <LiteratureNavigation mode="canvas" />
         : <div className="sidebar-modules">
       <div className="sidebar-header">
         <h2>{showTrash ? 'Trash' : 'Modules'}</h2>
@@ -608,6 +596,26 @@ export default function SidebarContent({ onShowNewModule, onShowNewLecture }: Si
       </div>
       }
     </>
+  );
+}
+
+function LiteratureNavigation({ mode }: { mode: 'literature' | 'canvas' }): React.ReactElement {
+  return (
+    <React.Suspense fallback={<p className="text-sm text-muted" role="status">Loading navigation…</p>}>
+      <div className="sidebar-literature">
+        <div style={{ padding: mode === 'literature' ? '0.375rem 0.5rem 0.25rem' : '0.5rem 0.5rem 0.25rem', fontSize: '0.65rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)' }}>
+          {mode === 'literature' ? 'Zotero' : 'Canvas Project'}
+        </div>
+        {mode === 'literature' ? (
+          <>
+            <ZoteroConnectionPanel />
+            <ZoteroImportPanel />
+            <div style={{ margin: '0.25rem 0.5rem', borderTop: '1px solid var(--color-border)' }} />
+          </>
+        ) : null}
+        <ProjectSidebar />
+      </div>
+    </React.Suspense>
   );
 }
 

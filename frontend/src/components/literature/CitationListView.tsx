@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { citationsApi } from '../../lib/literature-api';
+import { citationsApi } from '../../application/dataApi';
 import { useStore } from '../../store/useStore';
+import { useCapability } from '../../app/v04/CapabilityNotice';
 
 export default function CitationListView() {
   const { setActiveLiteratureTab } = useStore();
@@ -11,7 +12,14 @@ export default function CitationListView() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<Set<string>>(new Set());
 
+  // Centralised capability check (WP-02 Gate §3 blocker D).
+  // In a local workspace we MUST NOT auto-fetch the citation
+  // list. The gate below replaces the table with a short
+  // notice and disables the search / refresh actions.
+  const citationsCapability = useCapability('citations.crud');
+
   const loadCitations = useCallback(async (query?: string) => {
+    if (!citationsCapability.supported) return;
     setLoading(true);
     setError(null);
     try {
@@ -22,22 +30,25 @@ export default function CitationListView() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [citationsCapability.supported]);
 
   useEffect(() => {
+    if (!citationsCapability.supported) return;
     loadCitations();
-  }, [loadCitations]);
+  }, [loadCitations, citationsCapability.supported]);
 
   useEffect(() => {
+    if (!citationsCapability.supported) return;
     if (search.length === 0) {
       loadCitations();
       return;
     }
     const timer = setTimeout(() => loadCitations(search), 300);
     return () => clearTimeout(timer);
-  }, [search, loadCitations]);
+  }, [search, loadCitations, citationsCapability.supported]);
 
   const handleDelete = async (id: string) => {
+    if (!citationsCapability.supported) return;
     if (!confirm('Delete this citation?')) return;
     setDeleting((prev) => new Set(prev).add(id));
     try {
@@ -63,6 +74,19 @@ export default function CitationListView() {
   };
 
   const selected = citations.find((c) => c.id === selectedId);
+
+  if (!citationsCapability.supported) {
+    return (
+      <div
+        style={{ padding: '1rem' }}
+        data-testid="citation-list-local-notice"
+        data-capability="citations.crud"
+      >
+        <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem' }}>Citations</h2>
+        <p className="text-sm text-muted" style={{ margin: 0 }}>{citationsCapability.tooltip}</p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: '1rem' }}>

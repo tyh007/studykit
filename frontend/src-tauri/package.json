@@ -1,0 +1,18 @@
+{
+  "name": "studykit-desktop-shell",
+  "version": "0.4.0",
+  "private": true,
+  "description": "StudyKit — local-first learning and research workspace.",
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "dev:desktop": "tauri dev",
+    "build:desktop": "tauri build --bundles app",
+    "build:desktop:app": "tauri build --bundles app",
+    "build:desktop:dmg": "tauri build",
+    "build:desktop:unsigned": "tauri build --no-bundle"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0"
+  }
+}

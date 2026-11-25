@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capability for StudyKit desktop (WP-09B Round 1, Correction Gate). Grants only the read-only app metadata primitives. The Rust side calls `tauri-plugin-dialog` internally to drive the native folder picker; the WebView never reads or writes the filesystem directly, and the dialog plugin does NOT need to be exposed through the capability allowlist. No clipboard, filesystem, shell, global-shortcut, updater, HTTP, event, window-control, webview-control, menu, tray, or path permissions are enabled; future WP-09B / 09C packets add narrowly scoped capabilities.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:app:default",
+    "core:event:default"
+  ]
+}

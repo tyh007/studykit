@@ -566,3 +566,144 @@ CREATE INDEX idx_lit_projects_workspace ON literature_projects(workspace_id) WHE
 CREATE INDEX idx_lit_papers_project ON literature_papers(project_id) WHERE deleted_at IS NULL;
 CREATE INDEX idx_lit_papers_workspace ON literature_papers(workspace_id);
 CREATE INDEX idx_lit_custom_fields_project ON literature_custom_fields(project_id) WHERE deleted_at IS NULL;
+
+-- ===== COLLAB TABLES (WP-08 Round 3) =====
+-- Cross-user collaboration. The collab slice is
+-- project-scoped: every project has a set of
+-- memberships + a shared activity log + an op
+-- log the client uses for cross-device sync.
+-- The `id` columns use the projectId format the
+-- client generates (no server-side generation)
+-- so the client can write rows before the server
+-- has acked the id. The server enforces FK +
+-- uniqueness.
+
+CREATE TABLE IF NOT EXISTS collab_projects (
+  -- The project's client-generated id. The
+  -- collab_projects row is created atomically
+  -- with the research_projects row (the
+  -- createProject use case writes both inside
+  -- one transaction). The id is the same
+  -- id the client uses in Dexie.
+  id              TEXT PRIMARY KEY,
+  workspace_id    UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  -- The minimal project metadata that other
+  -- members need to discover and navigate the
+  -- project. Private columns (livingBrief,
+  -- private scratch, etc.) live in the
+  -- research_projects / collab_scratches
+  -- tables and are NOT mirrored here.
+  name            TEXT NOT NULL,
+  kind            TEXT NOT NULL DEFAULT 'empirical',
+  -- The user that created the project. The
+  -- initial membership row grants this user
+  -- the `owner` role in the same transaction.
+  owner_user_id   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at      TIMESTAMPTZ
+);
+
+-- A row per (project, user). The (projectId,
+-- userId) pair is unique. The server is the
+-- single source of truth for membership; the
+-- client may only add a membership through the
+-- invite endpoint, which is a no-op when the
+-- pair already exists.
+CREATE TABLE IF NOT EXISTS collab_memberships (
+  project_id   TEXT NOT NULL REFERENCES collab_projects(id) ON DELETE CASCADE,
+  user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role         TEXT NOT NULL CHECK (role IN ('owner','editor','commenter','viewer')),
+  -- The user that added this membership. The
+  -- `owner` role is only assigned by the project
+  -- creator at create time; every later invite
+  -- uses a non-owner role.
+  added_by     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  -- Snapshot of the display name at add time;
+  -- the client uses this for the member list
+  -- before the user record is queried.
+  display_name TEXT NOT NULL,
+  added_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (project_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_collab_memberships_user
+  ON collab_memberships(user_id);
+
+-- The cross-user activity log. Every cross-user
+-- event the client emits (member-added, comment-
+-- posted, task-shared, task-assigned, ...) is
+-- recorded here. The client uses the row's
+-- `created_at` + `id` tuple as the cursor.
+CREATE TABLE IF NOT EXISTS collab_activities (
+  id            TEXT PRIMARY KEY,
+  project_id    TEXT NOT NULL REFERENCES collab_projects(id) ON DELETE CASCADE,
+  -- The user that triggered the event.
+  actor_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  actor_name    TEXT NOT NULL,
+  -- Canonical shared activity is always attributed
+  -- to the authenticated user. AI suggestions must
+  -- pass through the Draft Layer and explicit accept.
+  actor_type    TEXT NOT NULL CHECK (actor_type = 'user'),
+  kind          TEXT NOT NULL,
+  -- Optional structured target. The shape
+  -- depends on `kind` (e.g. `task` for an
+  -- `task-shared` event). `null` for events
+  -- that are not attached to a single object.
+  target_kind   TEXT,
+  target_id     TEXT,
+  -- Short, human-readable summary (<= 140 chars).
+  summary       TEXT NOT NULL,
+  body          TEXT NOT NULL DEFAULT '',
+  -- JSON snapshot of the payload, used for
+  -- the inbox apply step on the receiving
+  -- side. The shape mirrors the canonical
+  -- domain row.
+  payload_json  TEXT NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_collab_activities_project_created
+  ON collab_activities(project_id, created_at);
+
+-- The durable cross-user op log. Every
+-- successful use case write appends a row
+-- here in the same transaction that writes
+-- the canonical row + the outbox row. The
+-- `client_op_id` is the client's outbox row
+-- id; the unique constraint makes the push
+-- idempotent (re-sending the same op is a
+-- no-op). The `(created_at, id)` cursor is
+-- what the client pulls in `?since=...`.
+CREATE TABLE IF NOT EXISTS collab_op_log (
+  id           TEXT PRIMARY KEY,
+  project_id   TEXT NOT NULL REFERENCES collab_projects(id) ON DELETE CASCADE,
+  -- The originating device's client id (the
+  -- outbox row's `clientId`). Used by the
+  -- server to skip the writer's own pulls.
+  client_id    TEXT NOT NULL,
+  kind         TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  base_version TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (client_id, id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_collab_op_log_project_cursor
+  ON collab_op_log(project_id, created_at, id);
+
+-- Per-(project, client) cursor. The client
+-- stores the last applied op id; the next
+-- pull returns ops with `(created_at, id) >
+-- cursor`. The cursor is a per-client opaque
+-- string (the client encodes the tuple as
+-- `<ms>:<id>`); the server only uses it as
+-- a value to filter by.
+CREATE TABLE IF NOT EXISTS collab_cursors (
+  project_id   TEXT NOT NULL REFERENCES collab_projects(id) ON DELETE CASCADE,
+  client_id    TEXT NOT NULL,
+  cursor_ms    BIGINT NOT NULL DEFAULT 0,
+  cursor_id    TEXT,
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (project_id, client_id)
+);

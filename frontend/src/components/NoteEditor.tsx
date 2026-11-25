@@ -13,11 +13,13 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { useStore } from '../store/useStore';
 import { db } from '../lib/db';
-import { getAuthToken, uploadsApi } from '../lib/api';
+import { getAuthToken, uploadsApi } from '../application/dataApi';
 import { Equation } from './EquationNode';
 import type { NoteBlock, BlockContent, BlockType } from '../types';
 import { AddAnnotationButton } from './CornellPanel';
 import CitationPicker from './literature/CitationPicker';
+import { useCapability } from '../app/v04/CapabilityNotice';
+import { OpenIntentCapsuleButton } from '../features/ai';
 
 const lowlight = createLowlight(common);
 
@@ -72,6 +74,14 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
   // Link dialog state
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [showCitationPicker, setShowCitationPicker] = useState(false);
+
+  // Centralised capability check (WP-02 Gate §3 blocker D).
+  // In a local workspace the Cite button and image upload
+  // must not be clickable — the data sources they hit live
+  // behind a Sync workspace. The hook is called
+  // unconditionally so the rules of hooks hold.
+  const citationsCapability = useCapability('citations.crud');
+  const uploadsCapability = useCapability('sourceDocuments.upload');
   const [linkUrl, setLinkUrl] = useState('');
   const [linkText, setLinkText] = useState('');
   const [resultMessage, setResultMessage] = useState<string | null>(null);
@@ -595,7 +605,22 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
         <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleBlockquote().run()} title="Callout/quote" aria-label="Callout or quote block" aria-pressed={editor.isActive('blockquote')}><QuoteIcon size="sm" /></button>
         <button className="btn btn-ghost btn-sm" onClick={() => editor.chain().focus().toggleCodeBlock().run()} title="Code block (Ctrl+Alt+C)" aria-label="Code block" aria-pressed={editor.isActive('codeBlock')}><CodeIcon size="sm" /></button>
         <button className="btn btn-ghost btn-sm" onClick={() => { setEquationLatex(''); setShowEquationInput(true); }} title="Insert equation (LaTeX)" aria-label="Insert equation using LaTeX"><EquationIcon size="sm" /></button>
-        <button className="btn btn-ghost btn-sm" onClick={() => { setImageUrl(''); setImageCaption(''); setShowImageInput(true); }} title="Insert image" aria-label="Insert image"><ImageIcon size="sm" /></button>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => {
+            if (!uploadsCapability.supported) return;
+            setImageUrl(''); setImageCaption(''); setShowImageInput(true);
+          }}
+          title={uploadsCapability.supported ? 'Insert image' : uploadsCapability.tooltip}
+          aria-label="Insert image"
+          aria-disabled={!uploadsCapability.supported}
+          disabled={!uploadsCapability.supported}
+          data-testid="note-editor-image-button"
+          data-capability="sourceDocuments.upload"
+          style={!uploadsCapability.supported ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+        >
+          <ImageIcon size="sm" />
+        </button>
         <button
           className="btn btn-ghost btn-sm"
           onClick={() => {
@@ -622,7 +647,22 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
           aria-pressed={editor?.isActive('link') ?? false}
         >{editor?.isActive("link") ? <><UnlinkIcon size="sm" /> <span style={{ marginLeft: '0.25rem' }}>Unlink</span></> : <><LinkIcon size="sm" /> <span style={{ marginLeft: '0.25rem' }}>Link</span></>}</button>
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
-        <button className="btn btn-ghost btn-sm" onClick={() => setShowCitationPicker(true)} title="Insert citation" aria-label="Insert citation"><CiteIcon size="sm" /> <span style={{ marginLeft: '0.25rem' }}>Cite</span></button>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => {
+            if (!citationsCapability.supported) return;
+            setShowCitationPicker(true);
+          }}
+          title={citationsCapability.supported ? 'Insert citation' : citationsCapability.tooltip}
+          aria-label="Insert citation"
+          aria-disabled={!citationsCapability.supported}
+          disabled={!citationsCapability.supported}
+          data-testid="note-editor-cite-button"
+          data-capability="citations.crud"
+          style={!citationsCapability.supported ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+        >
+          <CiteIcon size="sm" /> <span style={{ marginLeft: '0.25rem' }}>Cite</span>
+        </button>
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
         <button
           className="btn btn-ghost btn-sm"
@@ -648,6 +688,30 @@ export default function NoteEditor({ lectureId }: NoteEditorProps) {
         ><SaveIcon size="sm" /> <span style={{ marginLeft: '0.25rem' }}>{saveStatus === 'saving' ? 'Saving…' : 'Save'}</span></button>
         <SaveStatusIndicator status={saveStatus} lastSavedAt={lastSavedAt} />
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
+        <OpenIntentCapsuleButton
+          surface="selection"
+          label="Open in Intent Capsule"
+          selectedText={
+            activeParagraphPreview
+              ? activeParagraphPreview
+              : (typeof window !== 'undefined' ? window.getSelection()?.toString() ?? null : null)
+          }
+          selectedObjects={
+            lectureId
+              ? [{ id: `lecture:${lectureId}`, kind: 'note' as const }]
+              : []
+          }
+          container={
+            selectedModuleId
+              ? {
+                  workspaceId: null,
+                  mode: 'study',
+                  kind: 'course',
+                  id: selectedModuleId,
+                }
+              : null
+          }
+        />
         <button className="btn btn-ghost btn-sm" onClick={() => setShowShortcuts(true)} title="Keyboard shortcuts" aria-label="Show keyboard shortcuts"><KeyboardIcon size="sm" /></button>
         <span style={{ width: '1px', background: 'var(--color-border)', margin: '0 0.125rem' }} />
         {activeParagraphIndex !== null && (

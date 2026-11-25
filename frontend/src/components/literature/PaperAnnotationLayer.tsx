@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { literaturePapersApi } from '../../lib/literature-api';
+import { literaturePapersApi } from '../../application/dataApi';
 import { AnnotationIcon } from '../ui/Icons';
+import { useCapability } from '../../app/v04/CapabilityNotice';
 
 interface PaperAnnotation {
   id: string;
@@ -41,15 +42,23 @@ export default function PaperAnnotationLayer({ paperId, pageNumber }: PaperAnnot
   const [drawRect, setDrawRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [currentStroke, setCurrentStroke] = useState<Array<{ x: number; y: number }>>([]);
 
-  // Fetch annotations from server
+  // Centralised capability check (WP-02 Gate §3 blocker D).
+  // In a local workspace we MUST NOT auto-fetch annotations
+  // (which would call /api) and the highlight / ink tools
+  // must not be clickable. The `useCapability` hook is
+  // called unconditionally so the rules of hooks hold.
+  const notesCapability = useCapability('paperNotes.crud');
+
+  // Fetch annotations from server — only in a sync workspace.
   useEffect(() => {
     if (!paperId) return;
+    if (!notesCapability.supported) return;
     setLoading(true);
     literaturePapersApi.listAnnotations(paperId, pageNumber)
       .then(setAnnotations)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [paperId, pageNumber]);
+  }, [paperId, pageNumber, notesCapability.supported]);
 
   const getCoords = useCallback((e: React.MouseEvent<SVGSVGElement>): { x: number; y: number } => {
     const svg = svgRef.current;
@@ -86,6 +95,7 @@ export default function PaperAnnotationLayer({ paperId, pageNumber }: PaperAnnot
 
   const handleMouseUp = useCallback(async () => {
     if (!isDrawing || !activeTool || !paperId) return;
+    if (!notesCapability.supported) return;
     setIsDrawing(false);
 
     if (activeTool === 'highlight' && drawRect && drawRect.width > 3) {
@@ -137,6 +147,7 @@ export default function PaperAnnotationLayer({ paperId, pageNumber }: PaperAnnot
   }, [isDrawing, activeTool, paperId, pageNumber, drawRect, currentStroke, selectedLabel]);
 
   const handleDeleteAnnotation = async (id: string) => {
+    if (!notesCapability.supported) return;
     try {
       await literaturePapersApi.deleteAnnotation(id);
       setAnnotations(prev => prev.filter(a => a.id !== id));
@@ -145,7 +156,50 @@ export default function PaperAnnotationLayer({ paperId, pageNumber }: PaperAnnot
     }
   };
 
-  if (loading) return null;
+  if (loading && notesCapability.supported) return null;
+
+  // Local workspace: render a single disabled toolbar
+  // button with a short tooltip instead of the live
+  // highlight / ink tools. The user can see the tools
+  // exist but cannot use them, and no /api call happens.
+  if (!notesCapability.supported) {
+    return (
+      <div
+        data-testid="paper-annotation-local-notice"
+        data-capability="paperNotes.crud"
+        title={notesCapability.tooltip}
+        style={{
+          position: 'absolute', top: '0.25rem', right: '0.25rem', zIndex: 10,
+          display: 'flex', gap: '0.125rem', background: 'rgba(255,255,255,0.85)',
+          borderRadius: '4px', padding: '0.125rem', boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+          opacity: 0.5,
+        }}
+      >
+        <button
+          disabled
+          aria-disabled="true"
+          style={{
+            width: 24, height: 24, border: '1px solid #ccc',
+            borderRadius: 3, background: '#fff', cursor: 'not-allowed', fontSize: '0.75rem', padding: 0,
+          }}
+          title={notesCapability.tooltip}
+        >
+          ▨
+        </button>
+        <button
+          disabled
+          aria-disabled="true"
+          style={{
+            width: 24, height: 24, border: '1px solid #ccc',
+            borderRadius: 3, background: '#fff', cursor: 'not-allowed', fontSize: '0.75rem', padding: 0,
+          }}
+          title={notesCapability.tooltip}
+        >
+          <AnnotationIcon size="sm" />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <>

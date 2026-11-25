@@ -1,12 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
-import { zoteroApi } from '../../lib/literature-api';
+import { useSupports, zoteroApi } from '../../application/dataApi';
 
 export default function ZoteroConnectionPanel() {
   const {
     externalAccount, setExternalAccount,
     zoteroConnectionStatus, setZoteroConnectionStatus,
   } = useStore();
+  // Centralised capability check (WP-02 Gate §3 blocker D):
+  // the Zotero connect / import / status calls all require a
+  // sync workspace. In a local workspace we show a "需要 Sync"
+  // notice *before* the user can click, so the click never
+  // reaches the `/api` backend.
+  const canUseZotero = useSupports('zotero.connect');
 
   const [showConnect, setShowConnect] = useState(false);
   const [apiKey, setApiKey] = useState('');
@@ -14,8 +20,12 @@ export default function ZoteroConnectionPanel() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Check connection status on mount
+  // Check connection status on mount — only when the local
+  // workspace actually supports Zotero. The hook is unconditional
+  // so the hook order stays stable, but the body short-circuits
+  // when `canUseZotero` is false.
   useEffect(() => {
+    if (!canUseZotero) return;
     zoteroApi.status()
       .then((res: any) => {
         if (res.status === 'connected' && res.account) {
@@ -24,7 +34,7 @@ export default function ZoteroConnectionPanel() {
         }
       })
       .catch(() => { /* not connected */ });
-  }, []);
+  }, [canUseZotero, setExternalAccount, setZoteroConnectionStatus]);
 
   const handleConnect = async () => {
     if (!apiKey.trim()) return;
@@ -59,7 +69,7 @@ export default function ZoteroConnectionPanel() {
   };
 
   return (
-    <div className="zotero-panel" style={{ padding: '0.5rem', borderBottom: '1px solid var(--color-border)', marginBottom: '0.25rem' }}>
+    <div className="zotero-panel" data-testid="zotero-connection-panel" data-can-use-zotero={canUseZotero} style={{ padding: '0.5rem', borderBottom: '1px solid var(--color-border)', marginBottom: '0.25rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
         <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)' }}>
           Zotero
@@ -80,7 +90,20 @@ export default function ZoteroConnectionPanel() {
         />
       </div>
 
-      {zoteroConnectionStatus === 'connected' && externalAccount ? (
+      {!canUseZotero ? (
+        <div
+          className="zotero-local-notice"
+          data-testid="zotero-local-notice"
+          style={{
+            fontSize: '0.7rem',
+            color: 'var(--color-text-secondary)',
+            padding: '0.25rem 0',
+            lineHeight: 1.4,
+          }}
+        >
+          Zotero 同步需要 Sync workspace。在 local workspace 中此项不可用。
+        </div>
+      ) : zoteroConnectionStatus === 'connected' && externalAccount ? (
         <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
           <div style={{ marginBottom: '0.25rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {externalAccount.provider_display_name || 'Connected'}

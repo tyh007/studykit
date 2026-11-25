@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { literatureAiApi } from '../../lib/literature-api';
+import { literatureAiApi } from '../../application/dataApi';
 import { CloseIcon } from '../ui/Icons';
 import { OllamaClient } from '../../lib/literature/ollama-client';
 import { CustomAIClient } from '../../lib/literature/custom-ai-client';
@@ -7,6 +7,8 @@ import { readLocalProfileCredential, type AIProfile } from '../../lib/literature
 import { parseAIContent } from '../../lib/literature/ai-response';
 import ReactMarkdown from 'react-markdown';
 import type { LiteraturePaper } from '../../types';
+import { useCapability } from '../../app/v04/CapabilityNotice';
+import { OpenIntentCapsuleButton } from '../../features/ai';
 
 // parseAIContent now lives in `lib/literature/ai-response` and is shared with
 // the literature canvas QuestionNode.
@@ -118,7 +120,16 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Centralised capability check (WP-02 Gate §3 blocker D).
+  // In a local workspace we MUST NOT auto-fetch the AI profiles
+  // (which would call /api) and we MUST NOT show a chat
+  // input that the user can submit. The `CapabilityNotice`
+  // gate below renders the alternative UI and prevents the
+  // submit path from ever running.
+  const aiCapability = useCapability('ai.chat');
+
   useEffect(() => {
+    if (!aiCapability.supported) return;
     literatureAiApi.profiles().then(result => {
       const available = result.profiles.filter((profile: AIProfile) => profile.capabilities.text);
       setProfiles(available);
@@ -127,9 +138,12 @@ export default function AIChatPanel({ paper, paperIds, onClose }: AIChatPanelPro
       setProfiles([]);
       setProfileId('');
     });
-  }, []);
+  }, [aiCapability.supported]);
 
   const handleSend = async () => {
+    // Second line of defence: even if a stale UI event slips
+    // through, the local workspace must NEVER hit /api.
+    if (!aiCapability.supported) return;
     if (!input.trim() || loading) return;
 
     const userMessage: ChatMessage = { role: 'user', content: input.trim() };
@@ -200,6 +214,36 @@ EXTRACTED DATA: ${JSON.stringify(paper.extracted_data || {})}`
   };
 
   if (!expanded) {
+    if (!aiCapability.supported) {
+      // In a local workspace the collapsed bar is inert — it
+      // tells the user *why* it's inert instead of looking
+      // clickable. Clicking is a no-op so the user cannot
+      // accidentally reach a submit path that would throw.
+      return (
+        <div
+          aria-disabled="true"
+          title={aiCapability.tooltip}
+          data-testid="ai-chat-disabled"
+          data-capability="ai.chat"
+          style={{
+            padding: '0.5rem 0.75rem',
+            borderTop: '1px solid var(--color-border)',
+            cursor: 'not-allowed',
+            fontSize: '0.82rem',
+            color: 'var(--color-text-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            background: 'var(--color-bg-secondary)',
+            flexShrink: 0,
+            userSelect: 'none',
+          }}
+        >
+          <span style={{ opacity: 0.6 }}>AI</span>
+          <span>Ask AI about this paper (Sync workspace required)</span>
+        </div>
+      );
+    }
     return (
       <div
         onClick={() => setExpanded(true)}
@@ -219,6 +263,33 @@ EXTRACTED DATA: ${JSON.stringify(paper.extracted_data || {})}`
       >
         <span style={{ opacity: 0.7 }}>AI</span>
         <span>Ask AI about this paper...</span>
+      </div>
+    );
+  }
+
+  // Local workspace: render a short in-place hint instead of
+  // the full chat panel. The user should never reach a
+  // submit path in a local workspace.
+  if (!aiCapability.supported) {
+    return (
+      <div
+        ref={panelRef}
+        className="ai-chat-panel"
+        data-testid="ai-chat-panel-local-notice"
+        data-capability="ai.chat"
+        style={{
+          height: 'auto',
+          padding: '0.5rem 0.75rem',
+          fontSize: '0.8rem',
+          color: 'var(--color-text-muted)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          background: 'var(--color-bg-secondary)',
+          borderTop: '1px solid var(--color-border)',
+        }}
+      >
+        <span>{aiCapability.tooltip}</span>
       </div>
     );
   }
@@ -322,13 +393,20 @@ EXTRACTED DATA: ${JSON.stringify(paper.extracted_data || {})}`
             {profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name} · {profile.model || '未选模型'}</option>)}
           </select>
         </div>
-        <button
-          className="btn btn-ghost btn-sm"
-          onClick={() => { setExpanded(false); onClose?.(); }}
-          style={{ fontSize: '0.7rem', padding: '0.125rem 0.375rem' }}
-        >
-          <CloseIcon size="sm" />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+          <OpenIntentCapsuleButton
+            surface="selection"
+            label="Open in Intent Capsule"
+            selectedObjects={paper ? [{ id: paper.id, kind: 'paper' as const }] : []}
+          />
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => { setExpanded(false); onClose?.(); }}
+            style={{ fontSize: '0.7rem', padding: '0.125rem 0.375rem' }}
+          >
+            <CloseIcon size="sm" />
+          </button>
+        </div>
       </div>
 
       {/* Messages */}

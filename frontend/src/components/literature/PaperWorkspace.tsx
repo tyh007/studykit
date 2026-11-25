@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { literaturePapersApi, paperNotesApi, paperRelationsApi } from '../../lib/literature-api';
+import { literaturePapersApi, paperNotesApi, paperRelationsApi } from '../../application/dataApi';
 import { createAIExtractionService } from '../../lib/literature/ai-extraction';
 import { PromptBuilder } from '../../lib/literature/prompt-builder';
 import { StarIcon, CloseIcon, SyncIcon } from '../ui/Icons';
@@ -8,6 +8,7 @@ import PaperAnnotationLayer from './PaperAnnotationLayer';
 import AIChatPanel from './AIChatPanel';
 import PaperRelationsGraph from './PaperRelationsGraph';
 import { useStore } from '../../store/useStore';
+import { useCapability } from '../../app/v04/CapabilityNotice';
 import type { LiteraturePaper, PaperNote, PaperRelation } from '../../types';
 
 interface PaperWorkspaceProps {
@@ -118,15 +119,31 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
     setImportance(paper.importance || 0);
   }, [paper.id, paper.extracted_data, paper.reading_status, paper.importance]);
 
+  // Centralised capability check (WP-02 Gate §3 blocker D).
+  // In a local workspace paper relations live nowhere the
+  // user can read them, so we must NOT auto-fetch.
+  const paperRelationsCapability = useCapability('paperRelations.crud');
+  // Notes CRUD lives behind a sync workspace. The mount
+  // effect short-circuits BEFORE `paperNotesApi.list` is
+  // called; the Notes tab itself is replaced with a local
+  // notice (handled in the JSX below).
+  const paperNotesCapability = useCapability('paperNotes.crud');
+  // Paper metadata writes (extracted_data / reading status /
+  // importance) also require a sync workspace. The local
+  // workspace can read the paper's PDF + summary; it just
+  // cannot edit anything that flows through `/api`.
+  const paperCrudCapability = useCapability('literaturePapers.crud');
+
   // Load relations
   const loadRelations = useCallback(async () => {
+    if (!paperRelationsCapability.supported) return;
     try {
       const result = await paperRelationsApi.list(paper.id);
       setRelations(result);
     } catch (err) {
       console.error('Failed to load relations:', err);
     }
-  }, [paper.id]);
+  }, [paper.id, paperRelationsCapability.supported]);
 
   useEffect(() => {
     loadRelations();
@@ -139,15 +156,22 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
     }).catch(() => {});
   }, [projectId, paper.id]);
 
-  // Load notes
+  // Load notes — short-circuited in a local workspace. The
+  // mount effect MUST NOT call `paperNotesApi.list` or the
+  // local surface will throw into console.error and confuse
+  // the user.
   const loadNotes = useCallback(async () => {
+    if (!paperNotesCapability.supported) {
+      setNotes([]);
+      return;
+    }
     try {
       const result = await paperNotesApi.list(paper.id);
       setNotes(result);
     } catch (err) {
       console.error('Failed to load notes:', err);
     }
-  }, [paper.id]);
+  }, [paper.id, paperNotesCapability.supported]);
 
   useEffect(() => {
     loadNotes();
@@ -161,6 +185,7 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
 
   // Save all changes (extracted_data + status + importance)
   const handleSave = async () => {
+    if (!paperCrudCapability.supported) return;
     setSaving(true);
     try {
       const updates: Record<string, any> = {};
@@ -191,6 +216,7 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
 
   // Auto-save status and importance changes immediately
   const handleStatusChange = async (newStatus: 'unread' | 'reading' | 'read' | 'reviewed') => {
+    if (!paperCrudCapability.supported) return;
     setStatus(newStatus);
     try {
       await literaturePapersApi.update(paper.id, { reading_status: newStatus });
@@ -201,6 +227,7 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
   };
 
   const handleImportanceChange = async (newImportance: number) => {
+    if (!paperCrudCapability.supported) return;
     setImportance(newImportance);
     try {
       await literaturePapersApi.update(paper.id, { importance: newImportance });
@@ -212,6 +239,7 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
 
   // Re-extract a single field
   const handleReExtractField = async (field: string) => {
+    if (!paperCrudCapability.supported) return;
     if (!paper.full_text) return;
 
     setExtracting(true);
@@ -231,6 +259,7 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
 
   // Full extraction (when no extracted_data exists)
   const handleExtractAll = async () => {
+    if (!paperCrudCapability.supported) return;
     if (!paper.full_text) return;
     setExtracting(true);
     try {
@@ -259,6 +288,7 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
 
   // Notes: add
   const handleAddNote = async () => {
+    if (!paperNotesCapability.supported) return;
     if (!newNoteContent.trim()) return;
     setSavingNote(true);
     try {
@@ -274,6 +304,7 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
 
   // Notes: update
   const handleUpdateNote = async (noteId: string) => {
+    if (!paperNotesCapability.supported) return;
     if (!editNoteContent.trim()) return;
     try {
       await paperNotesApi.update(noteId, { content: editNoteContent.trim() });
@@ -287,6 +318,7 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
 
   // Notes: delete
   const handleDeleteNote = async (noteId: string) => {
+    if (!paperNotesCapability.supported) return;
     try {
       await paperNotesApi.delete(noteId);
       await loadNotes();
@@ -319,6 +351,11 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
         <select
           value={status}
           onChange={e => handleStatusChange(e.target.value as any)}
+          disabled={!paperCrudCapability.supported}
+          title={paperCrudCapability.supported ? undefined : paperCrudCapability.tooltip}
+          aria-disabled={!paperCrudCapability.supported}
+          data-capability="literaturePapers.crud"
+          data-testid="paper-workspace-reading-status"
           style={{ fontSize: '0.72rem', padding: '0.2rem 0.375rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}
         >
           {READING_STATUSES.map(s => (
@@ -332,8 +369,10 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
             <span
               key={n}
               onClick={() => handleImportanceChange(n === importance ? 0 : n)}
-              style={{ cursor: 'pointer', color: n <= importance ? '#f59e0b' : 'var(--color-border)', transition: 'color 0.1s' }}
-              title={`${n} star${n > 1 ? 's' : ''}`}
+              style={{ cursor: paperCrudCapability.supported ? 'pointer' : 'not-allowed', color: n <= importance ? '#f59e0b' : 'var(--color-border)', transition: 'color 0.1s' }}
+              title={paperCrudCapability.supported ? `${n} star${n > 1 ? 's' : ''}` : paperCrudCapability.tooltip}
+              data-capability="literaturePapers.crud"
+              aria-disabled={!paperCrudCapability.supported}
             >
               <StarIcon size="sm" />
             </span>
@@ -347,7 +386,7 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
         <div className="paper-preview-pane" style={{ width: splitPercent + '%' }}>
           {paper.storage_key ? (
             <LiteraturePDFViewer
-              paperId={paper.id}
+              source={{ kind: 'remote', paperId: paper.id }}
               currentPageIndex={pdfPageIndex}
               totalPages={pdfTotalPages}
               onPageChange={setPdfPageIndex}
@@ -401,7 +440,13 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
                     <p style={{ fontSize: '0.85rem', marginBottom: '0.5rem', color: 'var(--color-text-secondary)' }}>
                       No AI extraction yet. Extract key information from this paper?
                     </p>
-                    <button className="btn btn-primary btn-sm" onClick={handleExtractAll} disabled={extracting || !paper.full_text}>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={handleExtractAll}
+                      disabled={extracting || !paper.full_text || !paperCrudCapability.supported}
+                      title={paperCrudCapability.supported ? undefined : paperCrudCapability.tooltip}
+                      data-capability="literaturePapers.crud"
+                    >
                       {extracting ? 'Extracting...' : 'Extract Summary'}
                     </button>
                     {!paper.full_text && (
@@ -426,9 +471,10 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
                             <button
                               className="btn btn-ghost btn-icon btn-xs"
                               onClick={() => handleReExtractField(field)}
-                              disabled={extracting || !paper.full_text}
-                              title="Re-extract this field from AI"
+                              disabled={extracting || !paper.full_text || !paperCrudCapability.supported}
+                              title={paperCrudCapability.supported ? 'Re-extract this field from AI' : paperCrudCapability.tooltip}
                               aria-label={`Re-extract ${FIELD_LABELS[field]}`}
+                              data-capability="literaturePapers.crud"
                             >
                               <SyncIcon size="sm" className={extracting ? 'icon-spinning' : ''} />
                             </button>
@@ -436,6 +482,7 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
                           <textarea
                             value={value}
                             onChange={e => handleFieldChange(field, e.target.value)}
+                            readOnly={!paperCrudCapability.supported}
                             style={{
                               width: '100%', minHeight: 60, padding: '0.375rem 0.5rem',
                               fontSize: '0.8rem', lineHeight: 1.5,
@@ -450,11 +497,34 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
                       );
                     })}
 
+                    {!paperCrudCapability.supported && (
+                      <p
+                        className="text-sm text-muted"
+                        data-testid="paper-workspace-summary-readonly"
+                        data-capability="literaturePapers.crud"
+                        style={{ marginTop: '0.5rem', fontStyle: 'italic' }}
+                      >
+                        {paperCrudCapability.tooltip}
+                      </p>
+                    )}
+
                     <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-                      <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving || !dirty}>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={handleSave}
+                        disabled={saving || !dirty || !paperCrudCapability.supported}
+                        title={paperCrudCapability.supported ? undefined : paperCrudCapability.tooltip}
+                        data-capability="literaturePapers.crud"
+                      >
                         {saving ? 'Saving...' : 'Save Changes'}
                       </button>
-                      <button className="btn btn-ghost btn-sm" onClick={handleExtractAll} disabled={extracting || !paper.full_text}>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={handleExtractAll}
+                        disabled={extracting || !paper.full_text || !paperCrudCapability.supported}
+                        title={paperCrudCapability.supported ? undefined : paperCrudCapability.tooltip}
+                        data-capability="literaturePapers.crud"
+                      >
                         {extracting ? 'Extracting...' : 'Re-extract All'}
                       </button>
                     </div>
@@ -464,7 +534,15 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
             )}
 
             {/* === NOTES TAB === */}
-            {tab === 'notes' && (
+            {tab === 'notes' && !paperNotesCapability.supported ? (
+              <div
+                data-testid="paper-workspace-notes-local-notice"
+                data-capability="paperNotes.crud"
+                style={{ padding: '1rem' }}
+              >
+                <p className="text-sm text-muted">{paperNotesCapability.tooltip}</p>
+              </div>
+            ) : tab === 'notes' && (
               <div>
                 {/* New note */}
                 <div style={{ marginBottom: '1rem' }}>
@@ -481,7 +559,11 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
                       fontFamily: 'inherit', marginBottom: '0.375rem',
                     }}
                   />
-                  <button className="btn btn-primary btn-sm" onClick={handleAddNote} disabled={savingNote || !newNoteContent.trim()}>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={handleAddNote}
+                    disabled={savingNote || !newNoteContent.trim() || !paperNotesCapability.supported}
+                  >
                     {savingNote ? 'Adding...' : 'Add Note'}
                   </button>
                 </div>
@@ -552,7 +634,11 @@ export default function PaperWorkspace({ paper, projectId, onBack, onUpdated }: 
             )}
 
             {/* === RELATIONS TAB === */}
-            {tab === 'relations' && (
+            {tab === 'relations' && !paperRelationsCapability.supported ? (
+              <div data-testid="paper-relations-local-notice" data-capability="paperRelations.crud">
+                <p className="text-sm text-muted" style={{ padding: '1rem' }}>{paperRelationsCapability.tooltip}</p>
+              </div>
+            ) : tab === 'relations' && (
               <div>
                 <div style={{ marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>Paper Relations ({relations.length})</span>

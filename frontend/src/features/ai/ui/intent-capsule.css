@@ -1,0 +1,256 @@
+/* StudyKit v0.4 — Intent Capsule visual layer
+ *
+ * Token-driven. The Capsule must look the same in Light
+ * and Dark; no `if (theme)` branches, no hardcoded
+ * hexes. The only bespoke shadow comes from a token.
+ */
+
+.v04-ai-capsule-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 8vh 1rem 1rem;
+  z-index: 9000;
+  background: color-mix(in srgb, var(--color-bg) 60%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+.v04-ai-capsule {
+  width: min(640px, 100%);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem 0.75rem;
+  border-radius: 1rem;
+  overflow: auto;
+}
+
+.v04-ai-capsule-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.v04-ai-capsule-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  flex: 1;
+  color: var(--color-text);
+}
+
+.v04-ai-capsule-flavour {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.v04-ai-capsule-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.v04-ai-capsule-scope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+}
+
+.v04-ai-capsule-scope-label {
+  font-weight: 600;
+}
+
+.v04-ai-capsule-scope-chip {
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  border-radius: 999px;
+  padding: 0.18rem 0.6rem;
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+
+.v04-ai-capsule-scope-chip[aria-pressed='true'] {
+  background: var(--color-primary, #6b4eff);
+  color: var(--color-on-primary, #fff);
+  border-color: var(--color-primary, #6b4eff);
+}
+
+.v04-ai-capsule-scope-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.v04-ai-capsule-input {
+  width: 100%;
+  font-size: 0.95rem;
+}
+
+.v04-ai-capsule-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.v04-ai-capsule-preview {
+  background: var(--color-bg-secondary, rgba(0, 0, 0, 0.04));
+  border: 1px solid var(--color-border);
+  border-radius: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.v04-ai-capsule-preview-summary {
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.v04-ai-capsule-preview-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.v04-ai-capsule-preview-list li {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 0.3rem;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.72rem;
+}
+
+.v04-ai-capsule-preview-meta {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--color-text-secondary);
+}
+
+.v04-ai-capsule-draft {
+  border: 1px solid var(--color-border);
+  border-radius: 0.6rem;
+  padding: 0.75rem;
+  background: var(--color-bg-secondary, rgba(0, 0, 0, 0.04));
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.v04-ai-capsule-draft-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+}
+
+.v04-ai-capsule-draft-title {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.v04-ai-capsule-draft-text {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.v04-ai-capsule-draft-error {
+  margin: 0;
+  color: var(--color-error, #b00020);
+  font-size: 0.78rem;
+}
+
+.v04-ai-capsule-draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.v04-ai-capsule-error {
+  margin: 0;
+  color: var(--color-error, #b00020);
+  font-size: 0.78rem;
+}
+
+.v04-ai-capsule-foot {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: var(--color-text-muted, var(--color-text-secondary));
+  border-top: 1px solid var(--color-border);
+  padding-top: 0.4rem;
+}
+
+.v04-ai-capsule-hint {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  letter-spacing: 0.04em;
+}
+
+/* WP-07: task-suggestions Draft renderer */
+.v04-ai-capsule-draft-tasks {
+  display: grid;
+  gap: 0.5rem;
+}
+.v04-ai-capsule-draft-warning {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--color-warning, #b80);
+}
+.v04-ai-capsule-draft-task-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+.v04-ai-capsule-draft-task-row {
+  border: 1px solid var(--color-border, #e2e2e2);
+  border-radius: var(--radius-sm, 4px);
+  padding: 0.5rem 0.625rem;
+  display: grid;
+  gap: 0.25rem;
+}
+.v04-ai-capsule-draft-task-title {
+  font-size: 0.9rem;
+}
+.v04-ai-capsule-draft-task-why,
+.v04-ai-capsule-draft-task-dod,
+.v04-ai-capsule-draft-task-deps {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary, #555);
+}
+.v04-ai-capsule-draft-task-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.v04-ai-capsule-draft-complete {
+  margin: 0.5rem 0 0 0;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary, #555);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.v04-ai-capsule-draft-provider {
+  font-size: 0.7rem;
+  color: var(--color-text-muted, var(--color-text-secondary));
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+}

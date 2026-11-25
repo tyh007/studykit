@@ -115,6 +115,19 @@
   --error: #D88A7A;
   --info: #C49898;
 
+  /* ---- Subtle surfaces (token-driven, v0.4 primitives) ---- */
+  /* These let Pill / Button / StatusLabel tint themselves
+     semantically without any component reaching for an alpha literal. */
+  --success-subtle: rgba(138, 180, 154, 0.18);
+  --success-border: rgba(138, 180, 154, 0.36);
+  --warning-subtle: rgba(216, 184, 132, 0.20);
+  --warning-border: rgba(216, 184, 132, 0.36);
+  --error-subtle: rgba(216, 138, 122, 0.18);
+  --error-border: rgba(216, 138, 122, 0.36);
+  --error-glow: rgba(216, 138, 122, 0.20);
+  --info-subtle: var(--primary-subtle);
+  --info-border: var(--border-glass-strong);
+
   /* ---- Radius ---- */
   --radius-xs: 6px;
   --radius-sm: 8px;
@@ -225,7 +238,160 @@
     --warning: #D8B884;
     --error: #C8806E;
     --info: #9C7CA8;
+
+    /* Subtle / border tokens (dark tuned) */
+    --success-subtle: rgba(122, 166, 138, 0.20);
+    --success-border: rgba(122, 166, 138, 0.36);
+    --warning-subtle: rgba(216, 184, 132, 0.22);
+    --warning-border: rgba(216, 184, 132, 0.40);
+    --error-subtle: rgba(200, 128, 110, 0.20);
+    --error-border: rgba(200, 128, 110, 0.40);
+    --error-glow: rgba(200, 128, 110, 0.24);
+    --info-subtle: rgba(212, 168, 168, 0.06);
+    --info-border: rgba(255, 220, 200, 0.18);
   }
+}
+
+/* --------------------------------------------------------------------------
+   1c. Explicit theme contract (v0.4 Theme Runtime)
+   data-theme="dark" / data-theme="light" take precedence over the
+   prefers-color-scheme fallback above. Components only consume the
+   existing semantic tokens (--bg, --text, --primary, --surface-*, etc.),
+   so this section only re-asserts the same variable set under each
+   theme. System mode (no data-theme) keeps the @media fallback above.
+   -------------------------------------------------------------------------- */
+[data-theme="dark"] {
+  --bg-base: #1C1216;
+  --bg-radial-1: radial-gradient(ellipse 65% 55% at 0% 0%, rgba(216, 184, 132, 0.18), transparent 70%);
+  --bg-radial-2: radial-gradient(ellipse 60% 55% at 100% 100%, rgba(168, 124, 168, 0.22), transparent 70%);
+  --bg-radial-3: radial-gradient(ellipse 70% 55% at 50% 45%, rgba(196, 152, 152, 0.12), transparent 70%);
+
+  --primary: #D4A8A8;
+  --primary-soft: #DCB8B8;
+  --primary-hover: #C49AA0;
+  --primary-light: rgba(212, 168, 168, 0.12);
+  --primary-glow: rgba(232, 188, 180, 0.30);
+  --primary-subtle: rgba(212, 168, 168, 0.06);
+
+  --accent-butter: #D8B884;
+  --accent-blush: #C49898;
+  --accent-rose: #A87474;
+  --accent-lilac: #9C7CA8;
+  --accent-emerald: #7AA68A;
+  --accent-coral: #C8806E;
+
+  --surface: rgba(50, 32, 38, 0.55);
+  --surface-elevated: rgba(58, 38, 44, 0.70);
+  --surface-sunken: rgba(40, 28, 32, 0.55);
+
+  --glass-white: rgba(255, 220, 200, 0.06);
+  --glass-white-light: rgba(255, 220, 200, 0.04);
+  --glass-white-border: rgba(255, 220, 200, 0.10);
+  --glass-white-border-strong: rgba(255, 220, 200, 0.18);
+  --glass-black: rgba(0, 0, 0, 0.20);
+
+  --glass-liquid-1: rgba(50, 32, 38, 0.55);
+  --glass-liquid-2: rgba(50, 32, 38, 0.48);
+  --glass-liquid-3: rgba(50, 32, 38, 0.42);
+  --glass-liquid-floating: rgba(60, 40, 48, 0.70);
+  --glass-liquid-deep: rgba(40, 28, 34, 0.85);
+
+  --edge-top: rgba(255, 220, 200, 0.18);
+  --edge-top-soft: rgba(255, 220, 200, 0.10);
+  --edge-bottom-chromatic: rgba(192, 132, 144, 0.22);
+  --edge-bottom-chromatic-soft: rgba(192, 132, 144, 0.14);
+
+  --text: #E8DFD8;
+  --text-secondary: #B5A8A0;
+  --text-muted: #6B5858;
+  --text-inverse: #1C1216;
+  --text-glass: rgba(232, 223, 216, 0.70);
+
+  --border-glass: rgba(255, 220, 200, 0.10);
+  --border-glass-strong: rgba(255, 220, 200, 0.18);
+  --border-subtle: rgba(255, 220, 200, 0.06);
+
+  --success: #7AA68A;
+  --warning: #D8B884;
+  --error: #C8806E;
+  --info: #9C7CA8;
+
+  --success-subtle: rgba(122, 166, 138, 0.20);
+  --success-border: rgba(122, 166, 138, 0.36);
+  --warning-subtle: rgba(216, 184, 132, 0.22);
+  --warning-border: rgba(216, 184, 132, 0.40);
+  --error-subtle: rgba(200, 128, 110, 0.20);
+  --error-border: rgba(200, 128, 110, 0.40);
+  --error-glow: rgba(200, 128, 110, 0.24);
+  --info-subtle: rgba(212, 168, 168, 0.06);
+  --info-border: rgba(255, 220, 200, 0.18);
+}
+
+[data-theme="light"] {
+  --bg-base: #FBF6EE;
+  --bg-radial-1: radial-gradient(ellipse 65% 55% at 0% 0%, rgba(245, 229, 190, 0.30), transparent 70%);
+  --bg-radial-2: radial-gradient(ellipse 60% 55% at 100% 100%, rgba(220, 200, 220, 0.32), transparent 70%);
+  --bg-radial-3: radial-gradient(ellipse 70% 55% at 50% 45%, rgba(242, 213, 210, 0.18), transparent 70%);
+
+  --primary: #C8A0A4;
+  --primary-soft: #D8B8BC;
+  --primary-hover: #B89098;
+  --primary-light: rgba(200, 160, 164, 0.10);
+  --primary-glow: rgba(212, 168, 168, 0.30);
+  --primary-subtle: rgba(200, 160, 164, 0.05);
+
+  --accent-butter: #F5E5BE;
+  --accent-blush: #F2D5D2;
+  --accent-rose: #E5B8B0;
+  --accent-lilac: #DCC8DC;
+  --accent-emerald: #8AB49A;
+  --accent-coral: #D88A7A;
+
+  --surface: rgba(255, 251, 245, 0.65);
+  --surface-elevated: rgba(255, 251, 245, 0.78);
+  --surface-sunken: rgba(248, 240, 232, 0.55);
+
+  --glass-white: rgba(255, 251, 245, 0.78);
+  --glass-white-light: rgba(120, 80, 80, 0.03);
+  --glass-white-border: rgba(200, 160, 160, 0.16);
+  --glass-white-border-strong: rgba(200, 160, 160, 0.24);
+  --glass-black: rgba(60, 40, 40, 0.04);
+
+  --glass-liquid-1: rgba(251, 246, 238, 0.72);
+  --glass-liquid-2: rgba(251, 246, 238, 0.60);
+  --glass-liquid-3: rgba(251, 246, 238, 0.50);
+  --glass-liquid-floating: rgba(251, 246, 238, 0.82);
+  --glass-liquid-deep: rgba(248, 240, 230, 0.92);
+
+  --edge-top: rgba(255, 248, 235, 0.65);
+  --edge-top-soft: rgba(255, 248, 235, 0.40);
+  --edge-bottom-chromatic: rgba(212, 160, 160, 0.20);
+  --edge-bottom-chromatic-soft: rgba(212, 160, 160, 0.12);
+
+  --text: #3A2E2E;
+  --text-secondary: #6B5858;
+  --text-muted: #A89A98;
+  --text-inverse: #FBF6EE;
+  --text-glass: rgba(58, 46, 46, 0.65);
+
+  --border-glass: rgba(200, 160, 160, 0.16);
+  --border-glass-strong: rgba(200, 160, 160, 0.26);
+  --border-subtle: rgba(200, 160, 160, 0.08);
+
+  --success: #8AB49A;
+  --warning: #D8B884;
+  --error: #D88A7A;
+  --info: #C49898;
+
+  --success-subtle: rgba(138, 180, 154, 0.18);
+  --success-border: rgba(138, 180, 154, 0.36);
+  --warning-subtle: rgba(216, 184, 132, 0.20);
+  --warning-border: rgba(216, 184, 132, 0.36);
+  --error-subtle: rgba(216, 138, 122, 0.18);
+  --error-border: rgba(216, 138, 122, 0.36);
+  --error-glow: rgba(216, 138, 122, 0.20);
+  --info-subtle: var(--primary-subtle);
+  --info-border: var(--border-glass-strong);
 }
 
 /* --------------------------------------------------------------------------

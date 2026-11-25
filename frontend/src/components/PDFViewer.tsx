@@ -15,6 +15,7 @@ interface PDFViewerProps {
   currentPageIndex: number;
   onPageChange: (index: number) => void;
   annotationOverlay?: React.ReactNode;
+  sourceBlob?: Blob | null;
 }
 
 export default function PDFViewer({
@@ -23,6 +24,7 @@ export default function PDFViewer({
   currentPageIndex,
   onPageChange,
   annotationOverlay,
+  sourceBlob,
 }: PDFViewerProps) {
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -43,8 +45,13 @@ export default function PDFViewer({
       ? (window as any).__ENV.VITE_API_URL
       : import.meta.env.VITE_API_URL || '';
     const pdfUrl = apiBase ? `${apiBase}/uploads/${document.storage_key}` : `/uploads/${document.storage_key}`;
+    const loadingTask = sourceBlob
+      ? sourceBlob.arrayBuffer().then((buffer) =>
+          pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise,
+        )
+      : pdfjsLib.getDocument(pdfUrl).promise;
 
-    pdfjsLib.getDocument(pdfUrl).promise
+    loadingTask
       .then((pdf) => {
         if (!cancelled) {
           setPdfDoc(pdf);
@@ -63,7 +70,7 @@ export default function PDFViewer({
       });
 
     return () => { cancelled = true; };
-  }, [document?.storage_key]);
+  }, [document?.storage_key, sourceBlob]);
 
   // Render current page
   useEffect(() => {
