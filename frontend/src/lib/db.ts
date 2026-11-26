@@ -47,6 +47,7 @@ import type {
   StatementSupport,
 } from '../domain/output';
 import type { StatementCitation } from '../domain/citation';
+import type { AiDraftDecision, AiMessage, AiThread } from '../domain/aiThread';
 import type {
   CanvasView,
   FreeNode,
@@ -162,6 +163,9 @@ export class StudyKitDB extends Dexie {
   researchOutputStatements!: EntityTable<OutputStatement, 'id'>;
   researchStatementSupports!: EntityTable<StatementSupport, 'id'>;
   researchStatementCitations!: EntityTable<StatementCitation, 'id'>;
+  researchAiThreads!: EntityTable<AiThread, 'id'>;
+  researchAiMessages!: EntityTable<AiMessage, 'id'>;
+  researchAiDraftDecisions!: EntityTable<AiDraftDecision, 'id'>;
 
   constructor() {
     super('StudyKit');
@@ -418,6 +422,14 @@ export class StudyKitDB extends Dexie {
     this.version(11).stores({
       researchStatementCitations:
         'id, projectId, outputId, statementId, workId, citeKey, [statementId+workId], [outputId+statementId]',
+    });
+
+    // v0.5 P4: project AI threads (ADR-003 §4). Messages and draft
+    // decisions are append-only; both are read per thread.
+    this.version(12).stores({
+      researchAiThreads: 'id, projectId, updatedAt, [projectId+updatedAt]',
+      researchAiMessages: 'id, projectId, threadId, createdAt, [threadId+createdAt]',
+      researchAiDraftDecisions: 'id, projectId, threadId, messageId, draftId',
     });
 
     // Defensive: Dexie `EntityTable<FreeNode, 'id'>` typing

@@ -175,6 +175,8 @@ export interface AddPointInput {
   readonly projectId: string;
   readonly title: string;
   readonly idFactory?: () => string;
+  /** Set when the point came from an AI suggestion the user applied. */
+  readonly aiDraftId?: string;
 }
 
 /** Add a point at the end of the argument. */
@@ -191,10 +193,11 @@ export async function addPoint(repository: ResearchRepository, input: AddPointIn
     title,
     body: '',
     status: 'canonical',
-    aiSuggested: false,
+    aiSuggested: input.aiDraftId !== undefined,
+    ...(input.aiDraftId !== undefined ? { draftId: input.aiDraftId } : {}),
     createdAt: now,
     updatedAt: now,
-    authorType: 'user',
+    authorType: input.aiDraftId !== undefined ? 'ai' : 'user',
     argument: { order: existing.length },
   };
   await repository.transact(async (tx) => {

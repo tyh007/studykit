@@ -77,12 +77,39 @@ export interface OpenCapsuleInput {
 }
 
 /**
+ * v0.5 P4: a host that owns a docked AI panel (the Research workbench)
+ * can take plain "Ask" requests (header button, Cmd/Ctrl+K). Requests
+ * carrying surface-specific context or action args still open the
+ * capsule. The override returns true when it handled the request.
+ */
+type CapsuleOverride = (input: OpenCapsuleInput) => boolean;
+let capsuleOverride: CapsuleOverride | null = null;
+
+export function setCapsuleOverride(override: CapsuleOverride | null): () => void {
+  capsuleOverride = override;
+  return () => {
+    if (capsuleOverride === override) capsuleOverride = null;
+  };
+}
+
+function isPlainAsk(input: OpenCapsuleInput): boolean {
+  return (
+    !input.precomputedContext &&
+    !input.precomputedActionArgs &&
+    input.selectedText === undefined &&
+    input.selectedObjectIds === undefined &&
+    input.initialPrompt === undefined
+  );
+}
+
+/**
  * Open the Intent Capsule with the given input. The
  * function is synchronous; the actual rendering happens
  * in the React provider that subscribes to the session
  * store.
  */
 export function openCapsule(input: OpenCapsuleInput): void {
+  if (capsuleOverride && isPlainAsk(input) && capsuleOverride(input)) return;
   const restoreFocusId = input.restoreFocusId ?? currentFocusId();
   if (input.precomputedContext) {
     assistantSession.setContext(input.precomputedContext);

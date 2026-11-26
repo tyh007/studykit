@@ -18,6 +18,7 @@ import {
   revealRegion,
   serializeWorkbenchState,
   setPanelOpen,
+  setAiOpen,
   setSideOpen,
   setSideWidth,
   type EditorInput,
@@ -60,6 +61,7 @@ export interface WorkbenchController {
   setSideOpen(open: boolean): void;
   setSideWidth(width: number): void;
   setPanelOpen(open: boolean): void;
+  setAiOpen(open: boolean): void;
   reveal(region: WorkbenchRegion): void;
 }
 
@@ -133,6 +135,7 @@ export function useWorkbenchState(projectId: string, options: UseWorkbenchStateO
       setSideOpen: (open) => setState((s) => setSideOpen(s, open)),
       setSideWidth: (width) => setState((s) => setSideWidth(s, width)),
       setPanelOpen: (open) => setState((s) => setPanelOpen(s, open)),
+      setAiOpen: (open) => setState((s) => setAiOpen(s, open)),
       reveal: (region) => setState((s) => revealRegion(s, region)),
     }),
     [state],

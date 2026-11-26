@@ -173,3 +173,13 @@ export function useAuth(): AuthContextType {
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
 }
+
+/**
+ * The signed-in user's id, or 'local' outside an AuthProvider or when
+ * signed out. Used to attribute local records (e.g. AI thread messages)
+ * without making the surface depend on auth being mounted.
+ */
+export function useCurrentUserId(): string {
+  const ctx = useContext(AuthContext);
+  return ctx?.user?.id ? String(ctx.user.id) : 'local';
+}

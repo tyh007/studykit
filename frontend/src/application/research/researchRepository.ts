@@ -90,6 +90,14 @@ import {
 } from '../../domain/output';
 import type { StatementCitation } from '../../domain/citation';
 import {
+  isAiDraftDecision,
+  isAiMessage,
+  isAiThread,
+  type AiDraftDecision,
+  type AiMessage,
+  type AiThread,
+} from '../../domain/aiThread';
+import {
   citationDedupKey,
   isStatementCitation,
 } from '../../domain/citation';
@@ -148,6 +156,12 @@ export interface ResearchRepositoryTransaction {
   deleteStatementSupport(id: string): void;
   putStatementCitation(c: StatementCitation): void;
   deleteStatementCitation(id: string): void;
+  // v0.5 P4: project AI threads (ADR-003 §4). Messages and draft
+  // decisions are append-only: putting an id that already exists throws.
+  putAiThread(t: AiThread): void;
+  deleteAiThread(id: string): void;
+  appendAiMessage(m: AiMessage): void;
+  appendAiDraftDecision(d: AiDraftDecision): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -285,6 +299,15 @@ export interface StatementSupportQuery {
   readonly projectId?: string;
 }
 
+export interface AiThreadQuery {
+  readonly projectId: string;
+}
+
+export interface AiMessageQuery {
+  readonly threadId?: string;
+  readonly projectId?: string;
+}
+
 export interface StatementCitationQuery {
   readonly statementId?: string;
   readonly outputId?: string;
@@ -327,6 +350,9 @@ export interface ResearchSnapshot {
   readonly outputStatements: readonly OutputStatement[];
   readonly statementSupports: readonly StatementSupport[];
   readonly statementCitations: readonly StatementCitation[];
+  readonly aiThreads: readonly AiThread[];
+  readonly aiMessages: readonly AiMessage[];
+  readonly aiDraftDecisions: readonly AiDraftDecision[];
 }
 
 // ---------------------------------------------------------------------------
@@ -378,6 +404,10 @@ export interface ResearchRepository {
   listStatementSupports(query: StatementSupportQuery): Promise<StatementSupport[]>;
   getStatementCitation(id: string): Promise<StatementCitation | null>;
   listStatementCitations(query: StatementCitationQuery): Promise<StatementCitation[]>;
+  getAiThread(id: string): Promise<AiThread | null>;
+  listAiThreads(query: AiThreadQuery): Promise<AiThread[]>;
+  listAiMessages(query: AiMessageQuery): Promise<AiMessage[]>;
+  listAiDraftDecisions(query: AiMessageQuery): Promise<AiDraftDecision[]>;
 
   // --- atomic writes
   transact<T>(fn: (tx: ResearchRepositoryTransaction) => T | Promise<T>): Promise<T>;
@@ -599,6 +629,28 @@ export function assertStatementSupportInvariants(s: StatementSupport): void {
   if (!s.ref.id) throw new Error('StatementSupport.ref.id cannot be empty.');
 }
 
+export function assertAiThreadInvariants(t: AiThread): void {
+  if (!isAiThread(t)) throw new Error('AiThread does not satisfy the domain contract.');
+}
+
+export function assertAiMessageInvariants(m: AiMessage): void {
+  if (!isAiMessage(m)) throw new Error('AiMessage does not satisfy the domain contract.');
+}
+
+export function assertAiDraftDecisionInvariants(d: AiDraftDecision): void {
+  if (!isAiDraftDecision(d)) throw new Error('AiDraftDecision does not satisfy the domain contract.');
+}
+
+/** Threads newest first; messages and decisions oldest first. */
+export function sortAiThreads(all: AiThread[]): AiThread[] {
+  return all.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id));
+}
+
+export function sortByCreated<T extends { createdAt?: string; decidedAt?: string; id: string }>(all: T[]): T[] {
+  const at = (x: T): string => x.createdAt ?? x.decidedAt ?? '';
+  return all.sort((a, b) => at(a).localeCompare(at(b)) || a.id.localeCompare(b.id));
+}
+
 export function assertStatementCitationInvariants(c: StatementCitation): void {
   if (!isStatementCitation(c)) {
     throw new Error('StatementCitation does not satisfy the canonical domain contract.');
@@ -641,6 +693,9 @@ export class MemoryResearchRepository implements ResearchRepository {
   private readonly outputStatements = new Map<string, OutputStatement>();
   private readonly statementSupports = new Map<string, StatementSupport>();
   private readonly statementCitations = new Map<string, StatementCitation>();
+  private readonly aiThreads = new Map<string, AiThread>();
+  private readonly aiMessages = new Map<string, AiMessage>();
+  private readonly aiDraftDecisions = new Map<string, AiDraftDecision>();
   private readonly listeners = new Set<ResearchQueryListener>();
 
   async getProject(id: string): Promise<ResearchProject | null> {
@@ -928,6 +983,28 @@ export class MemoryResearchRepository implements ResearchRepository {
     return all.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
   }
 
+  async getAiThread(id: string): Promise<AiThread | null> {
+    return this.aiThreads.get(id) ?? null;
+  }
+
+  async listAiThreads(query: AiThreadQuery): Promise<AiThread[]> {
+    return sortAiThreads(Array.from(this.aiThreads.values()).filter((t) => t.projectId === query.projectId));
+  }
+
+  async listAiMessages(query: AiMessageQuery): Promise<AiMessage[]> {
+    let all = Array.from(this.aiMessages.values());
+    if (query.threadId) all = all.filter((m) => m.threadId === query.threadId);
+    if (query.projectId) all = all.filter((m) => m.projectId === query.projectId);
+    return sortByCreated(all);
+  }
+
+  async listAiDraftDecisions(query: AiMessageQuery): Promise<AiDraftDecision[]> {
+    let all = Array.from(this.aiDraftDecisions.values());
+    if (query.threadId) all = all.filter((d) => d.threadId === query.threadId);
+    if (query.projectId) all = all.filter((d) => d.projectId === query.projectId);
+    return sortByCreated(all);
+  }
+
   async transact<T>(fn: (tx: ResearchRepositoryTransaction) => T | Promise<T>): Promise<T> {
     const staged = {
       projects: new Map<string, ResearchProject | null>(),
@@ -952,6 +1029,9 @@ export class MemoryResearchRepository implements ResearchRepository {
       outputStatements: new Map<string, OutputStatement | null>(),
       statementSupports: new Map<string, StatementSupport | null>(),
       statementCitations: new Map<string, StatementCitation | null>(),
+      aiThreads: new Map<string, AiThread | null>(),
+      aiMessages: new Map<string, AiMessage>(),
+      aiDraftDecisions: new Map<string, AiDraftDecision>(),
     };
     const tx: ResearchRepositoryTransaction = {
       putProject: (p) => {
@@ -1105,6 +1185,25 @@ export class MemoryResearchRepository implements ResearchRepository {
         staged.statementCitations.set(c.id, c);
       },
       deleteStatementCitation: (id) => staged.statementCitations.set(id, null),
+      putAiThread: (t) => {
+        assertAiThreadInvariants(t);
+        staged.aiThreads.set(t.id, t);
+      },
+      deleteAiThread: (id) => staged.aiThreads.set(id, null),
+      appendAiMessage: (m) => {
+        assertAiMessageInvariants(m);
+        if (this.aiMessages.has(m.id) || staged.aiMessages.has(m.id)) {
+          throw new Error(`AiMessage ${m.id} already exists; messages are append-only.`);
+        }
+        staged.aiMessages.set(m.id, m);
+      },
+      appendAiDraftDecision: (d) => {
+        assertAiDraftDecisionInvariants(d);
+        if (this.aiDraftDecisions.has(d.id) || staged.aiDraftDecisions.has(d.id)) {
+          throw new Error(`AiDraftDecision ${d.id} already exists; decisions are append-only.`);
+        }
+        staged.aiDraftDecisions.set(d.id, d);
+      },
     };
     const result = await fn(tx);
     for (const [id, v] of staged.projects) apply(this.projects, id, v);
@@ -1129,6 +1228,16 @@ export class MemoryResearchRepository implements ResearchRepository {
     for (const [id, v] of staged.outputStatements) apply(this.outputStatements, id, v);
     for (const [id, v] of staged.statementSupports) apply(this.statementSupports, id, v);
     for (const [id, v] of staged.statementCitations) apply(this.statementCitations, id, v);
+    for (const [id, v] of staged.aiThreads) {
+      apply(this.aiThreads, id, v);
+      // Deleting a thread removes its messages and decisions with it.
+      if (v === null) {
+        for (const [mid, m] of this.aiMessages) if (m.threadId === id) this.aiMessages.delete(mid);
+        for (const [did, d] of this.aiDraftDecisions) if (d.threadId === id) this.aiDraftDecisions.delete(did);
+      }
+    }
+    for (const [id, v] of staged.aiMessages) this.aiMessages.set(id, v);
+    for (const [id, v] of staged.aiDraftDecisions) this.aiDraftDecisions.set(id, v);
     this.notify();
     return result;
   }
@@ -1164,6 +1273,9 @@ export class MemoryResearchRepository implements ResearchRepository {
       outputStatements: Array.from(this.outputStatements.values()),
       statementSupports: Array.from(this.statementSupports.values()),
       statementCitations: Array.from(this.statementCitations.values()),
+      aiThreads: Array.from(this.aiThreads.values()),
+      aiMessages: Array.from(this.aiMessages.values()),
+      aiDraftDecisions: Array.from(this.aiDraftDecisions.values()),
     };
     for (const l of this.listeners) l(snap);
   }

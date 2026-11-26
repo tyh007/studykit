@@ -32,6 +32,7 @@ import type {
   StatementSupport,
 } from '../../domain/output';
 import type { StatementCitation } from '../../domain/citation';
+import type { AiDraftDecision, AiMessage, AiThread } from '../../domain/aiThread';
 import {
   deleteDomainRecord,
   DesktopDomainRecordStore,
@@ -61,7 +62,10 @@ type ResearchEntity =
   | 'output_section'
   | 'output_statement'
   | 'statement_support'
-  | 'statement_citation';
+  | 'statement_citation'
+  | 'ai_thread'
+  | 'ai_message'
+  | 'ai_draft_decision';
 
 function put(
   entityType: ResearchEntity,
@@ -109,6 +113,9 @@ function hydrate(
     case 'output_statement': tx.putOutputStatement(value as unknown as OutputStatement); break;
     case 'statement_support': tx.putStatementSupport(value as unknown as StatementSupport); break;
     case 'statement_citation': tx.putStatementCitation(value as unknown as StatementCitation); break;
+    case 'ai_thread': tx.putAiThread(value as unknown as AiThread); break;
+    case 'ai_message': tx.appendAiMessage(value as unknown as AiMessage); break;
+    case 'ai_draft_decision': tx.appendAiDraftDecision(value as unknown as AiDraftDecision); break;
     default: throw new Error(`Unsupported Research entity type: ${entityType}`);
   }
 }
@@ -261,6 +268,22 @@ export class SqliteResearchRepository implements ResearchRepository {
     return (await this.ready()).listStatementCitations(...args);
   }
 
+  async getAiThread(...args: Parameters<ResearchRepository['getAiThread']>) {
+    return (await this.ready()).getAiThread(...args);
+  }
+
+  async listAiThreads(...args: Parameters<ResearchRepository['listAiThreads']>) {
+    return (await this.ready()).listAiThreads(...args);
+  }
+
+  async listAiMessages(...args: Parameters<ResearchRepository['listAiMessages']>) {
+    return (await this.ready()).listAiMessages(...args);
+  }
+
+  async listAiDraftDecisions(...args: Parameters<ResearchRepository['listAiDraftDecisions']>) {
+    return (await this.ready()).listAiDraftDecisions(...args);
+  }
+
   async transact<T>(
     fn: (tx: ResearchRepositoryTransaction) => T | Promise<T>,
   ): Promise<T> {
@@ -327,8 +350,22 @@ export class SqliteResearchRepository implements ResearchRepository {
         deleteStatementSupport: deleteMethod('deleteStatementSupport', 'statement_support'),
         putStatementCitation: putMethod<StatementCitation>('putStatementCitation', 'statement_citation'),
         deleteStatementCitation: deleteMethod('deleteStatementCitation', 'statement_citation'),
+        putAiThread: putMethod<AiThread>('putAiThread', 'ai_thread'),
+        deleteAiThread: (id: string): void => {
+          base.deleteAiThread(id);
+          operations.push(del('ai_thread', id));
+          removedThreads.push(id);
+        },
+        appendAiMessage: putMethod<AiMessage>('appendAiMessage', 'ai_message'),
+        appendAiDraftDecision: putMethod<AiDraftDecision>('appendAiDraftDecision', 'ai_draft_decision'),
       });
+      const removedThreads: string[] = [];
       const result = await fn(tx);
+      // A thread's messages and decisions go with it.
+      for (const threadId of removedThreads) {
+        for (const m of await memory.listAiMessages({ threadId })) operations.push(del('ai_message', m.id));
+        for (const d of await memory.listAiDraftDecisions({ threadId })) operations.push(del('ai_draft_decision', d.id));
+      }
       await this.store.transact(operations);
       return result;
     });

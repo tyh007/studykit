@@ -25,12 +25,16 @@ import { editorInputForLocation, encodeOpenParam, workbenchLocation } from './wo
 import { Button } from '../../shared/ui/Button';
 import { buildLedger, type Ledger, type LedgerGap } from '../../application/research/ledger';
 import type { Claim, ClaimEvidenceLink, Evidence } from '../../domain/research';
+import { contextForFocus } from '../../application/research/aiContext';
+import { setCapsuleOverride } from '../../features/ai/ui/openCapsule';
+import { useCurrentUserId } from '../../lib/auth';
 
 const ProjectHome = React.lazy(() => import('../../features/research/ProjectHome').then((m) => ({ default: m.ProjectHome })));
 const Sources = React.lazy(() => import('../../features/research/Sources').then((m) => ({ default: m.Sources })));
 const Discovery = React.lazy(() => import('../../features/research/Discovery').then((m) => ({ default: m.Discovery })));
 const ResearchReader = React.lazy(() => import('../../features/research/ResearchReader').then((m) => ({ default: m.ResearchReader })));
 const EvidenceWorkspace = React.lazy(() => import('../../features/research/EvidenceWorkspace').then((m) => ({ default: m.EvidenceWorkspace })));
+const ProjectAiPanel = React.lazy(() => import('../../features/research/ProjectAiPanel').then((m) => ({ default: m.ProjectAiPanel })));
 const ArgumentEditor = React.lazy(() => import('../../features/research/ArgumentEditor').then((m) => ({ default: m.ArgumentEditor })));
 const OutputWorkspace = React.lazy(() => import('../../features/research/OutputWorkspace').then((m) => ({ default: m.OutputWorkspace })));
 const DesignWorkspace = React.lazy(() => import('../../features/research/DesignWorkspace').then((m) => ({ default: m.DesignWorkspace })));
@@ -40,6 +44,7 @@ const CognitiveCanvasView = React.lazy(() => import('../../features/canvas/Cogni
 interface ProjectIndex {
   readonly loaded: boolean;
   readonly name: string;
+  readonly question: string;
   readonly works: readonly { id: string; title: string }[];
   readonly outputs: readonly { id: string; title: string }[];
   readonly tasks: readonly { id: string; title: string }[];
@@ -55,6 +60,7 @@ const TRANSIENT_PARAMS: readonly string[] = ['add', 'details', 'point'];
 const EMPTY_INDEX: ProjectIndex = {
   loaded: false,
   name: '',
+  question: '',
   works: [],
   outputs: [],
   tasks: [],
@@ -86,6 +92,7 @@ function useProjectIndex(projectId: string): ProjectIndex {
       setIndex({
         loaded: true,
         name: project?.name ?? '',
+        question: project?.livingBrief ?? '',
         works: works.map((w) => ({ id: w.id, title: w.title || 'Untitled source' })).sort(byTitle),
         outputs: outputs.map((o) => ({ id: o.id, title: o.title || 'Untitled draft' })).sort(byTitle),
         tasks: tasks.map((t) => ({ id: t.id, title: t.title })),
@@ -186,6 +193,38 @@ export function ResearchWorkbench(props: ResearchWorkbenchProps): React.ReactEle
     [index.claims, index.evidence, index.links],
   );
 
+  // The project AI (P4). The header's Ask button and Cmd/Ctrl+K open the
+  // docked panel here instead of the global capsule.
+  const userId = useCurrentUserId();
+  const setAiOpen = controller.setAiOpen;
+  React.useEffect(
+    () =>
+      setCapsuleOverride(() => {
+        setAiOpen(true);
+        window.setTimeout(() => document.querySelector<HTMLTextAreaElement>('[data-testid="ai-input"]')?.focus(), 0);
+        return true;
+      }),
+    [setAiOpen],
+  );
+  const aiContext = React.useMemo(
+    () =>
+      state.aiOpen
+        ? contextForFocus(
+            {
+              projectName: index.name,
+              question: index.question,
+              works: index.works,
+              outputs: index.outputs,
+              claims: index.claims,
+              evidence: index.evidence,
+              links: index.links,
+            },
+            current ? { kind: current.kind, id: current.id } : null,
+          )
+        : [],
+    [state.aiOpen, index, current?.kind, current?.id],
+  );
+
   const titleFor = (input: EditorInput): string => {
     switch (input.kind) {
       case 'overview':
@@ -219,6 +258,22 @@ export function ResearchWorkbench(props: ResearchWorkbenchProps): React.ReactEle
       editors={editors}
       titleFor={titleFor}
       explorerLabel="Project explorer"
+      aside={{
+        label: 'Project AI',
+        content: (
+          <React.Suspense fallback={<p className="workbench-loading sk-delayed-fallback" role="status">Loading…</p>}>
+            <ProjectAiPanel
+              projectId={projectId}
+              userId={userId}
+              context={aiContext}
+              onClose={() => setAiOpen(false)}
+              onOpenArgument={(claimId) =>
+                open({ kind: 'argument', id: projectId, ...(claimId ? { params: { point: claimId } } : {}) })
+              }
+            />
+          </React.Suspense>
+        ),
+      }}
       explorer={<ResearchExplorer projectId={projectId} index={index} controller={controller} open={open} />}
       panel={
         ledger.points.length > 0 || ledger.excerptCount > 0

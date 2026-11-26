@@ -79,6 +79,7 @@ import type {
 } from '../../domain/output';
 import { stableSectionOrder, stableStatementOrder, supportDedupKey } from '../../domain/output';
 import type { StatementCitation } from '../../domain/citation';
+import type { AiDraftDecision, AiMessage, AiThread } from '../../domain/aiThread';
 import { citationDedupKey } from '../../domain/citation';
 import type {
   ResearchRepository,
@@ -91,6 +92,13 @@ import {
   assertOutputSectionInvariants,
   assertOutputStatementInvariants,
   assertStatementCitationInvariants,
+  assertAiThreadInvariants,
+  assertAiMessageInvariants,
+  assertAiDraftDecisionInvariants,
+  sortAiThreads,
+  sortByCreated,
+  type AiThreadQuery,
+  type AiMessageQuery,
   assertStatementSupportInvariants,
   assertTaskInvariants,
 } from '../../application/research/researchRepository';
@@ -137,6 +145,9 @@ function readResearchTables(): ResearchTables {
     researchOutputStatements: Table<OutputStatement, string>;
     researchStatementSupports: Table<StatementSupport, string>;
     researchStatementCitations: Table<StatementCitation, string>;
+    researchAiThreads: Table<AiThread, string>;
+    researchAiMessages: Table<AiMessage, string>;
+    researchAiDraftDecisions: Table<AiDraftDecision, string>;
   };
   return {
     projects: extended.researchProjects as unknown as ResearchDexieTable<ResearchProject>,
@@ -161,6 +172,9 @@ function readResearchTables(): ResearchTables {
     outputStatements: extended.researchOutputStatements as unknown as ResearchDexieTable<OutputStatement>,
     statementSupports: extended.researchStatementSupports as unknown as ResearchDexieTable<StatementSupport>,
     statementCitations: extended.researchStatementCitations as unknown as ResearchDexieTable<StatementCitation>,
+    aiThreads: extended.researchAiThreads as unknown as ResearchDexieTable<AiThread>,
+    aiMessages: extended.researchAiMessages as unknown as ResearchDexieTable<AiMessage>,
+    aiDraftDecisions: extended.researchAiDraftDecisions as unknown as ResearchDexieTable<AiDraftDecision>,
   };
 }
 
@@ -187,6 +201,9 @@ interface ResearchTables {
   outputStatements: ResearchDexieTable<OutputStatement>;
   statementSupports: ResearchDexieTable<StatementSupport>;
   statementCitations: ResearchDexieTable<StatementCitation>;
+  aiThreads: ResearchDexieTable<AiThread>;
+  aiMessages: ResearchDexieTable<AiMessage>;
+  aiDraftDecisions: ResearchDexieTable<AiDraftDecision>;
 }
 
 class ResearchDexieDB {
@@ -218,6 +235,9 @@ class ResearchDexieDB {
       tables.outputStatements,
       tables.statementSupports,
       tables.statementCitations,
+      tables.aiThreads,
+      tables.aiMessages,
+      tables.aiDraftDecisions,
     ];
     for (const t of tArr) {
       // Dexie 4 only honours the event form; the object form is silently
@@ -268,6 +288,9 @@ class ResearchDexieDB {
       outputStatements,
       statementSupports,
       statementCitations,
+      aiThreads,
+      aiMessages,
+      aiDraftDecisions,
     ] = await Promise.all([
       t.projects.toArray(),
       t.querySpecs.toArray(),
@@ -291,6 +314,9 @@ class ResearchDexieDB {
       t.outputStatements.toArray(),
       t.statementSupports.toArray(),
       t.statementCitations.toArray(),
+      t.aiThreads.toArray(),
+      t.aiMessages.toArray(),
+      t.aiDraftDecisions.toArray(),
     ]);
     const snap: ResearchSnapshot = {
       projects,
@@ -315,6 +341,9 @@ class ResearchDexieDB {
       outputStatements,
       statementSupports,
       statementCitations,
+      aiThreads,
+      aiMessages,
+      aiDraftDecisions,
     };
     for (const l of this.listeners) l(snap);
   }
@@ -705,6 +734,28 @@ class DexieResearchRepository implements ResearchRepository {
     return all.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
   }
 
+  async getAiThread(id: string): Promise<AiThread | null> {
+    return (await readResearchTables().aiThreads.get(id)) ?? null;
+  }
+
+  async listAiThreads(query: AiThreadQuery): Promise<AiThread[]> {
+    return sortAiThreads(await readResearchTables().aiThreads.where('projectId').equals(query.projectId).toArray());
+  }
+
+  async listAiMessages(query: AiMessageQuery): Promise<AiMessage[]> {
+    const t = readResearchTables().aiMessages;
+    let all = query.threadId ? await t.where('threadId').equals(query.threadId).toArray() : await t.toArray();
+    if (query.projectId) all = all.filter((m) => m.projectId === query.projectId);
+    return sortByCreated(all);
+  }
+
+  async listAiDraftDecisions(query: AiMessageQuery): Promise<AiDraftDecision[]> {
+    const t = readResearchTables().aiDraftDecisions;
+    let all = query.threadId ? await t.where('threadId').equals(query.threadId).toArray() : await t.toArray();
+    if (query.projectId) all = all.filter((d) => d.projectId === query.projectId);
+    return sortByCreated(all);
+  }
+
   async transact<T>(fn: (tx: ResearchRepositoryTransaction) => T | Promise<T>): Promise<T> {
     const tables = readResearchTables();
     return db.transaction(
@@ -732,6 +783,9 @@ class DexieResearchRepository implements ResearchRepository {
         tables.outputStatements as unknown as Table<unknown, string>,
         tables.statementSupports as unknown as Table<unknown, string>,
         tables.statementCitations as unknown as Table<unknown, string>,
+        tables.aiThreads as unknown as Table<unknown, string>,
+        tables.aiMessages as unknown as Table<unknown, string>,
+        tables.aiDraftDecisions as unknown as Table<unknown, string>,
       ],
       async () => {
         const staged = {
@@ -757,6 +811,9 @@ class DexieResearchRepository implements ResearchRepository {
           outputStatements: new Map<string, OutputStatement | null>(),
           statementSupports: new Map<string, StatementSupport | null>(),
           statementCitations: new Map<string, StatementCitation | null>(),
+          aiThreads: new Map<string, AiThread | null>(),
+          aiMessages: new Map<string, AiMessage>(),
+          aiDraftDecisions: new Map<string, AiDraftDecision>(),
         };
         const tx: ResearchRepositoryTransaction = {
           putProject: (p) => {
@@ -892,8 +949,40 @@ class DexieResearchRepository implements ResearchRepository {
             staged.statementCitations.set(c.id, c);
           },
           deleteStatementCitation: (id) => staged.statementCitations.set(id, null),
+          putAiThread: (t) => {
+            assertAiThreadInvariants(t);
+            staged.aiThreads.set(t.id, t);
+          },
+          deleteAiThread: (id) => staged.aiThreads.set(id, null),
+          appendAiMessage: (m) => {
+            assertAiMessageInvariants(m);
+            if (staged.aiMessages.has(m.id)) throw new Error(`AiMessage ${m.id} already exists; messages are append-only.`);
+            staged.aiMessages.set(m.id, m);
+          },
+          appendAiDraftDecision: (d) => {
+            assertAiDraftDecisionInvariants(d);
+            if (staged.aiDraftDecisions.has(d.id)) {
+              throw new Error(`AiDraftDecision ${d.id} already exists; decisions are append-only.`);
+            }
+            staged.aiDraftDecisions.set(d.id, d);
+          },
         };
         const result = await fn(tx);
+        for (const id of staged.aiMessages.keys()) {
+          if (await tables.aiMessages.get(id)) throw new Error(`AiMessage ${id} already exists; messages are append-only.`);
+        }
+        for (const id of staged.aiDraftDecisions.keys()) {
+          if (await tables.aiDraftDecisions.get(id)) {
+            throw new Error(`AiDraftDecision ${id} already exists; decisions are append-only.`);
+          }
+        }
+        const removedThreads = Array.from(staged.aiThreads).filter(([, v]) => v === null).map(([id]) => id);
+        for (const threadId of removedThreads) {
+          for (const m of await tables.aiMessages.where('threadId').equals(threadId).toArray()) await tables.aiMessages.delete(m.id);
+          for (const d of await tables.aiDraftDecisions.where('threadId').equals(threadId).toArray()) {
+            await tables.aiDraftDecisions.delete(d.id);
+          }
+        }
         const persistedSupports = await tables.statementSupports.toArray();
         for (const [id, support] of staged.statementSupports) {
           if (
@@ -989,6 +1078,11 @@ class DexieResearchRepository implements ResearchRepository {
           ...Array.from(staged.statementCitations).map(([id, v]) =>
             v === null ? tables.statementCitations.delete(id) : tables.statementCitations.put(v),
           ),
+          ...Array.from(staged.aiThreads).map(([id, v]) =>
+            v === null ? tables.aiThreads.delete(id) : tables.aiThreads.put(v),
+          ),
+          ...Array.from(staged.aiMessages.values()).map((v) => tables.aiMessages.put(v)),
+          ...Array.from(staged.aiDraftDecisions.values()).map((v) => tables.aiDraftDecisions.put(v)),
         ]);
         return result;
       },

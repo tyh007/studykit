@@ -265,6 +265,19 @@ What shipped in P1 and where it differs from the decisions above:
 - **Write it up.** Enabled only when every slot of every point is filled or considered. `composeArgumentDraft` writes, in one transaction, a new Output ("Draft from your argument", numbered if taken): one section per point and one statement per filled slot, with every cited excerpt attached as a `StatementSupport` of the matching relation. The text is assembled from the user's own words (point, reasoning, notes); no AI. In the workbench, a draft's evidence citation opens the source at the cited page.
 - "What's missing" point gaps now open the argument scrolled to that point; the explorer lists *Argument* under *Writing* once the project has an excerpt or a point.
 
+## P4a implementation notes (2026-11-26)
+
+P4 is delivered in two steps. **P4a** (this one) is local: threads, the panel and the thinking-partner moves. **P4b** syncs shared threads to project members (op kinds, server-side author and role checks, share dialog).
+
+- **Storage as decided in §4.** `ResearchRepository` gains `ai_thread`, `ai_message` and `ai_draft_decision` (memory, Dexie v12 tables, desktop `domain_records`, Rust allow-list). `appendAiMessage` / `appendAiDraftDecision` refuse an id that already exists, so messages and decisions are append-only in every adapter. Deleting a thread removes its messages and decisions. Additions to the §4 shape: `AiContextRef.label`, and on `AiMessage` the optional `move` (`ask | challenge | missing`), `aiRole` and `skippedOwnThinking`. `AiDraftDecision` also carries `projectId` and `threadId`.
+- **Panel.** The right side bar (`state.aiOpen`, persisted; floats over the editor below 1180 px). The header Ask button and Cmd/Ctrl+K open it while the workbench is showing, through `setCapsuleOverride` in `openCapsule`. Requests carrying their own context or action args (canvas, selection) still open the capsule. On screen: a conversation picker, the context chips (removable), one input with Send, one **Challenge** button with four voices (skeptic, methods reviewer, outside reader, second examiner) and **What am I missing?**.
+- **Small steps by prompt.** The system prompt limits replies to three sentences, one step and a question back, and to the project context. The context is the focused editor (the argument outline, a source's excerpts, a draft's title, otherwise the point list) plus the project question, stored on both messages exactly as sent (≤ 2,000 chars each).
+- **Think first, then look.** What am I missing? asks for the user's own ideas first. "Just show me" is always available; the message records `skippedOwnThinking` and the thread shows "Asked before writing own ideas".
+- **Drafts.** A reply may end with a fenced `suggestions` block (`{"points": [...]}`, at most two). These become cards; nothing is written until **Add to argument**, which runs `addPoint` (claim marked `aiSuggested`, `authorType: 'ai'`, `draftId`) and appends an `applied` decision with the claim as `resultRef`. Dismiss appends `rejected`. A card can be decided once. P4a ships the `add-point` action only; it does not yet go through `ActionRegistry` (planned with P4b's sync so remote decisions and local application share one path).
+- **Sharing.** New threads are `shared`; a checkbox keeps a new one private; private → shared asks for confirmation; there is no way back. In a local-only workspace `shared` has no effect until P4b.
+- **AI off / failures.** Without a reachable provider the panel says so, keeps the typed text and leaves threads readable. A provider error is stored as a `failed` reply with **Try again**, which posts a new turn (no message is edited).
+- Messages are attributed to the signed-in user, or `local` (`useCurrentUserId`).
+
 ## Alternatives rejected
 
 - **Keep page routing and add a side AI panel.** Fixes AI scope but not the one-object-at-a-time problem.

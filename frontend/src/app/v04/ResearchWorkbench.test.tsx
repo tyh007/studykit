@@ -38,6 +38,16 @@ vi.mock('../../features/research/OutputWorkspace', () => ({ OutputWorkspace: () 
 vi.mock('../../features/research/ArgumentEditor', () => ({
   ArgumentEditor: (p: { focusPointId?: string }) => <div data-testid="stub-argument">{p.focusPointId ?? ''}</div>,
 }));
+vi.mock('../../features/research/ProjectAiPanel', () => ({
+  ProjectAiPanel: (p: { context: { label: string }[]; onClose: () => void }) => (
+    <div data-testid="stub-ai">
+      {p.context.map((c) => c.label).join(', ')}
+      <button type="button" onClick={p.onClose}>
+        close ai
+      </button>
+    </div>
+  ),
+}));
 vi.mock('../../features/research/DesignWorkspace', () => ({ DesignWorkspace: () => <div data-testid="stub-design" /> }));
 vi.mock('../../features/research/TaskDetail', () => ({ TaskDetail: () => <div data-testid="stub-task" /> }));
 
@@ -57,6 +67,7 @@ import {
   makeWork,
 } from '../../domain/__fixtures__/domain-fixtures';
 import { WORKBENCH_STORAGE_PREFIX } from '../../features/workbench/useWorkbenchState';
+import { openCapsule } from '../../features/ai/ui/openCapsule';
 
 const P = 'p-001';
 const container = { workspaceId: null, mode: 'research' as const, kind: 'project' as const, id: P };
@@ -252,5 +263,28 @@ describe('Research workbench', () => {
     expect(await screen.findByTestId('stub-argument')).toHaveTextContent('c-1');
     expect(screen.getByTestId('workbench-explorer-argument')).toHaveAttribute('aria-current', 'true');
     await waitFor(() => expect(locationStore.getSnapshot().params?.open).toBe(`argument:${P}`));
+  });
+
+  it('opens the project AI from Ask, with the open editor as context, and remembers it', async () => {
+    const repo = await seed(1);
+    await act(async () => {
+      await repo.transact(async (tx) => {
+        tx.putProject(makeResearchProject({ id: P, name: 'Sleep and memory', livingBrief: 'Does sleep help memory?' }));
+      });
+    });
+    const first = mount(repo, makeAppLocation({ mode: 'research', surface: 'project', container }));
+    await screen.findByTestId('stub-overview');
+    expect(screen.queryByTestId('workbench-aside')).not.toBeInTheDocument();
+
+    act(() => openCapsule({ surface: 'intent-capsule' }));
+    expect(await screen.findByTestId('stub-ai')).toHaveTextContent('Your question');
+    fireEvent.click(within(screen.getByTestId('workbench-explorer-sources')).getByText('Paper 1'));
+    await waitFor(() => expect(screen.getByTestId('stub-ai')).toHaveTextContent('Paper 1, Your question'));
+
+    first.unmount();
+    mount(repo, makeAppLocation({ mode: 'research', surface: 'workbench', container }));
+    expect(await screen.findByTestId('stub-ai')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('close ai'));
+    await waitFor(() => expect(screen.queryByTestId('workbench-aside')).not.toBeInTheDocument());
   });
 });

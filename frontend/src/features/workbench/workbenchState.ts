@@ -46,6 +46,8 @@ export interface WorkbenchState {
   readonly sideWidth: number;
   /** Bottom panel expanded (only shown when the host provides one). */
   readonly panelOpen: boolean;
+  /** Right-hand AI panel docked open (P4). */
+  readonly aiOpen: boolean;
   readonly revealed: readonly WorkbenchRegion[];
 }
 
@@ -71,6 +73,7 @@ export function createWorkbenchState(projectId: string): WorkbenchState {
     sideOpen: true,
     sideWidth: SIDE_WIDTH_DEFAULT,
     panelOpen: true,
+    aiOpen: false,
     revealed: Object.freeze([]),
   });
 }
@@ -171,6 +174,12 @@ export function setPanelOpen(state: WorkbenchState, open: boolean): WorkbenchSta
   return freeze({ ...state, panelOpen: open });
 }
 
+export function setAiOpen(state: WorkbenchState, open: boolean): WorkbenchState {
+  const next = open ? revealRegion(state, 'ai') : state;
+  if (next.aiOpen === open) return next;
+  return freeze({ ...next, aiOpen: open });
+}
+
 /** Record that a region has been used, so it stays visible from now on. */
 export function revealRegion(state: WorkbenchState, region: WorkbenchRegion): WorkbenchState {
   if (state.revealed.includes(region)) return state;
@@ -195,6 +204,7 @@ interface SerializedWorkbenchState {
   readonly sideOpen: boolean;
   readonly sideWidth: number;
   readonly panelOpen?: boolean;
+  readonly aiOpen?: boolean;
   readonly revealed: readonly string[];
 }
 
@@ -233,6 +243,7 @@ export function serializeWorkbenchState(state: WorkbenchState, options: Serializ
     sideOpen: state.sideOpen,
     sideWidth: state.sideWidth,
     panelOpen: state.panelOpen,
+    aiOpen: state.aiOpen,
     revealed: [...state.revealed],
   };
   return JSON.stringify(out);
@@ -291,6 +302,7 @@ export function parseWorkbenchState(raw: string | null, projectId: string): Work
       sideOpen: typeof d.sideOpen === 'boolean' ? d.sideOpen : true,
       sideWidth: SIDE_WIDTH_DEFAULT,
       panelOpen: typeof d.panelOpen === 'boolean' ? d.panelOpen : true,
+      aiOpen: d.aiOpen === true,
       revealed: [...new Set(revealed)],
     }),
     sideWidth,

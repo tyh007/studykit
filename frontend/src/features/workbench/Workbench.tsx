@@ -39,6 +39,16 @@ export interface WorkbenchProps {
     readonly summary?: string;
     readonly content: React.ReactNode;
   };
+  /**
+   * Optional right-hand side bar (the project AI, P4), shown while
+   * `state.aiOpen`. Below 1180 px it floats over the editor.
+   */
+  readonly aside?: {
+    readonly label: string;
+    readonly content: React.ReactNode;
+  };
+  /** Shown at the end of the tab bar (e.g. the Ask button). */
+  readonly tabBarEnd?: React.ReactNode;
 }
 
 function useNarrowViewport(maxWidth: number): boolean {
@@ -62,6 +72,8 @@ export function Workbench(props: WorkbenchProps): React.ReactElement {
   const { controller, editors, titleFor } = props;
   const { state } = controller;
   const narrow = useNarrowViewport(1023);
+  const asideFloats = useNarrowViewport(1179);
+  const asideVisible = Boolean(props.aside) && state.aiOpen;
   const [overlayOpen, setOverlayOpen] = React.useState(false);
   const sideVisible = narrow ? overlayOpen : state.sideOpen;
   const activeTab = state.tabs[state.active] ?? null;
@@ -101,7 +113,9 @@ export function Workbench(props: WorkbenchProps): React.ReactElement {
 
   return (
     <div
-      className={`workbench${narrow ? ' workbench--narrow' : ''}${sideVisible ? ' workbench--side-open' : ''}`}
+      className={`workbench${narrow ? ' workbench--narrow' : ''}${sideVisible ? ' workbench--side-open' : ''}${
+        asideVisible ? ` workbench--aside-open${asideFloats ? ' workbench--aside-float' : ''}` : ''
+      }`}
       data-testid="workbench"
       style={{ '--workbench-side-width': `${state.sideWidth}px` } as React.CSSProperties}
     >
@@ -179,6 +193,7 @@ export function Workbench(props: WorkbenchProps): React.ReactElement {
               );
             })}
           </div>
+          {props.tabBarEnd ? <div className="workbench-tabbar-end">{props.tabBarEnd}</div> : null}
         </div>
         <div
           className="workbench-editor"
@@ -232,6 +247,11 @@ export function Workbench(props: WorkbenchProps): React.ReactElement {
           </section>
         ) : null}
       </section>
+      {asideVisible && props.aside ? (
+        <aside className="workbench-aside" aria-label={props.aside.label} data-testid="workbench-aside">
+          {props.aside.content}
+        </aside>
+      ) : null}
     </div>
   );
 }

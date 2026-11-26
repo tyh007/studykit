@@ -144,7 +144,16 @@ beforeEach(() => {
   (prodDb as unknown as { researchOutputStatements: unknown }).researchOutputStatements = fOutputStatements;
   (prodDb as unknown as { researchStatementSupports: unknown }).researchStatementSupports = fStatementSupports;
   (prodDb as unknown as { researchStatementCitations: unknown }).researchStatementCitations = fStatementCitations;
+  const fAiThreads = makeFakeTable();
+  const fAiMessages = makeFakeTable();
+  const fAiDraftDecisions = makeFakeTable();
+  (prodDb as unknown as { researchAiThreads: unknown }).researchAiThreads = fAiThreads;
+  (prodDb as unknown as { researchAiMessages: unknown }).researchAiMessages = fAiMessages;
+  (prodDb as unknown as { researchAiDraftDecisions: unknown }).researchAiDraftDecisions = fAiDraftDecisions;
   const allTables: FakeTable<{ id: string }>[] = [
+    fAiThreads,
+    fAiMessages,
+    fAiDraftDecisions,
     fProjects,
     fQuerySpecs,
     fRuns,

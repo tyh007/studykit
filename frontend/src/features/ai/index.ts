@@ -21,5 +21,5 @@ export {
   IntentCapsuleProvider,
   type IntentCapsuleProviderProps,
 } from './ui/IntentCapsuleProvider';
-export { openCapsule, closeCapsule, type OpenCapsuleInput } from './ui/openCapsule';
+export { openCapsule, closeCapsule, setCapsuleOverride, type OpenCapsuleInput } from './ui/openCapsule';
 export { OpenIntentCapsuleButton, type OpenIntentCapsuleButtonProps } from './ui/OpenIntentCapsuleButton';
