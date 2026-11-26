@@ -248,6 +248,14 @@ What shipped in P1 and where it differs from the decisions above:
 - **Progressive disclosure.** Explorer groups render only when non-empty; Canvas and Research design appear in a “Thinking” group once opened. A brand-new project shows a start screen with two actions. The shell sidebar is hidden while the workbench is active. AI panel, activity bar and bottom panel are not part of P1.
 - **Fix found on the way.** The Web Research, Study and Collaboration Dexie repositories registered change hooks with the Dexie 3 object form, which Dexie 4 silently ignores, so `subscribe` listeners never fired on Web. They now use the event form (as the Canvas repository already did), and the test fakes model Dexie 4's API.
 
+## P2 implementation notes (2026-11-26)
+
+- **Verification is the relation choice.** `captureExcerpt` creates an excerpt (Evidence) and, when the user picks a point (Claim), verifies it and writes the link in one transaction. The required user interpretation is the user's note, or, if none, their explicit choice recorded as `Supports: <point>` / `Contradicts: …` / `Qualifies: …`. It is the user's act, never AI text, so the "verified evidence carries the user's interpretation" invariant holds. An excerpt saved without a point or note stays a `candidate`.
+- **Two actions.** Select text → "Add to a point…" → click a point (or type one and press Enter). The older full form stays behind "Details…".
+- **Ledger.** `buildLedger` (pure) classifies each point as no support, contested, single source or supported (two or more sources, no contradiction), and lists unconnected excerpts. The workbench shows it as a "What's missing" bottom panel that appears once a project has a point or an excerpt; items open the evidence editor or the source at the excerpt's page.
+- **Fix found on the way.** `LiteraturePDFViewer` rendered only a canvas, so PDF text could not be selected in the real app; selection capture only worked in tests. It now renders pdf.js's `TextLayer` (minimal CSS in `pdf-text-layer.css`), and the canvas is no longer scaled down by `max-width`, which would misalign the text layer.
+- Selections outside the PDF area are ignored; excerpts are capped at 2,000 characters (previously 240, silently).
+
 ## Alternatives rejected
 
 - **Keep page routing and add a side AI panel.** Fixes AI scope but not the one-object-at-a-time problem.

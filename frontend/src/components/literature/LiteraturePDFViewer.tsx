@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
+import './pdf-text-layer.css';
 import { getAuthToken } from '../../application/dataApi';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -57,6 +58,9 @@ export default function LiteraturePDFViewer({
   annotationOverlay,
 }: LiteraturePDFViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Selectable text over the canvas, so passages can be highlighted and
+  // captured as excerpts.
+  const textLayerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pdfDoc, setPdfDoc] = useState<any>(null);
@@ -106,6 +110,7 @@ export default function LiteraturePDFViewer({
     if (!pdfDoc || !canvasRef.current) return;
 
     let cancelled = false;
+    let textLayer: pdfjsLib.TextLayer | null = null;
     const renderPage = async () => {
       try {
         const page = await pdfDoc.getPage(currentPageIndex + 1);
@@ -125,13 +130,29 @@ export default function LiteraturePDFViewer({
           canvasContext: ctx,
           viewport,
         }).promise;
+        if (cancelled) return;
+
+        const layerDiv = textLayerRef.current;
+        if (layerDiv && typeof pdfjsLib.TextLayer === 'function') {
+          layerDiv.replaceChildren();
+          layerDiv.style.setProperty('--scale-factor', String(viewport.scale));
+          textLayer = new pdfjsLib.TextLayer({
+            textContentSource: page.streamTextContent(),
+            container: layerDiv,
+            viewport,
+          });
+          await textLayer.render();
+        }
       } catch (err) {
         console.error('Page render error:', err);
       }
     };
 
     renderPage();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      textLayer?.cancel();
+    };
   }, [pdfDoc, currentPageIndex, zoom]);
 
   const handlePrev = useCallback(() => {
@@ -183,7 +204,10 @@ export default function LiteraturePDFViewer({
           </div>
         )}
         <div style={{ position: 'relative', display: loading ? 'none' : 'block' }}>
-          <canvas ref={canvasRef} style={{ display: 'block', maxWidth: '100%' }} />
+          {/* Not scaled down with max-width: the text layer must stay
+              pixel-aligned with the canvas. Wide pages scroll instead. */}
+          <canvas ref={canvasRef} style={{ display: 'block' }} />
+          <div ref={textLayerRef} className="textLayer" data-testid="pdf-text-layer" />
           {annotationOverlay && (
             <div style={{ position: 'absolute', inset: 0 }}>
               {annotationOverlay}

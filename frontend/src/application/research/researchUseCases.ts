@@ -1087,3 +1087,146 @@ export async function acceptClaimDraft(
 export function rejectClaimDraft(draftId: string): void {
   draftLayer.transition(draftId, 'rejected');
 }
+
+// ---------------------------------------------------------------------------
+// v0.5 P2 — natural verification (product strategy §4, ADR-003 notes)
+// ---------------------------------------------------------------------------
+
+/** The point an excerpt is attached to: an existing Claim or a new one. */
+export type CapturePointTarget =
+  | { readonly kind: 'existing'; readonly claimId: string }
+  | { readonly kind: 'new'; readonly title: string };
+
+export interface CaptureExcerptInput {
+  readonly projectId: string;
+  readonly workId: string;
+  readonly locator: ResearchSourceLocator;
+  readonly exactQuote: string;
+  /** Optional "why" in the user's own words. */
+  readonly note?: string;
+  /** Omit to save the excerpt on its own (it stays unverified). */
+  readonly point?: CapturePointTarget;
+  readonly relation?: ClaimEvidenceRelation;
+  readonly evidenceType?: EvidenceType;
+  readonly idFactory?: () => string;
+}
+
+export interface CaptureExcerptResult {
+  readonly evidence: Evidence;
+  readonly claim: Claim | null;
+  readonly link: ClaimEvidenceLink | null;
+}
+
+const RELATION_LABEL: Readonly<Record<ClaimEvidenceRelation, string>> = {
+  supports: 'Supports',
+  contradicts: 'Contradicts',
+  qualifies: 'Qualifies',
+};
+
+/**
+ * The interpretation recorded when the user did not type one: their
+ * explicit choice of what the passage does to which point. It is the
+ * user's act, never AI text, so the "verified evidence carries the
+ * user's interpretation" invariant still holds.
+ */
+export function relationInterpretation(relation: ClaimEvidenceRelation, pointTitle: string): string {
+  return `${RELATION_LABEL[relation]}: ${pointTitle.trim()}`;
+}
+
+/**
+ * Highlight → excerpt, in one step.
+ *
+ * - With a point: the excerpt is created verified, the point is created
+ *   when new, and the link is written — all in one transaction, so a
+ *   failure leaves nothing behind. Saying which point a passage
+ *   supports, contradicts or qualifies *is* the verification act.
+ * - Without a point or note: the excerpt is saved as a candidate and
+ *   shows up in the ledger as "not connected to a point yet".
+ */
+export async function captureExcerpt(
+  repository: ResearchRepository,
+  input: CaptureExcerptInput,
+): Promise<CaptureExcerptResult> {
+  const quote = input.exactQuote.trim();
+  if (!quote) throw new Error('captureExcerpt: the excerpt is empty.');
+  if (!isResearchSourceKind(input.locator.kind)) {
+    throw new Error(`captureExcerpt: unknown locator kind ${input.locator.kind}.`);
+  }
+  const work = await repository.getWork(input.workId);
+  if (!work) throw new Error(`captureExcerpt: work ${input.workId} not found.`);
+
+  const relation = input.relation ?? 'supports';
+  const note = input.note?.trim() ?? '';
+  let claim: Claim | null = null;
+  let isNewClaim = false;
+  if (input.point?.kind === 'existing') {
+    claim = await repository.getClaim(input.point.claimId);
+    if (!claim) throw new Error(`captureExcerpt: point ${input.point.claimId} not found.`);
+    if (claim.projectId !== input.projectId) throw new Error('captureExcerpt: point belongs to another project.');
+  } else if (input.point?.kind === 'new') {
+    const title = input.point.title.trim();
+    if (!title) throw new Error('captureExcerpt: the new point needs a title.');
+    isNewClaim = true;
+  }
+
+  const now = nowIso();
+  if (isNewClaim && input.point?.kind === 'new') {
+    claim = makeClaimRecord({
+      id: makeId(input.idFactory, 'c'),
+      projectId: input.projectId,
+      title: input.point.title.trim(),
+      body: '',
+      status: 'canonical',
+      aiSuggested: false,
+      draftId: undefined,
+      lineageRunId: undefined,
+      authorType: 'user',
+      now,
+    });
+  }
+
+  const interpretation = note || (claim ? relationInterpretation(relation, claim.title) : '');
+  const evidence = makeEvidenceRecord({
+    id: makeId(input.idFactory, 'e'),
+    projectId: input.projectId,
+    workId: input.workId,
+    locator: input.locator,
+    exactQuote: quote,
+    userInterpretation: interpretation,
+    evidenceType: input.evidenceType ?? (relation === 'qualifies' ? 'limitation' : 'finding'),
+    status: 'candidate',
+    note: undefined,
+    draftId: undefined,
+    lineageRunId: undefined,
+    authorType: 'user',
+    now,
+  });
+  // Verified when the user said what it means (a point or a note) and
+  // the locator is complete; otherwise it stays a candidate.
+  const verified: Evidence = interpretation && isEvidenceReadyForVerification(evidence)
+    ? { ...evidence, status: 'verified' }
+    : evidence;
+  if (claim && verified.status !== 'verified') {
+    throw new Error('captureExcerpt: the excerpt needs a complete page locator before it can back a point.');
+  }
+
+  const link = claim
+    ? makeLinkRecord({
+        id: makeId(input.idFactory, 'l'),
+        projectId: input.projectId,
+        claimId: claim.id,
+        evidenceId: verified.id,
+        relation,
+        note: note || undefined,
+        authorType: 'user',
+        now,
+      })
+    : null;
+
+  await repository.transact(async (tx) => {
+    if (claim && isNewClaim) tx.putClaim(claim);
+    tx.putEvidence(verified);
+    if (link) tx.putLink(link);
+  });
+  return { evidence: verified, claim, link };
+}

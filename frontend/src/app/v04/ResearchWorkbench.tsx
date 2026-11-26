@@ -23,6 +23,8 @@ import { useWorkbenchState, type WorkbenchController } from '../../features/work
 import { activeInput, inputKey, isRevealed, type EditorInput } from '../../features/workbench/workbenchState';
 import { editorInputForLocation, encodeOpenParam, workbenchLocation } from './workbenchRoutes';
 import { Button } from '../../shared/ui/Button';
+import { buildLedger, type Ledger, type LedgerGap } from '../../application/research/ledger';
+import type { Claim, ClaimEvidenceLink, Evidence } from '../../domain/research';
 
 const ProjectHome = React.lazy(() => import('../../features/research/ProjectHome').then((m) => ({ default: m.ProjectHome })));
 const Sources = React.lazy(() => import('../../features/research/Sources').then((m) => ({ default: m.Sources })));
@@ -42,6 +44,9 @@ interface ProjectIndex {
   readonly tasks: readonly { id: string; title: string }[];
   readonly excerptCount: number;
   readonly pointCount: number;
+  readonly claims: readonly Claim[];
+  readonly evidence: readonly Evidence[];
+  readonly links: readonly ClaimEvidenceLink[];
 }
 
 const TRANSIENT_PARAMS: readonly string[] = ['add', 'details'];
@@ -54,6 +59,9 @@ const EMPTY_INDEX: ProjectIndex = {
   tasks: [],
   excerptCount: 0,
   pointCount: 0,
+  claims: [],
+  evidence: [],
+  links: [],
 };
 
 /** Live index of the project's objects for the explorer and tab titles. */
@@ -63,13 +71,14 @@ function useProjectIndex(projectId: string): ProjectIndex {
   React.useEffect(() => {
     let cancelled = false;
     const refresh = async (): Promise<void> => {
-      const [project, works, outputs, tasks, evidence, claims] = await Promise.all([
+      const [project, works, outputs, tasks, evidence, claims, links] = await Promise.all([
         repository.getProject(projectId),
         repository.listWorks({ projectId }),
         repository.listOutputs({ projectId }),
         repository.listTasks({ projectId }),
         repository.listEvidence({ projectId }),
         repository.listClaims({ projectId }),
+        repository.listLinks({ projectId }),
       ]);
       if (cancelled) return;
       const byTitle = (a: { title: string }, b: { title: string }): number => a.title.localeCompare(b.title);
@@ -79,8 +88,11 @@ function useProjectIndex(projectId: string): ProjectIndex {
         works: works.map((w) => ({ id: w.id, title: w.title || 'Untitled source' })).sort(byTitle),
         outputs: outputs.map((o) => ({ id: o.id, title: o.title || 'Untitled draft' })).sort(byTitle),
         tasks: tasks.map((t) => ({ id: t.id, title: t.title })),
-        excerptCount: evidence.length,
+        excerptCount: evidence.filter((e) => e.status !== 'rejected').length,
         pointCount: claims.length,
+        claims,
+        evidence,
+        links,
       });
     };
     void refresh().catch(() => {
@@ -165,6 +177,10 @@ export function ResearchWorkbench(props: ResearchWorkbenchProps): React.ReactEle
   );
 
   const editors = useResearchEditors(projectId, open, canvasRuntime);
+  const ledger = React.useMemo(
+    () => buildLedger({ claims: index.claims, evidence: index.evidence, links: index.links }),
+    [index.claims, index.evidence, index.links],
+  );
 
   const titleFor = (input: EditorInput): string => {
     switch (input.kind) {
@@ -198,6 +214,15 @@ export function ResearchWorkbench(props: ResearchWorkbenchProps): React.ReactEle
       titleFor={titleFor}
       explorerLabel="Project explorer"
       explorer={<ResearchExplorer projectId={projectId} index={index} controller={controller} open={open} />}
+      panel={
+        ledger.points.length > 0 || ledger.excerptCount > 0
+          ? {
+              title: 'What’s missing',
+              summary: ledgerSummary(ledger),
+              content: <LedgerPanel ledger={ledger} index={index} projectId={projectId} open={open} />,
+            }
+          : undefined
+      }
       emptyState={
         <div className="workbench-start" data-testid="workbench-start">
           <h1>{index.name || 'New project'}</h1>
@@ -309,7 +334,7 @@ function ResearchExplorer(props: ExplorerProps): React.ReactElement {
           <ul className="workbench-explorer-list">
             {item(
               { kind: 'evidence', id: projectId },
-              `${index.excerptCount} excerpts · ${index.pointCount} points`,
+              `${plural(index.excerptCount, 'excerpt', 'excerpts')} · ${plural(index.pointCount, 'point', 'points')}`,
               'workbench-explorer-evidence',
             )}
           </ul>
@@ -341,6 +366,82 @@ function ResearchExplorer(props: ExplorerProps): React.ReactElement {
         </section>
       )}
     </nav>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// What's missing (the verification ledger, P2)
+// ---------------------------------------------------------------------------
+
+function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+export function ledgerSummary(ledger: Ledger): string {
+  const parts = [plural(ledger.points.length, 'point', 'points')];
+  if (ledger.points.length > 0) parts.push(`${ledger.supportedCount} well supported`);
+  parts.push(ledger.gaps.length === 0 ? 'nothing missing' : plural(ledger.gaps.length, 'thing to look at', 'things to look at'));
+  return parts.join(' · ');
+}
+
+function gapText(gap: LedgerGap, index: ProjectIndex): { label: string; detail?: string } {
+  switch (gap.kind) {
+    case 'no-support':
+      return { label: `“${gap.title}” has no supporting excerpt yet` };
+    case 'contested':
+      return { label: `“${gap.title}” has ${plural(gap.contradicts, 'excerpt', 'excerpts')} against it` };
+    case 'single-source':
+      return { label: `“${gap.title}” rests on a single source` };
+    case 'unconnected-excerpt': {
+      const title = index.works.find((w) => w.id === gap.workId)?.title ?? 'a source';
+      const where = gap.pageNumber ? `, p. ${gap.pageNumber}` : '';
+      return {
+        label: `Excerpt from ${title}${where} isn’t connected to a point`,
+        detail: gap.quote.length > 140 ? `${gap.quote.slice(0, 140)}…` : gap.quote,
+      };
+    }
+  }
+}
+
+function LedgerPanel(props: {
+  readonly ledger: Ledger;
+  readonly index: ProjectIndex;
+  readonly projectId: string;
+  readonly open: (input: EditorInput) => void;
+}): React.ReactElement {
+  const { ledger } = props;
+  if (ledger.gaps.length === 0) {
+    return (
+      <p className="workbench-ledger-done" data-testid="ledger-done">
+        Every point is backed by two or more sources, and every excerpt is connected.
+      </p>
+    );
+  }
+  return (
+    <ul className="workbench-ledger" data-testid="ledger-gaps">
+      {ledger.gaps.map((gap) => {
+        const { label, detail } = gapText(gap, props.index);
+        const target: EditorInput =
+          gap.kind === 'unconnected-excerpt'
+            ? { kind: 'work', id: gap.workId, ...(gap.pageNumber ? { params: { page: String(gap.pageNumber) } } : {}) }
+            : { kind: 'evidence', id: props.projectId };
+        const key = gap.kind === 'unconnected-excerpt' ? gap.evidenceId : `${gap.kind}:${gap.claimId}`;
+        return (
+          <li key={key}>
+            <button
+              type="button"
+              className={`workbench-ledger-item workbench-ledger-item--${gap.kind}`}
+              onClick={() => props.open(target)}
+              data-testid="ledger-gap"
+              data-gap-kind={gap.kind}
+            >
+              <span className="workbench-ledger-label">{label}</span>
+              {detail ? <span className="workbench-ledger-detail">{detail}</span> : null}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -394,7 +495,13 @@ function useResearchEditors(
       },
       work: {
         render: (input) => (
-          <ResearchReader projectId={projectId} workId={input.id} onBackToLibrary={library} onOpenEvidence={evidence} />
+          <ResearchReader
+            projectId={projectId}
+            workId={input.id}
+            onBackToLibrary={library}
+            onOpenEvidence={evidence}
+            {...(input.params?.page ? { initialPageNumber: Number(input.params.page) } : {})}
+          />
         ),
       },
       evidence: {

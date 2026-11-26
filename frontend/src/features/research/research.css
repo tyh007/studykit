@@ -217,3 +217,103 @@
   padding: 0;
   list-style: none;
 }
+
+/* v0.5 P2 — highlight → excerpt → point */
+.research-reader-notice {
+  margin: 0 1rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--research-radius);
+  background: var(--research-bg-elevated);
+  color: var(--research-text);
+  font-size: 0.85rem;
+}
+
+.point-picker {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  gap: 0.5rem;
+  width: 340px;
+  padding: 0.75rem;
+  border: 1px solid var(--research-border);
+  border-radius: var(--research-radius);
+  background: var(--bg-solid, var(--research-bg-elevated));
+  color: var(--research-text);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.point-picker-quote {
+  margin: 0;
+  padding-left: 0.5rem;
+  border-left: 2px solid var(--research-border);
+  color: var(--research-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.point-picker-relations {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.point-picker-relation {
+  flex: 1;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--research-border);
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--research-muted);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.point-picker-relation.is-active {
+  border-color: var(--color-primary, currentColor);
+  color: var(--research-text);
+  font-weight: 600;
+}
+
+.point-picker-list {
+  display: grid;
+  gap: 2px;
+  max-height: 11rem;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.point-picker-option {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 0;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--research-text);
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.point-picker-option:hover,
+.point-picker-option:focus-visible {
+  background: var(--research-border);
+}
+
+.point-picker-option--new {
+  color: var(--color-primary, var(--research-text));
+}
+
+.point-picker-hint {
+  margin: 0;
+  padding: 0.25rem 0.5rem;
+  color: var(--research-muted);
+  font-size: 0.8rem;
+}
+
+.point-picker-footer {
+  display: flex;
+  justify-content: flex-end;
+}

@@ -553,7 +553,8 @@ async function seedThreeVerifiedEvidenceViaUI(
     const fixture = document.createElement('span');
     fixture.setAttribute('data-testid', `reader-fixture-${i}-${projectName.replace(/\s+/g, '-')}`);
     fixture.textContent = `quote number ${i}`;
-    reader.appendChild(fixture);
+    // v0.5 P2: only selections inside the PDF area become excerpts.
+    within(reader).getByTestId('research-reader-pdf-area').appendChild(fixture);
     setupSelection(fixture, `quote number ${i}`);
     await screen.findByTestId('selection-action-bar');
     await user.click(screen.getByTestId('selection-action-evidence'));
@@ -808,8 +809,8 @@ describe('WP-05 invariant: incomplete locator in real UI', () => {
     await user.click(within(row).getByTestId('research-library-open-reader'));
     const reader = await screen.findByTestId('research-reader');
     // Open the Drawer via a real DOM selection.
-    const selectable = reader.querySelector('div');
-    if (!selectable) throw new Error('No selectable element in reader');
+    // v0.5 P2: only selections inside the PDF area become excerpts.
+    const selectable = within(reader).getByTestId('research-reader-pdf-area');
     selectable.textContent = 'test quote for drawer';
     setupSelection(selectable, 'test quote for drawer');
     await screen.findByTestId('selection-action-bar');

@@ -17,6 +17,7 @@ import {
   pinEditor,
   revealRegion,
   serializeWorkbenchState,
+  setPanelOpen,
   setSideOpen,
   setSideWidth,
   type EditorInput,
@@ -58,6 +59,7 @@ export interface WorkbenchController {
   close(index: number): void;
   setSideOpen(open: boolean): void;
   setSideWidth(width: number): void;
+  setPanelOpen(open: boolean): void;
   reveal(region: WorkbenchRegion): void;
 }
 
@@ -130,6 +132,7 @@ export function useWorkbenchState(projectId: string, options: UseWorkbenchStateO
       close: (index) => setState((s) => closeEditor(s, index)),
       setSideOpen: (open) => setState((s) => setSideOpen(s, open)),
       setSideWidth: (width) => setState((s) => setSideWidth(s, width)),
+      setPanelOpen: (open) => setState((s) => setPanelOpen(s, open)),
       reveal: (region) => setState((s) => revealRegion(s, region)),
     }),
     [state],

@@ -24,7 +24,12 @@ vi.mock('../../features/research/Sources', () => ({
 }));
 vi.mock('../../features/research/Discovery', () => ({ Discovery: () => <div data-testid="stub-search" /> }));
 vi.mock('../../features/research/ResearchReader', () => ({
-  ResearchReader: (p: { workId: string }) => <div data-testid="stub-reader">{p.workId}</div>,
+  ResearchReader: (p: { workId: string; initialPageNumber?: number }) => (
+    <div data-testid="stub-reader">
+      {p.workId}
+      {p.initialPageNumber ? ` @p${p.initialPageNumber}` : ''}
+    </div>
+  ),
 }));
 vi.mock('../../features/research/EvidenceWorkspace', () => ({
   EvidenceWorkspace: () => <div data-testid="stub-evidence" />,
@@ -40,7 +45,14 @@ import { makeAppLocation, type AppLocation } from '../../domain/workspace';
 import { MemoryResearchRepository } from '../../application/research/researchRepository';
 import { OpenAlexSearchProvider } from '../../application/research/openAlexProvider';
 import { ResearchProvider, type ResearchContextValue } from '../../features/research/researchContext';
-import { makeResearchProject, makeWork } from '../../domain/__fixtures__/domain-fixtures';
+import {
+  makeClaim,
+  makeClaimEvidenceLink,
+  makeEvidence,
+  makeResearchLocator,
+  makeResearchProject,
+  makeWork,
+} from '../../domain/__fixtures__/domain-fixtures';
 import { WORKBENCH_STORAGE_PREFIX } from '../../features/workbench/useWorkbenchState';
 
 const P = 'p-001';
@@ -168,5 +180,55 @@ describe('Research workbench', () => {
     await screen.findByTestId('stub-overview');
     fireEvent.click(screen.getByRole('button', { name: 'Close Overview' }));
     await waitFor(() => expect(tabKinds()).toEqual([]));
+  });
+
+  it('shows “What’s missing” once there are points or excerpts, and jumps to the excerpt’s page', async () => {
+    const repo = await seed(1);
+    mount(repo, makeAppLocation({ mode: 'research', surface: 'project', container }));
+    await screen.findByTestId('stub-overview');
+    // Nothing to report yet: no panel.
+    expect(screen.queryByTestId('workbench-panel')).not.toBeInTheDocument();
+
+    await act(async () => {
+      await repo.transact(async (tx) => {
+        tx.putClaim(makeClaim({ id: 'c-1', projectId: P, title: 'Sleep helps memory' }));
+        tx.putEvidence(
+          makeEvidence({
+            id: 'e-1',
+            projectId: P,
+            workId: 'w-1',
+            status: 'verified',
+            locator: makeResearchLocator({ workId: 'w-1', pageNumber: 2 }),
+          }),
+        );
+        tx.putEvidence(
+          makeEvidence({
+            id: 'e-2',
+            projectId: P,
+            workId: 'w-1',
+            status: 'candidate',
+            exactQuote: 'An unconnected passage',
+            locator: makeResearchLocator({ workId: 'w-1', pageNumber: 5 }),
+          }),
+        );
+        tx.putLink(makeClaimEvidenceLink({ id: 'l-1', projectId: P, claimId: 'c-1', evidenceId: 'e-1' }));
+      });
+    });
+
+    const panel = await screen.findByTestId('workbench-panel');
+    expect(within(panel).getByTestId('workbench-panel-toggle')).toHaveTextContent(
+      'What’s missing1 point · 0 well supported · 2 things to look at',
+    );
+    const gaps = within(panel).getAllByTestId('ledger-gap');
+    expect(gaps.map((g) => g.dataset.gapKind)).toEqual(['single-source', 'unconnected-excerpt']);
+    expect(gaps[1]).toHaveTextContent('Excerpt from Paper 1, p. 5 isn’t connected to a point');
+
+    fireEvent.click(gaps[1]!);
+    expect(await screen.findByTestId('stub-reader')).toHaveTextContent('w-1 @p5');
+
+    // The panel folds away and stays folded.
+    fireEvent.click(within(panel).getByTestId('workbench-panel-toggle'));
+    expect(within(panel).queryAllByTestId('ledger-gap')).toHaveLength(0);
+    expect(within(panel).getByTestId('workbench-panel-toggle')).toHaveAttribute('aria-expanded', 'false');
   });
 });

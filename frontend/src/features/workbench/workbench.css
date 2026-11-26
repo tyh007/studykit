@@ -296,3 +296,102 @@
   flex-wrap: wrap;
   gap: 0.5rem;
 }
+
+/* ---- Bottom panel ---- */
+
+.workbench-panel {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border-glass);
+  background: var(--surface);
+}
+
+.workbench-panel.is-open {
+  max-height: 38%;
+  min-height: 7rem;
+}
+
+.workbench-panel-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4rem 0.75rem;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.workbench-panel-chevron {
+  width: 0.75rem;
+  color: var(--text-muted);
+}
+
+.workbench-panel-title {
+  font-weight: 600;
+}
+
+.workbench-panel-summary {
+  color: var(--text-muted);
+}
+
+.workbench-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 0.75rem 0.75rem;
+}
+
+/* ---- What's missing (Research ledger) ---- */
+
+.workbench-ledger {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workbench-ledger-item {
+  display: grid;
+  gap: 0.15rem;
+  width: 100%;
+  padding: 0.35rem 0.5rem 0.35rem 0.75rem;
+  border: 0;
+  border-left: 3px solid var(--border-glass);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.workbench-ledger-item:hover,
+.workbench-ledger-item:focus-visible {
+  background: var(--border-glass);
+}
+
+.workbench-ledger-item--no-support,
+.workbench-ledger-item--contested {
+  border-left-color: var(--color-warning, #b80);
+}
+
+.workbench-ledger-detail {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workbench-ledger-done {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}

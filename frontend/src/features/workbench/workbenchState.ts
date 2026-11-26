@@ -44,6 +44,8 @@ export interface WorkbenchState {
   readonly active: number;
   readonly sideOpen: boolean;
   readonly sideWidth: number;
+  /** Bottom panel expanded (only shown when the host provides one). */
+  readonly panelOpen: boolean;
   readonly revealed: readonly WorkbenchRegion[];
 }
 
@@ -68,6 +70,7 @@ export function createWorkbenchState(projectId: string): WorkbenchState {
     active: -1,
     sideOpen: true,
     sideWidth: SIDE_WIDTH_DEFAULT,
+    panelOpen: true,
     revealed: Object.freeze([]),
   });
 }
@@ -163,6 +166,11 @@ export function setSideWidth(state: WorkbenchState, width: number): WorkbenchSta
   return freeze({ ...state, sideWidth: clamped });
 }
 
+export function setPanelOpen(state: WorkbenchState, open: boolean): WorkbenchState {
+  if (state.panelOpen === open) return state;
+  return freeze({ ...state, panelOpen: open });
+}
+
 /** Record that a region has been used, so it stays visible from now on. */
 export function revealRegion(state: WorkbenchState, region: WorkbenchRegion): WorkbenchState {
   if (state.revealed.includes(region)) return state;
@@ -186,6 +194,7 @@ interface SerializedWorkbenchState {
   readonly active: number;
   readonly sideOpen: boolean;
   readonly sideWidth: number;
+  readonly panelOpen?: boolean;
   readonly revealed: readonly string[];
 }
 
@@ -223,6 +232,7 @@ export function serializeWorkbenchState(state: WorkbenchState, options: Serializ
     active: state.active,
     sideOpen: state.sideOpen,
     sideWidth: state.sideWidth,
+    panelOpen: state.panelOpen,
     revealed: [...state.revealed],
   };
   return JSON.stringify(out);
@@ -280,6 +290,7 @@ export function parseWorkbenchState(raw: string | null, projectId: string): Work
       active,
       sideOpen: typeof d.sideOpen === 'boolean' ? d.sideOpen : true,
       sideWidth: SIDE_WIDTH_DEFAULT,
+      panelOpen: typeof d.panelOpen === 'boolean' ? d.panelOpen : true,
       revealed: [...new Set(revealed)],
     }),
     sideWidth,

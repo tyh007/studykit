@@ -50,7 +50,12 @@ import { Button } from '../../shared/ui/Button';
 import { Pill } from '../../shared/ui/Pill';
 import { Surface } from '../../shared/ui/Surface';
 import { useResearchDeps } from './researchContext';
-import { createEvidenceDraft, verifyEvidence } from '../../application/research/researchUseCases';
+import {
+  captureExcerpt,
+  createEvidenceDraft,
+  verifyEvidence,
+  type CapturePointTarget,
+} from '../../application/research/researchUseCases';
 import {
   importLocalPdf,
   importAcquiredPdf,
@@ -61,19 +66,72 @@ import {
   type WorkReaderSourceError,
   type WorkReaderSourceResult,
 } from '../../application/research/workReaderSource';
-import { hashQuote, isEvidenceReadyForVerification, type Evidence, type EvidenceType, type ResearchSourceLocator, type Work } from '../../domain/research';
+import {
+  hashQuote,
+  isEvidenceReadyForVerification,
+  type Claim,
+  type ClaimEvidenceRelation,
+  type Evidence,
+  type EvidenceType,
+  type ResearchSourceLocator,
+  type Work,
+} from '../../domain/research';
+
+/** Longest excerpt kept from a selection. Longer selections are cut, and the user is told. */
+const MAX_EXCERPT_CHARS = 2000;
+
+export function buildPageLocator(
+  workId: string,
+  assetId: string | undefined,
+  pageNumber: number,
+  excerpt: string,
+): ResearchSourceLocator {
+  return {
+    kind: 'paper-page',
+    workId,
+    ...(assetId ? { assetId } : {}),
+    pageNumber,
+    quoteHash: hashQuote(excerpt),
+    capturedAt: new Date().toISOString(),
+  };
+}
+
+/** The project's points (Claims), kept live. */
+function useProjectPoints(projectId: string): readonly Claim[] {
+  const deps = useResearchDeps();
+  const [points, setPoints] = React.useState<readonly Claim[]>([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    const load = (): void => {
+      void deps.repository.listClaims({ projectId }).then((rows) => {
+        if (!cancelled) setPoints([...rows].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+      });
+    };
+    load();
+    const off = deps.repository.subscribe(load);
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, [deps.repository, projectId]);
+  return points;
+}
 
 export interface ResearchReaderProps {
   readonly projectId: string;
   readonly workId: string;
   readonly onBackToLibrary: (projectId: string) => void;
   readonly onOpenEvidence: (projectId: string) => void;
+  /** 1-based page to open on (e.g. from the ledger). */
+  readonly initialPageNumber?: number;
 }
 
 export function ResearchReader(props: ResearchReaderProps): React.ReactElement {
   const deps = useResearchDeps();
   const [work, setWork] = React.useState<Work | null>(null);
-  const [page, setPage] = React.useState(0);
+  const [page, setPage] = React.useState(() =>
+    props.initialPageNumber && props.initialPageNumber > 0 ? props.initialPageNumber - 1 : 0,
+  );
   const [totalPages, setTotalPages] = React.useState(0);
   const [zoom, setZoom] = React.useState(100);
   const [error, setError] = React.useState<string | null>(null);
@@ -82,6 +140,14 @@ export function ResearchReader(props: ResearchReaderProps): React.ReactElement {
     null,
   );
   const [draftOpen, setDraftOpen] = React.useState(false);
+  // A frozen copy of the selection: clicking into the point picker
+  // collapses the live selection, so the picker works from this.
+  const [captured, setCaptured] = React.useState<{ text: string; rect: DOMRect | null; page: number; truncated: boolean } | null>(null);
+  const [captureBusy, setCaptureBusy] = React.useState(false);
+  const [captureError, setCaptureError] = React.useState<string | null>(null);
+  const [notice, setNotice] = React.useState<string | null>(null);
+  const pdfAreaRef = React.useRef<HTMLDivElement | null>(null);
+  const points = useProjectPoints(props.projectId);
   const [importing, setImporting] = React.useState(false);
   const [importError, setImportError] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -151,8 +217,11 @@ export function ResearchReader(props: ResearchReaderProps): React.ReactElement {
         return;
       }
       const range = sel.getRangeAt(0);
+      // Only selections inside the PDF become excerpts.
+      const area = pdfAreaRef.current;
+      if (area && !area.contains(range.commonAncestorContainer)) return;
       const rect = range.getBoundingClientRect();
-      setSelection({ text: text.slice(0, 240), rect });
+      setSelection({ text, rect });
     };
     document.addEventListener('mouseup', onUp);
     return () => {
@@ -165,7 +234,68 @@ export function ResearchReader(props: ResearchReaderProps): React.ReactElement {
   // pointing at a different page.
   React.useEffect(() => {
     setSelection(null);
+    setCaptured(null);
   }, [page]);
+
+  // A later request for a specific page (e.g. from "What's missing")
+  // moves an already-open reader there.
+  React.useEffect(() => {
+    if (props.initialPageNumber && props.initialPageNumber > 0) setPage(props.initialPageNumber - 1);
+  }, [props.initialPageNumber]);
+
+  React.useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 4000);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  const clearSelection = (): void => {
+    setSelection(null);
+    setCaptured(null);
+    setCaptureError(null);
+    if (typeof window !== 'undefined') window.getSelection?.()?.removeAllRanges();
+  };
+
+  const freezeSelection = (): { text: string; rect: DOMRect | null; page: number; truncated: boolean } | null => {
+    if (!selection) return null;
+    const truncated = selection.text.length > MAX_EXCERPT_CHARS;
+    return { text: selection.text.slice(0, MAX_EXCERPT_CHARS), rect: selection.rect, page, truncated };
+  };
+
+  const assetIdForCapture = sourceResult?.kind === 'ok' ? sourceResult.source.assetId : undefined;
+
+  const handleCapture = async (
+    snapshot: { text: string; page: number },
+    point?: CapturePointTarget,
+    relation?: ClaimEvidenceRelation,
+    note?: string,
+  ): Promise<void> => {
+    if (!work) return;
+    setCaptureBusy(true);
+    setCaptureError(null);
+    try {
+      const result = await captureExcerpt(deps.repository, {
+        projectId: props.projectId,
+        workId: work.id,
+        locator: buildPageLocator(work.id, assetIdForCapture, snapshot.page + 1, snapshot.text),
+        exactQuote: snapshot.text,
+        ...(point ? { point } : {}),
+        ...(relation ? { relation } : {}),
+        ...(note ? { note } : {}),
+      });
+      const verb = relation === 'contradicts' ? 'against' : relation === 'qualifies' ? 'as a limit on' : 'to';
+      setNotice(
+        result.claim
+          ? `Excerpt from page ${snapshot.page + 1} added ${verb} “${result.claim.title}”.`
+          : `Excerpt from page ${snapshot.page + 1} saved. Connect it to a point when you’re ready.`,
+      );
+      clearSelection();
+    } catch (err) {
+      setCaptureError(err instanceof Error ? err.message : 'Couldn’t save this excerpt.');
+    } finally {
+      setCaptureBusy(false);
+    }
+  };
 
   const handleImportClick = (): void => {
     setImportError(null);
@@ -271,13 +401,18 @@ export function ResearchReader(props: ResearchReaderProps): React.ReactElement {
           Open Evidence workspace
         </Button>
       </header>
+      {notice ? (
+        <p role="status" data-testid="research-reader-capture-notice" className="research-reader-notice">
+          {notice}
+        </p>
+      ) : null}
       {error ? (
         <p role="alert" data-testid="research-reader-error" style={{ color: 'var(--color-danger, #b00)', padding: '0 1rem' }}>
           {error}
         </p>
       ) : null}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <div style={{ flex: 1, minWidth: 0, padding: '0 1rem' }}>
+        <div ref={pdfAreaRef} data-testid="research-reader-pdf-area" style={{ flex: 1, minWidth: 0, padding: '0 1rem' }}>
           {sourceResult && sourceResult.kind === 'ok' ? (
             <LiteraturePDFViewer
               source={sourceResult.source}
@@ -297,18 +432,30 @@ export function ResearchReader(props: ResearchReaderProps): React.ReactElement {
             />
           )}
         </div>
-        {selection && selection.text.length > 0 && sourceResult?.kind === 'ok' ? (
+        {captured ? (
+          <PointPicker
+            rect={captured.rect}
+            excerpt={captured.text}
+            truncated={captured.truncated}
+            points={points}
+            busy={captureBusy}
+            error={captureError}
+            onPick={(point, relation, note) => void handleCapture(captured, point, relation, note)}
+            onClose={clearSelection}
+          />
+        ) : selection && selection.text.length > 0 && sourceResult?.kind === 'ok' ? (
           <SelectionActionBar
             rect={selection.rect}
+            busy={captureBusy}
+            onAddToPoint={() => setCaptured(freezeSelection())}
+            onSaveExcerpt={() => {
+              const snap = freezeSelection();
+              if (snap) void handleCapture(snap);
+            }}
             onPick={() => {
               setDraftOpen(true);
             }}
-            onDismiss={() => {
-              setSelection(null);
-              if (typeof window !== 'undefined') {
-                window.getSelection?.()?.removeAllRanges();
-              }
-            }}
+            onDismiss={clearSelection}
           />
         ) : null}
       </div>
@@ -329,7 +476,7 @@ export function ResearchReader(props: ResearchReaderProps): React.ReactElement {
           work={work}
           source={sourceResult.source}
           pageNumber={page + 1}
-          excerpt={selection?.text ?? ''}
+          excerpt={(selection?.text ?? '').slice(0, MAX_EXCERPT_CHARS)}
           onClose={() => {
             setDraftOpen(false);
             setSelection(null);
@@ -345,29 +492,53 @@ export function ResearchReader(props: ResearchReaderProps): React.ReactElement {
 
 function SelectionActionBar(props: {
   readonly rect: DOMRect | null;
+  readonly busy: boolean;
+  readonly onAddToPoint: () => void;
+  readonly onSaveExcerpt: () => void;
   readonly onPick: () => void;
   readonly onDismiss: () => void;
 }): React.ReactElement | null {
   if (!props.rect) return null;
   const style: React.CSSProperties = {
     top: Math.max(8, props.rect.top - 44),
-    left: props.rect.left + props.rect.width / 2 - 110,
+    left: Math.max(8, props.rect.left + props.rect.width / 2 - 170),
   };
   return (
     <div
       role="toolbar"
-      aria-label="Save selection as Evidence"
+      aria-label="Use this passage"
       data-testid="selection-action-bar"
       className="selection-action-bar"
       style={style}
+      // Keep the text selection while a button is pressed.
+      onMouseDown={(e) => e.preventDefault()}
     >
+      <Button
+        variant="primary"
+        size="sm"
+        onClick={props.onAddToPoint}
+        disabled={props.busy}
+        data-testid="selection-action-point"
+      >
+        Add to a point…
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={props.onSaveExcerpt}
+        disabled={props.busy}
+        data-testid="selection-action-save"
+      >
+        Save excerpt
+      </Button>
       <Button
         variant="ghost"
         size="sm"
         onClick={props.onPick}
         data-testid="selection-action-evidence"
+        title="Open the full form (type, interpretation)"
       >
-        Save as Evidence
+        Details…
       </Button>
       <Button
         variant="ghost"
@@ -378,6 +549,148 @@ function SelectionActionBar(props: {
       >
         ×
       </Button>
+    </div>
+  );
+}
+
+const RELATIONS: readonly { value: ClaimEvidenceRelation; label: string }[] = [
+  { value: 'supports', label: 'Supports' },
+  { value: 'contradicts', label: 'Contradicts' },
+  { value: 'qualifies', label: 'Limits' },
+];
+
+/**
+ * "Which point does this passage speak to?" — one click on a point (or
+ * Enter on a new one) saves, verifies and connects the excerpt.
+ */
+export function PointPicker(props: {
+  readonly rect: DOMRect | null;
+  readonly excerpt: string;
+  readonly truncated: boolean;
+  readonly points: readonly Claim[];
+  readonly busy: boolean;
+  readonly error: string | null;
+  readonly onPick: (point: CapturePointTarget, relation: ClaimEvidenceRelation, note: string) => void;
+  readonly onClose: () => void;
+}): React.ReactElement {
+  const [query, setQuery] = React.useState('');
+  const [relation, setRelation] = React.useState<ClaimEvidenceRelation>('supports');
+  const [note, setNote] = React.useState('');
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
+  React.useEffect(() => inputRef.current?.focus(), []);
+
+  const q = query.trim().toLowerCase();
+  const matches = (q ? props.points.filter((p) => p.title.toLowerCase().includes(q)) : props.points).slice(0, 6);
+  const exact = props.points.find((p) => p.title.trim().toLowerCase() === q);
+
+  const submitQuery = (): void => {
+    if (props.busy || !q) return;
+    if (exact) props.onPick({ kind: 'existing', claimId: exact.id }, relation, note);
+    else props.onPick({ kind: 'new', title: query.trim() }, relation, note);
+  };
+
+  const top = props.rect ? Math.min(window.innerHeight - 380, Math.max(8, props.rect.bottom + 8)) : 80;
+  const left = props.rect ? Math.min(window.innerWidth - 360, Math.max(8, props.rect.left)) : 80;
+
+  return (
+    <div
+      role="dialog"
+      aria-label="Add excerpt to a point"
+      data-testid="point-picker"
+      className="point-picker"
+      style={{ top, left }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          props.onClose();
+        }
+      }}
+    >
+      <blockquote className="point-picker-quote" data-testid="point-picker-quote">
+        {props.excerpt.length > 180 ? `${props.excerpt.slice(0, 180)}…` : props.excerpt}
+      </blockquote>
+      {props.truncated ? (
+        <p className="point-picker-hint">Long selection: only the first 2,000 characters are kept.</p>
+      ) : null}
+      <div className="point-picker-relations" role="radiogroup" aria-label="This passage">
+        {RELATIONS.map((r) => (
+          <button
+            key={r.value}
+            type="button"
+            role="radio"
+            aria-checked={relation === r.value}
+            className={`point-picker-relation${relation === r.value ? ' is-active' : ''}`}
+            onClick={() => setRelation(r.value)}
+            data-testid={`point-picker-relation-${r.value}`}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+      <input
+        ref={inputRef}
+        className="research-input point-picker-input"
+        value={query}
+        onChange={(e) => setQuery(e.currentTarget.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            submitQuery();
+          }
+        }}
+        placeholder={props.points.length > 0 ? 'Find a point, or write a new one' : 'Write the point this passage speaks to'}
+        aria-label="Point"
+        data-testid="point-picker-input"
+      />
+      <ul className="point-picker-list" data-testid="point-picker-list">
+        {matches.map((p) => (
+          <li key={p.id}>
+            <button
+              type="button"
+              className="point-picker-option"
+              disabled={props.busy}
+              onClick={() => props.onPick({ kind: 'existing', claimId: p.id }, relation, note)}
+              data-testid="point-picker-option"
+            >
+              {p.title}
+            </button>
+          </li>
+        ))}
+        {q && !exact ? (
+          <li>
+            <button
+              type="button"
+              className="point-picker-option point-picker-option--new"
+              disabled={props.busy}
+              onClick={submitQuery}
+              data-testid="point-picker-new"
+            >
+              New point: “{query.trim()}”
+            </button>
+          </li>
+        ) : null}
+        {!q && props.points.length === 0 ? (
+          <li className="point-picker-hint">Your points will appear here.</li>
+        ) : null}
+      </ul>
+      <input
+        className="research-input point-picker-note"
+        value={note}
+        onChange={(e) => setNote(e.currentTarget.value)}
+        placeholder="Why, in your words (optional)"
+        aria-label="Why, in your words (optional)"
+        data-testid="point-picker-note"
+      />
+      {props.error ? (
+        <p role="alert" className="research-error" data-testid="point-picker-error">
+          {props.error}
+        </p>
+      ) : null}
+      <div className="point-picker-footer">
+        <Button variant="ghost" size="sm" onClick={props.onClose} data-testid="point-picker-cancel">
+          Cancel
+        </Button>
+      </div>
     </div>
   );
 }

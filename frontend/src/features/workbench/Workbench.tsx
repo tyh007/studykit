@@ -29,6 +29,16 @@ export interface WorkbenchProps {
   readonly explorerLabel: string;
   /** Shown in the editor area when no tab is open. */
   readonly emptyState: React.ReactNode;
+  /**
+   * Optional bottom panel (e.g. "What's missing"). Omit it until there
+   * is something to show: regions appear when they are useful.
+   */
+  readonly panel?: {
+    readonly title: string;
+    /** One line shown next to the title, also when collapsed. */
+    readonly summary?: string;
+    readonly content: React.ReactNode;
+  };
 }
 
 function useNarrowViewport(maxWidth: number): boolean {
@@ -194,6 +204,33 @@ export function Workbench(props: WorkbenchProps): React.ReactElement {
             props.emptyState
           )}
         </div>
+        {props.panel ? (
+          <section
+            className={`workbench-panel${state.panelOpen ? ' is-open' : ''}`}
+            aria-label={props.panel.title}
+            data-testid="workbench-panel"
+          >
+            <button
+              type="button"
+              className="workbench-panel-header"
+              aria-expanded={state.panelOpen}
+              aria-controls="workbench-panel-body"
+              onClick={() => controller.setPanelOpen(!state.panelOpen)}
+              data-testid="workbench-panel-toggle"
+            >
+              <span className="workbench-panel-chevron" aria-hidden="true">
+                {state.panelOpen ? '▾' : '▸'}
+              </span>
+              <span className="workbench-panel-title">{props.panel.title}</span>
+              {props.panel.summary ? <span className="workbench-panel-summary">{props.panel.summary}</span> : null}
+            </button>
+            {state.panelOpen ? (
+              <div className="workbench-panel-body" id="workbench-panel-body">
+                {props.panel.content}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
       </section>
     </div>
   );
