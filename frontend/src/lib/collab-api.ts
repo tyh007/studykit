@@ -60,6 +60,7 @@
  * same project" real.
  */
 
+import type { AiDraftDecision, AiMessage, AiThread } from '../domain/aiThread';
 import type {
   Activity,
   Collaborator,
@@ -96,7 +97,12 @@ export type CollabOpKind =
   | 'task-shared'
   | 'task-assigned'
   | 'task-status-changed'
-  | 'conflict-detected';
+  | 'conflict-detected'
+  // v0.5 P4b: shared project AI threads (ADR-003 §5).
+  | 'ai-thread-created'
+  | 'ai-thread-updated'
+  | 'ai-message-appended'
+  | 'ai-draft-decided';
 
 export const COLLAB_OP_KINDS: readonly CollabOpKind[] = [
   'membership-bootstrap',
@@ -110,6 +116,10 @@ export const COLLAB_OP_KINDS: readonly CollabOpKind[] = [
   'task-assigned',
   'task-status-changed',
   'conflict-detected',
+  'ai-thread-created',
+  'ai-thread-updated',
+  'ai-message-appended',
+  'ai-draft-decided',
 ] as const;
 
 export interface CollabOp {
@@ -177,6 +187,10 @@ export interface CollabOpPayloads {
     readonly previousStatus: ResearchTask['status'] | null;
   };
   'conflict-detected': Conflict;
+  'ai-thread-created': AiThread;
+  'ai-thread-updated': AiThread;
+  'ai-message-appended': AiMessage;
+  'ai-draft-decided': AiDraftDecision;
 }
 
 // ---------------------------------------------------------------------------

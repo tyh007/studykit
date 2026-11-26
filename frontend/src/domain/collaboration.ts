@@ -976,7 +976,10 @@ export type Capability =
   | 'output.create'
   | 'ai.read-context'
   | 'ai.run-local'
-  | 'ai.run-cloud';
+  | 'ai.run-cloud'
+  // v0.5 P4b: shared project AI threads (ADR-003 §5).
+  | 'ai-thread.read'
+  | 'ai-thread.post';
 
 export const CAPABILITIES: readonly Capability[] = [
   'project.read',
@@ -1016,6 +1019,8 @@ export const CAPABILITIES: readonly Capability[] = [
   'ai.read-context',
   'ai.run-local',
   'ai.run-cloud',
+  'ai-thread.read',
+  'ai-thread.post',
 ] as const;
 
 export function isCapability(value: unknown): value is Capability {

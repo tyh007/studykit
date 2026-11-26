@@ -113,17 +113,87 @@ const router = express.Router();
 
 const VALID_ROLES = new Set(['owner', 'editor', 'commenter', 'viewer']);
 const INVITABLE_ROLES = new Set(['editor', 'commenter', 'viewer']);
+// v0.5 P4b: shared project AI threads (ADR-003 §5). Only owners and
+// editors post; commenters and viewers read them through pull.
+const AI_THREAD_OPS = ['ai-thread-created', 'ai-thread-updated', 'ai-message-appended', 'ai-draft-decided'];
+const AI_OP_MAX_BYTES = 256 * 1024;
+
+/**
+ * The shared thread `threadId` in `projectId`, as first published, or
+ * null. A thread exists on the server only once an `ai-thread-created`
+ * op for it was accepted; private threads are never pushed.
+ */
+async function findSharedThread(projectId, threadId) {
+  const result = await db.query(
+    "SELECT payload_json FROM collab_op_log WHERE project_id = $1 AND kind = 'ai-thread-created'",
+    [projectId],
+  );
+  for (const row of result.rows) {
+    try {
+      const t = JSON.parse(row.payload_json);
+      if (t && t.id === threadId) return t;
+    } catch {
+      /* ignore malformed rows */
+    }
+  }
+  return null;
+}
+
+/**
+ * Validate an AI thread op against the caller. Returns a rejection
+ * reason, or null when the op may be stored. AI never posts as itself
+ * or as someone else: every record names the member who wrote or
+ * requested it, and that must be the caller.
+ */
+async function checkAiThreadOp(kind, parsed, rawPayload, projectId, userId) {
+  if (Buffer.byteLength(rawPayload, 'utf8') > AI_OP_MAX_BYTES) return 'payload exceeds 256 KiB';
+  if (!parsed || typeof parsed !== 'object') return 'invalid payload';
+  if (parsed.projectId !== projectId) return 'payload projectId mismatch';
+  switch (kind) {
+    case 'ai-thread-created':
+    case 'ai-thread-updated': {
+      if (typeof parsed.id !== 'string' || !parsed.id) return 'thread id missing';
+      if (parsed.visibility !== 'shared') return 'only shared threads are synced';
+      const existing = await findSharedThread(projectId, parsed.id);
+      if (kind === 'ai-thread-created') {
+        if (parsed.createdBy !== userId) return 'thread creator mismatch';
+        if (existing && existing.createdBy !== userId) return 'thread id already taken';
+        return null;
+      }
+      if (!existing) return 'unknown thread';
+      if (parsed.createdBy !== existing.createdBy) return 'thread creator cannot change';
+      return null;
+    }
+    case 'ai-message-appended': {
+      if (parsed.authorId !== userId) return 'message author mismatch';
+      if (parsed.role !== 'user' && parsed.role !== 'assistant') return 'invalid message role';
+      if (!(await findSharedThread(projectId, parsed.threadId))) return 'thread is not shared in this project';
+      return null;
+    }
+    case 'ai-draft-decided': {
+      if (parsed.decidedBy !== userId) return 'decision author mismatch';
+      if (parsed.decision !== 'applied' && parsed.decision !== 'rejected') return 'invalid decision';
+      if (!(await findSharedThread(projectId, parsed.threadId))) return 'thread is not shared in this project';
+      return null;
+    }
+    default:
+      return 'unknown AI op';
+  }
+}
+
 const ROLE_ALLOWED_OPS = {
   owner: new Set([
     'member-added', 'member-role-changed', 'member-removed',
     'comment-posted', 'comment-resolved', 'activity-logged',
     'task-shared', 'task-assigned', 'task-status-changed',
     'conflict-detected',
+    ...AI_THREAD_OPS,
   ]),
   editor: new Set([
     'comment-posted', 'comment-resolved', 'activity-logged',
     'task-shared', 'task-assigned', 'task-status-changed',
     'conflict-detected',
+    ...AI_THREAD_OPS,
   ]),
   commenter: new Set(['comment-posted', 'activity-logged']),
   viewer: new Set(),
@@ -546,6 +616,13 @@ router.post('/projects/:id/push', asyncHandler(async (req, res) => {
     }
     try {
       const parsed = JSON.parse(payload);
+      if (AI_THREAD_OPS.includes(op.kind)) {
+        const reason = await checkAiThreadOp(op.kind, parsed, payload, projectId, req.user.id);
+        if (reason) {
+          rejected.push({ id: op.id, reason });
+          continue;
+        }
+      }
       if (parsed && typeof parsed === 'object') {
         const payloadProjectId = parsed.projectId || (parsed.task && parsed.task.projectId);
         if (payloadProjectId && payloadProjectId !== projectId) {

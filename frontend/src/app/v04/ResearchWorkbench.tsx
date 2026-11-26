@@ -28,6 +28,7 @@ import type { Claim, ClaimEvidenceLink, Evidence } from '../../domain/research';
 import { contextForFocus } from '../../application/research/aiContext';
 import { setCapsuleOverride } from '../../features/ai/ui/openCapsule';
 import { useCurrentUserId } from '../../lib/auth';
+import { useAiSync } from './useAiSync';
 
 const ProjectHome = React.lazy(() => import('../../features/research/ProjectHome').then((m) => ({ default: m.ProjectHome })));
 const Sources = React.lazy(() => import('../../features/research/Sources').then((m) => ({ default: m.Sources })));
@@ -196,6 +197,7 @@ export function ResearchWorkbench(props: ResearchWorkbenchProps): React.ReactEle
   // The project AI (P4). The header's Ask button and Cmd/Ctrl+K open the
   // docked panel here instead of the global capsule.
   const userId = useCurrentUserId();
+  const aiSync = useAiSync(projectId, userId);
   const setAiOpen = controller.setAiOpen;
   React.useEffect(
     () =>
@@ -267,6 +269,9 @@ export function ResearchWorkbench(props: ResearchWorkbenchProps): React.ReactEle
               userId={userId}
               context={aiContext}
               onClose={() => setAiOpen(false)}
+              {...(aiSync.sync ? { sync: aiSync.sync } : {})}
+              role={aiSync.role}
+              memberNames={aiSync.memberNames}
               onOpenArgument={(claimId) =>
                 open({ kind: 'argument', id: projectId, ...(claimId ? { params: { point: claimId } } : {}) })
               }

@@ -65,6 +65,14 @@ import type {
 } from '../../domain/collaboration';
 import type { ResearchTask } from '../../domain/researchDesign';
 import {
+  isAiDraftDecision,
+  isAiMessage,
+  isAiThread,
+  type AiDraftDecision,
+  type AiMessage,
+  type AiThread,
+} from '../../domain/aiThread';
+import {
   type CollabGateway,
   type CollabOp,
   type CollabOpKind,
@@ -232,6 +240,12 @@ export interface ResearchApplyTarget {
    * `task-shared` op will land the full row).
    */
   getTask(id: string): Promise<ResearchTask | null>;
+  /** v0.5 P4b: store a shared AI thread received from another member. */
+  applyAiThread?(row: AiThread): Promise<void>;
+  /** Append a remote message; a message that already exists is skipped. */
+  applyAiMessage?(row: AiMessage): Promise<void>;
+  /** Append a remote draft decision; an existing one is skipped. */
+  applyAiDraftDecision?(row: AiDraftDecision): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -519,6 +533,30 @@ async function applyRemoteOp(
     case 'conflict-detected': {
       const row = payload as Conflict;
       await deps.collabRepository.upsertConflict(row);
+      return false;
+    }
+    // v0.5 P4b: shared AI threads. Remote rows are validated again here
+    // (the server checks authorship; the client checks shape) and are
+    // written as-is: messages and decisions are append-only, so a row
+    // that already exists is skipped. A remote decision is recorded, not
+    // re-applied: canonical Research objects stay local (ADR-003 §5).
+    case 'ai-thread-created':
+    case 'ai-thread-updated': {
+      if (!deps.researchRepository?.applyAiThread) return false;
+      if (!isAiThread(payload) || payload.visibility !== 'shared' || payload.projectId !== op.projectId) return false;
+      await deps.researchRepository.applyAiThread(payload);
+      return false;
+    }
+    case 'ai-message-appended': {
+      if (!deps.researchRepository?.applyAiMessage) return false;
+      if (!isAiMessage(payload) || payload.projectId !== op.projectId) return false;
+      await deps.researchRepository.applyAiMessage(payload);
+      return false;
+    }
+    case 'ai-draft-decided': {
+      if (!deps.researchRepository?.applyAiDraftDecision) return false;
+      if (!isAiDraftDecision(payload) || payload.projectId !== op.projectId) return false;
+      await deps.researchRepository.applyAiDraftDecision(payload);
       return false;
     }
   }

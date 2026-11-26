@@ -58,6 +58,7 @@
  * production tree does not see this.
  */
 
+import { aiApplyTarget } from '../../application/research/aiSync';
 import React from 'react';
 import { isFeatureEnabled } from '../feature-flags';
 import { useAuth } from '../../lib/auth';
@@ -355,6 +356,8 @@ export function CollaborationWiring(
         getTask: async (id) => {
           return sharedResearchRepo.getTask(id);
         },
+        // v0.5 P4b: shared AI threads from other members.
+        ...aiApplyTarget(sharedResearchRepo),
       }
     : null;
 

@@ -60,7 +60,8 @@ function makeMockApp() {
   // auth header) and the collab router.
   const express = require('express');
   const app = express();
-  app.use(express.json());
+  // Same body limit as backend/index.js.
+  app.use(express.json({ limit: '10mb' }));
   app.use((req, res, next) => {
     // Auth simulation: every test passes a
     // header `x-test-user: <userId>` and
@@ -650,3 +651,72 @@ function getJson(app, path, headers = {}) {
     server.on('error', reject);
   });
 }
+
+// ---------------------------------------------------------------------------
+// v0.5 P4b: shared project AI threads (ADR-003 §5)
+// ---------------------------------------------------------------------------
+
+async function aiHarness() {
+  const { mockDb, router } = makeHarness();
+  seedUsers(mockDb, [
+    { id: 'u-a', display_name: 'A' },
+    { id: 'u-e', display_name: 'E' },
+    { id: 'u-c', display_name: 'C' },
+    { id: 'u-v', display_name: 'V' },
+  ]);
+  seedWorkspace(mockDb, 'u-a');
+  const app = makeMockApp();
+  app.use('/api/collab', router);
+  await postJson(app, '/api/collab/projects', { id: 'p-1', name: 'P1', kind: 'empirical', owner_user_id: 'u-a' }, { 'x-test-user': 'u-a' });
+  for (const [user, role] of [['u-e', 'editor'], ['u-c', 'commenter'], ['u-v', 'viewer']]) {
+    await postJson(app, '/api/collab/projects/p-1/memberships', { user_id: user, role, display_name: user }, { 'x-test-user': 'u-a' });
+  }
+  let n = 0;
+  const push = async (user, kind, payload) => {
+    n += 1;
+    const client = `cli_${user}`;
+    const res = await postJson(app, '/api/collab/projects/p-1/push', {
+      client_id: client,
+      ops: [{ id: `op_${n}`, client_id: client, kind, payload_json: typeof payload === 'string' ? payload : JSON.stringify(payload) }],
+    }, { 'x-test-user': user });
+    return res.body.rejected[0]?.reason ?? 'accepted';
+  };
+  return { push };
+}
+
+const thread = (over = {}) => ({ id: 't-1', projectId: 'p-1', title: 'T', visibility: 'shared', createdBy: 'u-a', createdAt: 'x', updatedAt: 'x', archivedAt: null, ...over });
+const message = (over = {}) => ({ id: 'm-1', threadId: 't-1', projectId: 'p-1', role: 'user', authorId: 'u-a', body: 'hi', context: [], drafts: [], provider: null, status: 'complete', createdAt: 'x', ...over });
+
+test('P4b: owners and editors post to shared AI threads; commenters and viewers cannot', async () => {
+  const { push } = await aiHarness();
+  assert.equal(await push('u-a', 'ai-thread-created', thread()), 'accepted');
+  assert.equal(await push('u-a', 'ai-message-appended', message()), 'accepted');
+  assert.equal(await push('u-e', 'ai-message-appended', message({ id: 'm-2', authorId: 'u-e', role: 'assistant' })), 'accepted');
+  assert.match(await push('u-c', 'ai-message-appended', message({ id: 'm-3', authorId: 'u-c' })), /role commenter cannot push/);
+  assert.match(await push('u-v', 'ai-thread-created', thread({ id: 't-2', createdBy: 'u-v' })), /role viewer cannot push/);
+});
+
+test('P4b: AI records must name the caller — no posting as someone else', async () => {
+  const { push } = await aiHarness();
+  assert.equal(await push('u-e', 'ai-thread-created', thread({ createdBy: 'u-a' })), 'thread creator mismatch');
+  assert.equal(await push('u-a', 'ai-thread-created', thread()), 'accepted');
+  assert.equal(await push('u-e', 'ai-message-appended', message({ authorId: 'u-a' })), 'message author mismatch');
+  assert.equal(
+    await push('u-e', 'ai-draft-decided', { id: 'd-1', projectId: 'p-1', threadId: 't-1', messageId: 'm-1', draftId: 'x', decision: 'applied', decidedBy: 'u-a', decidedAt: 'x', resultRef: null }),
+    'decision author mismatch',
+  );
+  assert.equal(await push('u-e', 'ai-thread-created', thread({ createdBy: 'u-e' })), 'thread id already taken');
+});
+
+test('P4b: messages need a shared thread in the same project; private threads never sync', async () => {
+  const { push } = await aiHarness();
+  assert.equal(await push('u-a', 'ai-message-appended', message()), 'thread is not shared in this project');
+  assert.equal(await push('u-a', 'ai-thread-created', thread({ visibility: 'private' })), 'only shared threads are synced');
+  assert.equal(await push('u-a', 'ai-thread-created', thread({ projectId: 'p-2' })), 'payload projectId mismatch');
+  assert.equal(await push('u-a', 'ai-thread-updated', thread()), 'unknown thread');
+  assert.equal(await push('u-a', 'ai-thread-created', thread()), 'accepted');
+  assert.equal(await push('u-e', 'ai-thread-updated', thread({ title: 'Renamed' })), 'accepted');
+  assert.equal(await push('u-e', 'ai-thread-updated', thread({ createdBy: 'u-e' })), 'thread creator cannot change');
+  assert.equal(await push('u-a', 'ai-message-appended', 'null'), 'invalid payload');
+  assert.equal(await push('u-a', 'ai-message-appended', message({ body: 'x'.repeat(300 * 1024) })), 'payload exceeds 256 KiB');
+});

@@ -33,6 +33,7 @@ import type { ProviderRouter } from '../../features/ai/kernel/providerRouter';
 import { normaliseProviderError } from '../../features/ai/kernel/providerRouter';
 import type { ResearchRepository } from './researchRepository';
 import { addPoint } from './argument';
+import { isPublished, publishThread, type AiSyncPort } from './aiSync';
 
 // ---------------------------------------------------------------------------
 // Roles and copy
@@ -197,6 +198,8 @@ export interface PartnerDeps {
   readonly idFactory?: (prefix: string) => string;
   /** The signed-in user's id, or 'local'. */
   readonly userId: string;
+  /** P4b: sends shared threads to project members. Omit when not collaborating. */
+  readonly sync?: AiSyncPort;
 }
 
 function id(deps: PartnerDeps, prefix: string): string {
@@ -229,22 +232,33 @@ export async function createThread(
 }
 
 /** Private → shared only. Shared threads can't be made private again. */
-export async function shareThread(repository: ResearchRepository, threadId: string): Promise<AiThread> {
+export async function shareThread(
+  repository: ResearchRepository,
+  threadId: string,
+  deps?: Pick<PartnerDeps, 'sync'>,
+): Promise<AiThread> {
   const thread = await repository.getAiThread(threadId);
   if (!thread) throw new Error(`shareThread: thread ${threadId} not found.`);
   if (thread.visibility === 'shared') return thread;
   const next: AiThread = { ...thread, visibility: 'shared', updatedAt: nowIso() };
   await repository.transact(async (tx) => tx.putAiThread(next));
-  return next;
+  // Sharing publishes the conversation so far (ADR-003 §5).
+  return deps?.sync ? publishThread(repository, deps.sync, threadId) : next;
 }
 
-export async function renameThread(repository: ResearchRepository, threadId: string, title: string): Promise<AiThread> {
+export async function renameThread(
+  repository: ResearchRepository,
+  threadId: string,
+  title: string,
+  deps?: Pick<PartnerDeps, 'sync'>,
+): Promise<AiThread> {
   const thread = await repository.getAiThread(threadId);
   if (!thread) throw new Error(`renameThread: thread ${threadId} not found.`);
   const t = title.trim();
   if (!t) throw new Error('renameThread: a conversation needs a title.');
   const next: AiThread = { ...thread, title: t, updatedAt: nowIso() };
   await repository.transact(async (tx) => tx.putAiThread(next));
+  if (deps?.sync?.hasMembers && isPublished(next)) deps.sync.record({ kind: 'ai-thread-updated', payload: next });
   return next;
 }
 
@@ -281,16 +295,21 @@ export async function askPartner(
   if (thread && thread.projectId !== input.projectId) throw new Error('askPartner: thread belongs to another project.');
   const history = thread ? await repository.listAiMessages({ threadId: thread.id }) : [];
   const now = nowIso();
+  let isNewThread = false;
   if (!thread) {
+    isNewThread = true;
+    const visibility = input.visibility ?? 'shared';
     thread = {
       id: id(deps, 'thr'),
       projectId: input.projectId,
       title: titleFrom(input.move === 'ask' ? input.prompt : body),
-      visibility: input.visibility ?? 'shared',
+      visibility,
       createdBy: deps.userId,
       createdAt: now,
       updatedAt: now,
       archivedAt: null,
+      // Sent from the start when the project already has members.
+      ...(visibility === 'shared' && deps.sync?.hasMembers ? { publishedAt: now } : {}),
     };
   }
   const context = input.context.map((c) => ({ ...c, excerpt: c.excerpt === null ? null : clampExcerpt(c.excerpt) }));
@@ -315,6 +334,11 @@ export async function askPartner(
     tx.putAiThread(threadAtQuestion);
     tx.appendAiMessage(question);
   });
+  const sending = Boolean(deps.sync?.hasMembers) && isPublished(threadAtQuestion);
+  if (sending) {
+    if (isNewThread) deps.sync!.record({ kind: 'ai-thread-created', payload: threadAtQuestion });
+    deps.sync!.record({ kind: 'ai-message-appended', payload: question });
+  }
 
   let reply: AiMessage;
   try {
@@ -357,6 +381,7 @@ export async function askPartner(
     tx.putAiThread(finalThread);
     tx.appendAiMessage(reply);
   });
+  if (sending) deps.sync!.record({ kind: 'ai-message-appended', payload: reply });
   return { thread: finalThread, question, reply };
 }
 
@@ -371,20 +396,8 @@ export async function decideDraft(
   const earlier = await repository.listAiDraftDecisions({ threadId: input.message.threadId });
   if (earlier.some((d) => d.draftId === input.draftId)) throw new Error('decideDraft: this suggestion was already handled.');
 
-  let resultRef: AiDraftDecision['resultRef'] = null;
-  if (input.decision === 'applied') {
-    switch (draft.actionId) {
-      case 'add-point': {
-        const claim = await addPoint(repository, {
-          projectId: input.message.projectId,
-          title: draft.args.title ?? draft.summary,
-          aiDraftId: draft.draftId,
-        });
-        resultRef = { kind: 'claim', id: claim.id };
-        break;
-      }
-    }
-  }
+  const resultRef: AiDraftDecision['resultRef'] =
+    input.decision === 'applied' ? await AI_DRAFT_ACTIONS[draft.actionId](repository, draft, input.message) : null;
   const decision: AiDraftDecision = {
     id: id(deps, 'dec'),
     projectId: input.message.projectId,
@@ -397,5 +410,31 @@ export async function decideDraft(
     resultRef,
   };
   await repository.transact(async (tx) => tx.appendAiDraftDecision(decision));
+  const thread = await repository.getAiThread(input.message.threadId);
+  if (deps.sync?.hasMembers && thread && isPublished(thread)) deps.sync.record({ kind: 'ai-draft-decided', payload: decision });
   return decision;
 }
+
+/**
+ * Everything a draft card can do, in one place. Applying a card is the
+ * only path from AI text to the project, and each entry runs the same
+ * canonical use case the user's own action would. (Thread drafts are
+ * accepted here rather than through the capsule's ActionRegistry: they
+ * are already drafts, and registering them there would surface them as
+ * capsule chips.)
+ */
+export const AI_DRAFT_ACTIONS: Readonly<
+  Record<
+    AiDraftProposal['actionId'],
+    (repository: ResearchRepository, draft: AiDraftProposal, message: AiMessage) => Promise<AiDraftDecision['resultRef']>
+  >
+> = {
+  'add-point': async (repository, draft, message) => {
+    const claim = await addPoint(repository, {
+      projectId: message.projectId,
+      title: draft.args.title ?? draft.summary,
+      aiDraftId: draft.draftId,
+    });
+    return { kind: 'claim', id: claim.id };
+  },
+};

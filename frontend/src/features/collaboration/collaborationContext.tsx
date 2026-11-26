@@ -76,7 +76,11 @@ export interface CollaborationDeps {
       | 'comment-resolved'
       | 'activity-logged'
       | 'task-shared'
-      | 'conflict-detected';
+      | 'conflict-detected'
+      | 'ai-thread-created'
+      | 'ai-thread-updated'
+      | 'ai-message-appended'
+      | 'ai-draft-decided';
     readonly payload: unknown;
     readonly baseVersion?: number | string;
   }) => void;

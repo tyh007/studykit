@@ -19,6 +19,13 @@ import {
   shareThread,
 } from '../../application/research/aiPartner';
 import { contextKey } from '../../application/research/aiContext';
+import {
+  canPostShared,
+  isPublished,
+  listUnsentSharedThreads,
+  settleEarlierThreads,
+  type AiSyncPort,
+} from '../../application/research/aiSync';
 import type {
   AiContextRef,
   AiDraftDecision,
@@ -38,6 +45,12 @@ export interface ProjectAiPanelProps {
   readonly onClose: () => void;
   /** Open the argument, optionally at a point. */
   readonly onOpenArgument: (claimId?: string) => void;
+  /** P4b: present while the project has other members. */
+  readonly sync?: AiSyncPort;
+  /** The user's project role, or null when not collaborating. */
+  readonly role?: string | null;
+  /** userId → name, to label messages from other members. */
+  readonly memberNames?: Readonly<Record<string, string>>;
 }
 
 type Availability = 'checking' | 'available' | 'off';
@@ -76,7 +89,10 @@ function useThreads(projectId: string, activeId: string | null): ThreadData {
 export function ProjectAiPanel(props: ProjectAiPanelProps): React.ReactElement {
   const { projectId, userId } = props;
   const { repository, providerRouter } = useResearchDeps();
-  const deps = React.useMemo(() => ({ userId }), [userId]);
+  const sync = props.sync;
+  const role = props.role ?? null;
+  const deps = React.useMemo(() => ({ userId, ...(sync ? { sync } : {}) }), [userId, sync]);
+  const mayPostShared = canPostShared(role);
 
   const [activeId, setActiveIdState] = React.useState<string | null>(() => {
     try {
@@ -125,11 +141,13 @@ export function ProjectAiPanel(props: ProjectAiPanelProps): React.ReactElement {
   const [roleMenu, setRoleMenu] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [privateNew, setPrivateNew] = React.useState(false);
+  const [privateNew, setPrivateNew] = React.useState(!mayPostShared);
   const [removed, setRemoved] = React.useState<ReadonlySet<string>>(new Set());
   const context = props.context.filter((c) => !removed.has(contextKey(c)));
 
-  const canSend = availability === 'available' && Boolean(providerRouter) && !busy;
+  // Commenters and viewers read shared conversations but don't post.
+  const readOnly = !mayPostShared && active?.visibility === 'shared';
+  const canSend = availability === 'available' && Boolean(providerRouter) && !busy && !readOnly;
 
   const send = async (move: AiMove, extra: { role?: AiRole; ownIdeas?: string; prompt?: string } = {}): Promise<void> => {
     if (!providerRouter || !canSend) return;
@@ -144,7 +162,7 @@ export function ProjectAiPanel(props: ProjectAiPanelProps): React.ReactElement {
         providerRouter,
         {
           projectId,
-          ...(active ? { threadId: active.id } : { visibility: privateNew ? 'private' : 'shared' }),
+          ...(active ? { threadId: active.id } : { visibility: privateNew || !mayPostShared ? 'private' : 'shared' }),
           move,
           prompt,
           ...(extra.role ? { role: extra.role } : {}),
@@ -220,7 +238,11 @@ export function ProjectAiPanel(props: ProjectAiPanelProps): React.ReactElement {
       {active ? (
         <p className="ai-panel-visibility" data-testid="ai-visibility">
           {active.visibility === 'shared' ? (
-            'Shared with this project'
+            sync ? (
+              isPublished(active) ? 'Visible to project members' : 'Shared, not sent to members yet'
+            ) : (
+              'Shared with this project'
+            )
           ) : (
             <>
               Private ·{' '}
@@ -229,7 +251,7 @@ export function ProjectAiPanel(props: ProjectAiPanelProps): React.ReactElement {
                 className="ai-link"
                 onClick={() => {
                   if (window.confirm('Share this conversation with the project? Members will see every message so far. This can’t be undone.')) {
-                    void shareThread(repository, active.id);
+                    void shareThread(repository, active.id, deps);
                   }
                 }}
               >
@@ -240,13 +262,21 @@ export function ProjectAiPanel(props: ProjectAiPanelProps): React.ReactElement {
         </p>
       ) : null}
 
+      {sync ? <EarlierThreads projectId={projectId} userId={userId} sync={sync} /> : null}
+
       <div className="ai-panel-body" aria-live="polite">
         {data.messages.length === 0 && !busy ? (
           <div className="ai-intro" data-testid="ai-intro">
             <p>Think out loud here. I answer in small steps and leave the writing to you.</p>
             <label className="ai-private">
-              <input type="checkbox" checked={privateNew} onChange={(e) => setPrivateNew(e.target.checked)} data-testid="ai-private" />
-              Keep this conversation to myself
+              <input
+                type="checkbox"
+                checked={privateNew || !mayPostShared}
+                disabled={!mayPostShared}
+                onChange={(e) => setPrivateNew(e.target.checked)}
+                data-testid="ai-private"
+              />
+              {mayPostShared ? 'Keep this conversation to myself' : 'Your conversations here are private to you'}
             </label>
           </div>
         ) : null}
@@ -260,6 +290,7 @@ export function ProjectAiPanel(props: ProjectAiPanelProps): React.ReactElement {
               onRetry={() => retry(m)}
               onOpenArgument={props.onOpenArgument}
               canRetry={canSend}
+              authorName={m.authorId !== userId ? (props.memberNames?.[m.authorId] ?? 'Another member') : null}
             />
           ))}
           {busy ? (
@@ -289,6 +320,11 @@ export function ProjectAiPanel(props: ProjectAiPanelProps): React.ReactElement {
           </ul>
         ) : null}
 
+        {readOnly ? (
+          <p className="ai-off" role="note" data-testid="ai-read-only">
+            You can read this shared conversation. Owners and editors can post in it.
+          </p>
+        ) : null}
         {availability === 'off' ? (
           <p className="ai-off" role="note" data-testid="ai-off">
             AI is off. Start Ollama with a local model, or sign in to use cloud AI. Your conversations stay readable.
@@ -387,11 +423,14 @@ function MessageItem(props: {
   readonly onRetry: () => void;
   readonly onOpenArgument: (claimId?: string) => void;
   readonly canRetry: boolean;
+  /** Set when another member wrote or requested this message. */
+  readonly authorName: string | null;
 }): React.ReactElement {
   const m = props.message;
   if (m.role === 'user') {
     return (
       <li className="ai-message ai-message--user" data-testid="ai-message" data-role="user">
+        {props.authorName ? <p className="ai-meta">{props.authorName}</p> : null}
         <p className="ai-message-body">{m.body}</p>
         {m.skippedOwnThinking ? <p className="ai-meta">Asked before writing own ideas</p> : null}
       </li>
@@ -442,9 +481,83 @@ function MessageItem(props: {
         <p className="ai-meta ai-provenance">
           {m.provider.id === 'ollama' ? 'Local AI' : 'Cloud AI'}
           {m.provider.model ? ` · ${m.provider.model}` : ''}
+          {props.authorName ? ` · asked by ${props.authorName}` : ''}
           {m.context.length > 0 ? ` · saw ${m.context.map((c) => c.label).join(', ')}` : ''}
         </p>
       ) : null}
     </li>
+  );
+}
+
+/**
+ * The one-time choice when a project gains members: which shared
+ * conversations written while alone may they see? Nothing has been sent
+ * yet; the ones left unticked become private.
+ */
+function EarlierThreads(props: { readonly projectId: string; readonly userId: string; readonly sync: AiSyncPort }): React.ReactElement | null {
+  const { repository } = useResearchDeps();
+  const [pending, setPending] = React.useState<readonly AiThread[]>([]);
+  const [chosen, setChosen] = React.useState<ReadonlySet<string>>(new Set());
+  const [busy, setBusy] = React.useState(false);
+  React.useEffect(() => {
+    let cancelled = false;
+    const refresh = (): void => {
+      void listUnsentSharedThreads(repository, props.projectId, props.userId).then((rows) => {
+        if (cancelled) return;
+        setPending(rows);
+        setChosen(new Set(rows.map((r) => r.id)));
+      });
+    };
+    refresh();
+    const off = repository.subscribe(refresh);
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, [repository, props.projectId, props.userId]);
+  if (pending.length === 0) return null;
+  return (
+    <section className="ai-earlier" data-testid="ai-earlier" aria-label="Earlier conversations">
+      <p>This project now has other members. Which of your earlier conversations may they see?</p>
+      <ul>
+        {pending.map((t) => (
+          <li key={t.id}>
+            <label>
+              <input
+                type="checkbox"
+                checked={chosen.has(t.id)}
+                onChange={(e) =>
+                  setChosen((prev) => {
+                    const next = new Set(prev);
+                    if (e.target.checked) next.add(t.id);
+                    else next.delete(t.id);
+                    return next;
+                  })
+                }
+                data-testid="ai-earlier-thread"
+              />
+              {t.title}
+            </label>
+          </li>
+        ))}
+      </ul>
+      <p className="ai-meta">Unticked ones become private to you.</p>
+      <Button
+        variant="primary"
+        size="sm"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          void settleEarlierThreads(repository, props.sync, {
+            projectId: props.projectId,
+            userId: props.userId,
+            share: [...chosen],
+          }).finally(() => setBusy(false));
+        }}
+        data-testid="ai-earlier-confirm"
+      >
+        {chosen.size === 0 ? 'Keep them private' : `Share ${chosen.size === 1 ? '1 conversation' : `${chosen.size} conversations`}`}
+      </Button>
+    </section>
   );
 }

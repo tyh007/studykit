@@ -14,6 +14,8 @@ import { OpenAlexSearchProvider } from '../../application/research/openAlexProvi
 import type { ProviderChatRequest, ProviderRouter } from '../ai/kernel/providerRouter';
 import type { AiContextRef } from '../../domain/aiThread';
 import { makeResearchProject } from '../../domain/__fixtures__/domain-fixtures';
+import type { AiSyncOp, AiSyncPort } from '../../application/research/aiSync';
+import { askPartner } from '../../application/research/aiPartner';
 
 const P = 'p-001';
 const CONTEXT: AiContextRef[] = [
@@ -29,7 +31,7 @@ function makeRouter(reply = 'One study used only young adults. Does it hold for 
   return { router, chat };
 }
 
-function mount(router?: ProviderRouter) {
+function mount(router?: ProviderRouter, extra: Partial<React.ComponentProps<typeof ProjectAiPanel>> = {}) {
   const onOpenArgument = vi.fn();
   const value: ResearchContextValue = {
     repository: repo,
@@ -38,7 +40,7 @@ function mount(router?: ProviderRouter) {
   };
   const ui = (
     <ResearchProvider value={value}>
-      <ProjectAiPanel projectId={P} userId="u-1" context={CONTEXT} onClose={() => undefined} onOpenArgument={onOpenArgument} />
+      <ProjectAiPanel projectId={P} userId="u-1" context={CONTEXT} onClose={() => undefined} onOpenArgument={onOpenArgument} {...extra} />
     </ResearchProvider>
   );
   return { ...render(ui), onOpenArgument, ui };
@@ -154,5 +156,55 @@ describe('ProjectAiPanel', () => {
     expect(await screen.findByText('Couldn’t answer: Ollama is not running')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('ai-retry'));
     expect(await screen.findByText('Back now.')).toBeInTheDocument();
+  });
+
+  describe('with project members (P4b)', () => {
+    const port = (): AiSyncPort & { ops: AiSyncOp[] } => {
+      const ops: AiSyncOp[] = [];
+      return { hasMembers: true, ops, record: (op) => void ops.push(op) };
+    };
+
+    it('says who can see a conversation and sends new turns to members', async () => {
+      const { router } = makeRouter();
+      const sync = port();
+      mount(router, { sync, role: 'owner' });
+      await ask('For the team');
+      await waitFor(() => expect(screen.getByTestId('ai-visibility')).toHaveTextContent('Visible to project members'));
+      await waitFor(() => expect(sync.ops.map((o) => o.kind)).toEqual(['ai-thread-created', 'ai-message-appended', 'ai-message-appended']));
+    });
+
+    it('asks which earlier conversations members may see before sending any', async () => {
+      const { router } = makeRouter();
+      await askPartner(repo, router, { projectId: P, move: 'ask', prompt: 'Alone 1', context: [] }, { userId: 'u-1' });
+      await askPartner(repo, router, { projectId: P, move: 'ask', prompt: 'Alone 2', context: [] }, { userId: 'u-1' });
+      const sync = port();
+      mount(router, { sync, role: 'owner' });
+      const box = await screen.findByTestId('ai-earlier');
+      const boxes = within(box).getAllByTestId('ai-earlier-thread');
+      expect(boxes).toHaveLength(2);
+      expect(sync.ops).toEqual([]);
+      fireEvent.click(boxes[0]!);
+      fireEvent.click(within(box).getByTestId('ai-earlier-confirm'));
+      await waitFor(() => expect(screen.queryByTestId('ai-earlier')).not.toBeInTheDocument());
+      expect(sync.ops.filter((o) => o.kind === 'ai-thread-created')).toHaveLength(1);
+      const threads = await repo.listAiThreads({ projectId: P });
+      expect(threads.map((t) => t.visibility).sort()).toEqual(['private', 'shared']);
+    });
+
+    it('lets commenters read shared conversations, labels other members, and keeps their own private', async () => {
+      const { router } = makeRouter();
+      await askPartner(repo, router, { projectId: P, move: 'ask', prompt: 'From the owner', context: [] }, { userId: 'u-owner' });
+      localStorage.setItem('studykit.ai.activeThread.' + P, (await repo.listAiThreads({ projectId: P }))[0]!.id);
+      mount(router, { sync: port(), role: 'commenter', memberNames: { 'u-owner': 'Ana' } });
+      expect(await screen.findByTestId('ai-read-only')).toHaveTextContent('You can read this shared conversation');
+      expect(screen.getByTestId('ai-send')).toBeDisabled();
+      expect(screen.getAllByTestId('ai-message')[0]).toHaveTextContent('Ana');
+      expect(screen.getByText(/asked by Ana/)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId('ai-new-thread'));
+      expect(await screen.findByTestId('ai-private')).toBeChecked();
+      expect(screen.getByTestId('ai-private')).toBeDisabled();
+      expect(screen.queryByTestId('ai-read-only')).not.toBeInTheDocument();
+    });
   });
 });

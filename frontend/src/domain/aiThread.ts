@@ -23,6 +23,13 @@ export interface AiThread {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly archivedAt: string | null;
+  /**
+   * v0.5 P4b: when this device first sent the thread to project
+   * members (or received it from one). Absent while the thread has
+   * never left this device: a shared thread written while the user
+   * was alone in the project waits for an explicit decision.
+   */
+  readonly publishedAt?: string;
 }
 
 export type AiContextKind = 'project' | 'work' | 'evidence' | 'claim' | 'argument' | 'output' | 'note' | 'selection';
@@ -105,7 +112,8 @@ export function isAiThread(value: unknown): value is AiThread {
     str(v.createdBy) &&
     iso(v.createdAt) &&
     iso(v.updatedAt) &&
-    (v.archivedAt === null || iso(v.archivedAt))
+    (v.archivedAt === null || iso(v.archivedAt)) &&
+    (v.publishedAt === undefined || iso(v.publishedAt))
   );
 }
 
