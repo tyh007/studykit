@@ -810,8 +810,11 @@ describe('WP-05 invariant: incomplete locator in real UI', () => {
     const reader = await screen.findByTestId('research-reader');
     // Open the Drawer via a real DOM selection.
     // v0.5 P2: only selections inside the PDF area become excerpts.
-    const selectable = within(reader).getByTestId('research-reader-pdf-area');
+    // Append a fixture rather than overwrite the area: React owns the
+    // nodes already in there and re-renders them.
+    const selectable = document.createElement('p');
     selectable.textContent = 'test quote for drawer';
+    within(reader).getByTestId('research-reader-pdf-area').appendChild(selectable);
     setupSelection(selectable, 'test quote for drawer');
     await screen.findByTestId('selection-action-bar');
     await user.click(screen.getByTestId('selection-action-evidence'));

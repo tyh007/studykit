@@ -14,7 +14,7 @@ import { isFeatureEnabled } from '../feature-flags';
 import { makeAppLocation, type AppLocation, type ContainerRef } from '../../domain/workspace';
 import type { EditorInput } from '../../features/workbench/workbenchState';
 
-/** Research editor kinds registered in the workbench (P1). */
+/** Research editor kinds registered in the workbench (P1; `argument` since P3). */
 export type ResearchEditorKind =
   | 'overview'
   | 'library'
@@ -22,12 +22,13 @@ export type ResearchEditorKind =
   | 'work'
   | 'evidence'
   | 'output'
+  | 'argument'
   | 'design'
   | 'task'
   | 'canvas';
 
 const RESEARCH_EDITOR_KINDS: ReadonlySet<string> = new Set<ResearchEditorKind>([
-  'overview', 'library', 'search', 'work', 'evidence', 'output', 'design', 'task', 'canvas',
+  'overview', 'library', 'search', 'work', 'evidence', 'output', 'argument', 'design', 'task', 'canvas',
 ]);
 
 /** Project-scoped Research surfaces the workbench replaces. */

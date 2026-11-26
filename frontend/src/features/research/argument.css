@@ -1,0 +1,404 @@
+/* v0.5 P3 — argument editor */
+
+.argument {
+  container-type: size;
+  container-name: argument;
+  height: 100%;
+  min-height: 0;
+}
+
+.argument-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.argument-layout.has-peek {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.argument-main {
+  overflow: auto;
+  padding: 24px clamp(16px, 4vw, 40px) 48px;
+  min-width: 0;
+}
+
+.argument-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.argument-header h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  color: var(--text);
+}
+
+.argument-question {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  max-width: 60ch;
+}
+
+.argument-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.argument-error {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--warning-subtle, transparent);
+  border: 1px solid var(--warning-border, var(--border-glass));
+  color: var(--text);
+}
+
+.argument-empty {
+  color: var(--text-secondary);
+  margin: 8px 0 16px;
+}
+
+.argument-points {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 16px;
+}
+
+.argument-point {
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md, 12px);
+  background: var(--surface-elevated, var(--surface));
+  padding: 14px 16px 16px;
+  transition: box-shadow 0.2s ease;
+}
+
+.argument-point.is-focused {
+  box-shadow: 0 0 0 2px var(--accent-butter, var(--border-glass-strong));
+}
+
+.argument-point-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.argument-point-number {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.8rem;
+  background: var(--border-glass);
+  color: var(--text-secondary);
+}
+
+.argument-point.is-complete .argument-point-number {
+  background: var(--success-subtle, var(--border-glass));
+  color: var(--text);
+}
+
+.argument-point-title {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs, 6px);
+  padding: 4px 6px;
+}
+
+.argument-point-title:hover,
+.argument-point-title:focus {
+  border-color: var(--border-glass);
+  outline: none;
+}
+
+.argument-point-status {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.argument-point.is-complete .argument-point-status {
+  color: var(--success, var(--text-secondary));
+}
+
+.argument-point-move {
+  display: flex;
+  gap: 2px;
+}
+
+.argument-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.argument-slot {
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-sm, 8px);
+  padding: 10px 12px;
+  min-width: 0;
+}
+
+.argument-slot.is-gap {
+  border-style: dashed;
+  border-color: var(--warning-border, var(--border-glass));
+  background: var(--warning-subtle, transparent);
+}
+
+.argument-slot h3 {
+  margin: 0 0 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.argument-gap-text,
+.argument-none,
+.argument-soft-hint {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.argument-soft-hint {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.argument-cites {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.argument-cite {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.argument-cite-open,
+.argument-picker li > button {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs, 6px);
+  padding: 4px 6px;
+  cursor: pointer;
+}
+
+.argument-cite-open:hover,
+.argument-picker li > button:hover {
+  background: var(--border-glass);
+}
+
+.argument-cite-quote {
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.argument-cite-where {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.argument-reasoning {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs, 6px);
+  padding: 4px 6px;
+}
+
+.argument-reasoning:focus {
+  outline: none;
+  border-color: var(--border-glass);
+  background: var(--surface, transparent);
+}
+
+.argument-slot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.argument-link {
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.argument-link:hover {
+  color: var(--text);
+}
+
+.argument-icon {
+  flex: none;
+  font: inherit;
+  line-height: 1;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-radius: var(--radius-xs, 6px);
+  padding: 4px 6px;
+  cursor: pointer;
+}
+
+.argument-icon:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--border-glass);
+}
+
+.argument-icon:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.argument-picker {
+  margin-top: 8px;
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--bg-solid, var(--surface-elevated, var(--surface)));
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.argument-picker input {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 6px 8px;
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-xs, 6px);
+  background: transparent;
+  color: var(--text);
+}
+
+.argument-picker ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.argument-picker-empty {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  padding: 4px 6px;
+}
+
+.argument-picker-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.argument-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.argument-add input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px dashed var(--border-glass-strong, var(--border-glass));
+  border-radius: var(--radius-sm, 8px);
+  background: transparent;
+  color: var(--text);
+}
+
+.argument-peek {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  border-left: 1px solid var(--border-glass);
+  overflow: auto;
+}
+
+.argument-peek-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-glass);
+  position: sticky;
+  top: 0;
+  background: var(--bg-solid, var(--surface-elevated, var(--surface)));
+  z-index: 1;
+}
+
+.argument-peek-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  font-size: 0.88rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.argument-peek-hint {
+  margin: 6px 12px 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* Stack the source under the argument when the editor itself is narrow. */
+@container argument (max-width: 960px) {
+  .argument-layout.has-peek {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .argument-peek {
+    border-left: none;
+    border-top: 1px solid var(--border-glass);
+  }
+}

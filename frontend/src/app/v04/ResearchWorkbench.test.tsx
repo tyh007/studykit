@@ -35,6 +35,9 @@ vi.mock('../../features/research/EvidenceWorkspace', () => ({
   EvidenceWorkspace: () => <div data-testid="stub-evidence" />,
 }));
 vi.mock('../../features/research/OutputWorkspace', () => ({ OutputWorkspace: () => <div data-testid="stub-output" /> }));
+vi.mock('../../features/research/ArgumentEditor', () => ({
+  ArgumentEditor: (p: { focusPointId?: string }) => <div data-testid="stub-argument">{p.focusPointId ?? ''}</div>,
+}));
 vi.mock('../../features/research/DesignWorkspace', () => ({ DesignWorkspace: () => <div data-testid="stub-design" /> }));
 vi.mock('../../features/research/TaskDetail', () => ({ TaskDetail: () => <div data-testid="stub-task" /> }));
 
@@ -230,5 +233,24 @@ describe('Research workbench', () => {
     fireEvent.click(within(panel).getByTestId('workbench-panel-toggle'));
     expect(within(panel).queryAllByTestId('ledger-gap')).toHaveLength(0);
     expect(within(panel).getByTestId('workbench-panel-toggle')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('lists the argument under Writing and sends a point’s gap to it', async () => {
+    const repo = await seed(1);
+    mount(repo, makeAppLocation({ mode: 'research', surface: 'project', container }));
+    await screen.findByTestId('stub-overview');
+    expect(screen.queryByTestId('workbench-explorer-argument')).not.toBeInTheDocument();
+
+    await act(async () => {
+      await repo.transact(async (tx) => {
+        tx.putClaim(makeClaim({ id: 'c-1', projectId: P, title: 'Sleep helps memory' }));
+      });
+    });
+    const gap = await screen.findByTestId('ledger-gap');
+    expect(gap.dataset.gapKind).toBe('no-support');
+    fireEvent.click(gap);
+    expect(await screen.findByTestId('stub-argument')).toHaveTextContent('c-1');
+    expect(screen.getByTestId('workbench-explorer-argument')).toHaveAttribute('aria-current', 'true');
+    await waitFor(() => expect(locationStore.getSnapshot().params?.open).toBe(`argument:${P}`));
   });
 });

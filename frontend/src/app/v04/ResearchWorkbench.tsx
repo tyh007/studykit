@@ -31,6 +31,7 @@ const Sources = React.lazy(() => import('../../features/research/Sources').then(
 const Discovery = React.lazy(() => import('../../features/research/Discovery').then((m) => ({ default: m.Discovery })));
 const ResearchReader = React.lazy(() => import('../../features/research/ResearchReader').then((m) => ({ default: m.ResearchReader })));
 const EvidenceWorkspace = React.lazy(() => import('../../features/research/EvidenceWorkspace').then((m) => ({ default: m.EvidenceWorkspace })));
+const ArgumentEditor = React.lazy(() => import('../../features/research/ArgumentEditor').then((m) => ({ default: m.ArgumentEditor })));
 const OutputWorkspace = React.lazy(() => import('../../features/research/OutputWorkspace').then((m) => ({ default: m.OutputWorkspace })));
 const DesignWorkspace = React.lazy(() => import('../../features/research/DesignWorkspace').then((m) => ({ default: m.DesignWorkspace })));
 const TaskDetail = React.lazy(() => import('../../features/research/TaskDetail').then((m) => ({ default: m.TaskDetail })));
@@ -49,7 +50,7 @@ interface ProjectIndex {
   readonly links: readonly ClaimEvidenceLink[];
 }
 
-const TRANSIENT_PARAMS: readonly string[] = ['add', 'details'];
+const TRANSIENT_PARAMS: readonly string[] = ['add', 'details', 'point'];
 
 const EMPTY_INDEX: ProjectIndex = {
   loaded: false,
@@ -176,7 +177,10 @@ export function ResearchWorkbench(props: ResearchWorkbenchProps): React.ReactEle
     [controller],
   );
 
-  const editors = useResearchEditors(projectId, open, canvasRuntime);
+  // Editors are memoised; they read the latest excerpts through a ref.
+  const evidenceRef = React.useRef(index.evidence);
+  evidenceRef.current = index.evidence;
+  const editors = useResearchEditors(projectId, open, canvasRuntime, evidenceRef);
   const ledger = React.useMemo(
     () => buildLedger({ claims: index.claims, evidence: index.evidence, links: index.links }),
     [index.claims, index.evidence, index.links],
@@ -196,6 +200,8 @@ export function ResearchWorkbench(props: ResearchWorkbenchProps): React.ReactEle
         return 'Excerpts and points';
       case 'output':
         return index.outputs.find((o) => o.id === input.id)?.title ?? 'Writing';
+      case 'argument':
+        return 'Argument';
       case 'design':
         return 'Research design';
       case 'task':
@@ -341,12 +347,13 @@ function ResearchExplorer(props: ExplorerProps): React.ReactElement {
         </section>
       )}
 
-      {index.outputs.length > 0 && (
+      {(index.outputs.length > 0 || points > 0) && (
         <section className="workbench-explorer-group" aria-labelledby="workbench-group-writing">
           <div className="workbench-explorer-group-header">
             <h2 id="workbench-group-writing">Writing</h2>
           </div>
           <ul className="workbench-explorer-list" data-testid="workbench-explorer-writing">
+            {points > 0 && item({ kind: 'argument', id: projectId }, 'Argument', 'workbench-explorer-argument')}
             {index.outputs.map((o) => item({ kind: 'output', id: o.id }, o.title, 'workbench-explorer-output'))}
           </ul>
         </section>
@@ -424,7 +431,7 @@ function LedgerPanel(props: {
         const target: EditorInput =
           gap.kind === 'unconnected-excerpt'
             ? { kind: 'work', id: gap.workId, ...(gap.pageNumber ? { params: { page: String(gap.pageNumber) } } : {}) }
-            : { kind: 'evidence', id: props.projectId };
+            : { kind: 'argument', id: props.projectId, params: { point: gap.claimId } };
         const key = gap.kind === 'unconnected-excerpt' ? gap.evidenceId : `${gap.kind}:${gap.claimId}`;
         return (
           <li key={key}>
@@ -453,12 +460,21 @@ function useResearchEditors(
   projectId: string,
   open: (input: EditorInput) => void,
   canvasRuntime: ReturnType<typeof useCanvasRuntime>,
+  evidenceRef: React.MutableRefObject<readonly Evidence[]>,
 ): Readonly<Record<string, EditorDefinition>> {
   return React.useMemo(() => {
     const overview = (): void => open({ kind: 'overview', id: projectId });
     const library = (): void => open({ kind: 'library', id: projectId });
     const evidence = (): void => open({ kind: 'evidence', id: projectId });
     const work = (workId: string): void => open({ kind: 'work', id: workId });
+    const source = (workId: string, pageNumber?: number): void =>
+      open({ kind: 'work', id: workId, ...(pageNumber ? { params: { page: String(pageNumber) } } : {}) });
+    // A citation in a draft opens its source at the cited page.
+    const excerpt = ({ evidenceId }: { evidenceId: string }): void => {
+      const e = evidenceRef.current.find((x) => x.id === evidenceId);
+      if (e) source(e.workId, e.locator.pageNumber);
+      else evidence();
+    };
 
     const editors: Record<string, EditorDefinition> = {
       overview: {
@@ -527,9 +543,20 @@ function useResearchEditors(
             projectId={projectId}
             outputId={input.id}
             onBackToProject={overview}
-            onJumpToEvidence={evidence}
-            onJumpToClaim={evidence}
+            onJumpToEvidence={excerpt}
+            onJumpToClaim={({ claimId }) => open({ kind: 'argument', id: projectId, params: { point: claimId } })}
             onOpenReader={({ workId }) => work(workId)}
+          />
+        ),
+      },
+      argument: {
+        render: (input) => (
+          <ArgumentEditor
+            projectId={projectId}
+            {...(input.params?.point ? { focusPointId: input.params.point } : {})}
+            onOpenSource={({ workId, pageNumber }) => source(workId, pageNumber)}
+            onOpenOutput={(outputId) => open({ kind: 'output', id: outputId })}
+            onOpenSources={library}
           />
         ),
       },

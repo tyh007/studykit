@@ -256,6 +256,15 @@ What shipped in P1 and where it differs from the decisions above:
 - **Fix found on the way.** `LiteraturePDFViewer` rendered only a canvas, so PDF text could not be selected in the real app; selection capture only worked in tests. It now renders pdf.js's `TextLayer` (minimal CSS in `pdf-text-layer.css`), and the canvas is no longer scaled down by `max-width`, which would misalign the text layer.
 - Selections outside the PDF area are ignored; excerpts are capped at 2,000 characters (previously 240, silently).
 
+## P3 implementation notes (2026-11-26)
+
+- **Argument editor (`argument` kind, one per project).** The project's points in order, each with four slots: *Evidence* (supports), *Why it holds* (the claim body), *Against it* (contradicts) and *Limits* (qualifies). An empty slot is a dashed gap with one action. *Against it* and *Limits* can instead be marked "Looked — none found", so a point is complete only when the user has considered each slot, not merely filled the easy ones.
+- **No new tables.** Slots are `ClaimEvidenceLink`s, reasoning is `Claim.body`, and order plus the two "none found" marks live in a new optional `Claim.argument` field (`order`, `noCounter`, `noLimits`). Older records without it sort by creation time. Web (Dexie) and desktop (`domain_records`) storage are unchanged.
+- **Only checked excerpts can be cited** (`citeInSlot` rejects candidates; citing the same excerpt in the same slot twice is a no-op). The picker lists only verified excerpts; when there are none, it offers to open a source beside the argument to highlight one (P2 capture), which updates the argument live.
+- **Sources beside the argument.** Clicking a cite opens the Reader at that page in a side pane inside the editor (stacked when the editor is narrower than 960 px, via a container query), with "Open in a tab". The general split-editor layout stays out of scope.
+- **Write it up.** Enabled only when every slot of every point is filled or considered. `composeArgumentDraft` writes, in one transaction, a new Output ("Draft from your argument", numbered if taken): one section per point and one statement per filled slot, with every cited excerpt attached as a `StatementSupport` of the matching relation. The text is assembled from the user's own words (point, reasoning, notes); no AI. In the workbench, a draft's evidence citation opens the source at the cited page.
+- "What's missing" point gaps now open the argument scrolled to that point; the explorer lists *Argument* under *Writing* once the project has an excerpt or a point.
+
 ## Alternatives rejected
 
 - **Keep page routing and add a side AI panel.** Fixes AI scope but not the one-object-at-a-time problem.

@@ -956,6 +956,27 @@ export interface Claim {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly authorType: 'user' | 'ai';
+  /** v0.5 P3: where the point sits in the argument, and which optional
+   *  slots the user looked at and found nothing for. Absent on older
+   *  records; `body` holds the point's reasoning ("why it holds"). */
+  readonly argument?: ClaimArgumentMeta;
+}
+
+export interface ClaimArgumentMeta {
+  readonly order?: number;
+  /** The user looked for counter-evidence and found none. */
+  readonly noCounter?: boolean;
+  /** The user considered the limits and found none worth stating. */
+  readonly noLimits?: boolean;
+}
+
+function isClaimArgumentMeta(value: unknown): value is ClaimArgumentMeta {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  if (v.order !== undefined && (typeof v.order !== 'number' || !Number.isFinite(v.order))) return false;
+  if (v.noCounter !== undefined && typeof v.noCounter !== 'boolean') return false;
+  if (v.noLimits !== undefined && typeof v.noLimits !== 'boolean') return false;
+  return true;
 }
 
 export function isClaim(value: unknown): value is Claim {
@@ -972,6 +993,7 @@ export function isClaim(value: unknown): value is Claim {
   if (typeof v.createdAt !== 'string' || v.createdAt.length === 0) return false;
   if (typeof v.updatedAt !== 'string' || v.updatedAt.length === 0) return false;
   if (v.authorType !== 'user' && v.authorType !== 'ai') return false;
+  if (v.argument !== undefined && !isClaimArgumentMeta(v.argument)) return false;
   return true;
 }
 
