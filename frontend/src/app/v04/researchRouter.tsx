@@ -43,6 +43,7 @@ import { useLocation, locationStore } from './locationStore';
 import { makeAppLocation, type ContainerRef } from '../../domain/workspace';
 import { useCanvasRuntime } from './canvasWiringContext';
 import type { CanvasObjectRef } from '../../domain/canvas';
+import { isWorkbenchLocation } from './workbenchRoutes';
 
 const ResearchHome = React.lazy(() => import('../../features/research/ResearchHome').then((module) => ({ default: module.ResearchHome })));
 const ProjectHome = React.lazy(() => import('../../features/research/ProjectHome').then((module) => ({ default: module.ProjectHome })));
@@ -55,6 +56,9 @@ const DesignWorkspace = React.lazy(() => import('../../features/research/DesignW
 const TaskDetail = React.lazy(() => import('../../features/research/TaskDetail').then((module) => ({ default: module.TaskDetail })));
 const OutputWorkspace = React.lazy(() => import('../../features/research/OutputWorkspace').then((module) => ({ default: module.OutputWorkspace })));
 const CognitiveCanvasView = React.lazy(() => import('../../features/canvas/CognitiveCanvasView').then((module) => ({ default: module.CognitiveCanvasView })));
+// v0.5 (ADR-003): project-scoped surfaces render inside one workbench when
+// `v05Workbench` is on.
+const ResearchWorkbench = React.lazy(() => import('./ResearchWorkbench').then((module) => ({ default: module.ResearchWorkbench })));
 
 export function ResearchRouter(): React.ReactElement | null {
   // ============================================================
@@ -75,6 +79,10 @@ export function ResearchRouter(): React.ReactElement | null {
 
   if (!flagOn) return null;
   if (location.mode !== 'research') return null;
+
+  if (isWorkbenchLocation(location) && location.container) {
+    return <ResearchWorkbench projectId={location.container.id} />;
+  }
 
   if (location.surface === 'research-home') {
     return (

@@ -40,11 +40,8 @@ interface FakeTable<T extends { id: string }> {
   get(id: string): Promise<T | undefined>;
   put(row: T): Promise<unknown>;
   delete(id: string): Promise<void>;
-  hook(hooks: {
-    creating?: (key: string, obj: T) => void;
-    updating?: (modifications: Partial<T>, key: string, obj: T) => void;
-    deleting?: (key: string) => void;
-  }): void;
+  // Dexie 4 event form: `table.hook('creating', fn)`.
+  hook(event: 'creating' | 'updating' | 'deleting', subscriber: (...args: never[]) => void): void;
   clear(): Promise<void>;
   __txBegin(): void;
   __txCommit(): void;
@@ -85,10 +82,8 @@ function makeFakeTable<T extends { id: string }>(): FakeTable<T> {
       rows.delete(id);
       hooks.deleting?.(id);
     },
-    hook: (h) => {
-      hooks.creating = h.creating;
-      hooks.updating = h.updating;
-      hooks.deleting = h.deleting;
+    hook: (event, subscriber) => {
+      (hooks as Record<string, unknown>)[event] = subscriber;
     },
     clear: async () => rows.clear(),
     __txBegin: begin,

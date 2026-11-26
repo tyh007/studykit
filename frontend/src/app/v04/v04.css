@@ -521,6 +521,21 @@
   min-height: 100%;
 }
 
+/* v0.5 Research workbench (ADR-003): the workbench brings its own
+   explorer, so the shell sidebar is hidden and the surface fills the area. */
+.v04-workspace-layout--workbench {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.v04-workspace-layout--workbench .v04-active-surface {
+  overflow: hidden;
+}
+
+.v04-workspace-layout--workbench .v04-active-surface > .workbench {
+  width: 100%;
+  margin: 0;
+}
+
 .v04-legacy-leaf > .app-body > .sidebar {
   display: none;
 }

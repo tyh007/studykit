@@ -107,6 +107,7 @@ describe('workspace domain contract', () => {
         'research-canvas',
         'cognitive-canvas',
         'output',
+        'workbench',
         'search',
         'settings',
       ]) {
@@ -163,6 +164,7 @@ describe('workspace domain contract', () => {
         'evidence',
         'research-canvas',
         'output',
+        'workbench',
         'search',
         'settings',
       ];

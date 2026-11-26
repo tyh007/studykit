@@ -33,8 +33,9 @@ describe('WP-11 route chunk architecture', () => {
     // WP-11R2: the unified `Sources` surface is a
     // thin lazy wrapper that composes Library +
     // Discovery (both still lazy). The wrapper
-    // itself is one more lazy chunk (11 total).
-    expect(research.match(/React\.lazy/g)?.length).toBe(11);
+    // itself is one more lazy chunk (11 total). v0.5 adds the
+    // ResearchWorkbench as one more lazy chunk (12 total).
+    expect(research.match(/React\.lazy/g)?.length).toBe(12);
   });
 
   it('does not reintroduce the App ↔ V04Shell cycle', () => {

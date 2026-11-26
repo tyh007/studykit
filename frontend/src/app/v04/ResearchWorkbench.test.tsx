@@ -1,0 +1,172 @@
+/**
+ * v0.5 P1 — Research workbench wiring (ADR-003).
+ *
+ * The Research surfaces are stubbed: this file tests the workbench
+ * itself (explorer, tabs, URL ⇄ tab sync, persistence), not the
+ * surfaces, which keep their own suites.
+ */
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import React from 'react';
+
+vi.mock('../../features/research/ProjectHome', () => ({
+  ProjectHome: (p: { onOpenReader: (i: { projectId: string; workId: string }) => void; projectId: string }) => (
+    <div data-testid="stub-overview">
+      <button type="button" onClick={() => p.onOpenReader({ projectId: p.projectId, workId: 'w-2' })}>
+        open w-2 from overview
+      </button>
+    </div>
+  ),
+}));
+vi.mock('../../features/research/Sources', () => ({
+  Sources: (p: { initialAdd?: boolean }) => <div data-testid="stub-sources">{p.initialAdd ? 'add-open' : 'list'}</div>,
+}));
+vi.mock('../../features/research/Discovery', () => ({ Discovery: () => <div data-testid="stub-search" /> }));
+vi.mock('../../features/research/ResearchReader', () => ({
+  ResearchReader: (p: { workId: string }) => <div data-testid="stub-reader">{p.workId}</div>,
+}));
+vi.mock('../../features/research/EvidenceWorkspace', () => ({
+  EvidenceWorkspace: () => <div data-testid="stub-evidence" />,
+}));
+vi.mock('../../features/research/OutputWorkspace', () => ({ OutputWorkspace: () => <div data-testid="stub-output" /> }));
+vi.mock('../../features/research/DesignWorkspace', () => ({ DesignWorkspace: () => <div data-testid="stub-design" /> }));
+vi.mock('../../features/research/TaskDetail', () => ({ TaskDetail: () => <div data-testid="stub-task" /> }));
+
+import { ResearchWorkbench } from './ResearchWorkbench';
+import { locationStore } from './locationStore';
+import { __resetFeatureFlagsForTests, __setFeatureFlagForTests } from '../feature-flags';
+import { makeAppLocation, type AppLocation } from '../../domain/workspace';
+import { MemoryResearchRepository } from '../../application/research/researchRepository';
+import { OpenAlexSearchProvider } from '../../application/research/openAlexProvider';
+import { ResearchProvider, type ResearchContextValue } from '../../features/research/researchContext';
+import { makeResearchProject, makeWork } from '../../domain/__fixtures__/domain-fixtures';
+import { WORKBENCH_STORAGE_PREFIX } from '../../features/workbench/useWorkbenchState';
+
+const P = 'p-001';
+const container = { workspaceId: null, mode: 'research' as const, kind: 'project' as const, id: P };
+
+async function seed(works: number): Promise<MemoryResearchRepository> {
+  const repo = new MemoryResearchRepository();
+  await repo.transact(async (tx) => {
+    tx.putProject(makeResearchProject({ id: P, name: 'Sleep and memory' }));
+    for (let i = 1; i <= works; i += 1) {
+      tx.putWork(makeWork({ id: `w-${i}`, title: `Paper ${i}`, projectIds: [P], identifiers: { doi: `10.1/${i}` } }));
+    }
+  });
+  return repo;
+}
+
+function mount(repo: MemoryResearchRepository, location: AppLocation) {
+  act(() => locationStore.replace(location));
+  const value: ResearchContextValue = {
+    repository: repo,
+    openAlex: new OpenAlexSearchProvider({ fetchImpl: async () => new Response('{}', { status: 200 }) }),
+  };
+  return render(
+    <ResearchProvider value={value}>
+      <ResearchWorkbench projectId={P} />
+    </ResearchProvider>,
+  );
+}
+
+const tabKinds = (): string[] => screen.queryAllByTestId('workbench-tab').map((t) => t.dataset.editorKind ?? '');
+
+beforeEach(() => {
+  __setFeatureFlagForTests('v04Research', true);
+  __setFeatureFlagForTests('v05Workbench', true);
+  localStorage.clear();
+});
+
+afterEach(() => {
+  cleanup();
+  __resetFeatureFlagsForTests();
+  localStorage.clear();
+});
+
+describe('Research workbench', () => {
+  it('opens a brand-new project on the two-action start screen', async () => {
+    mount(await seed(0), makeAppLocation({ mode: 'research', surface: 'project', container }));
+    expect(await screen.findByTestId('workbench-start')).toBeInTheDocument();
+    expect(await screen.findByText('Sleep and memory', { selector: '[data-testid="workbench-project-name"]' })).toBeInTheDocument();
+    expect(screen.getByText(/Add a PDF or search for papers/)).toBeInTheDocument();
+    // Groups with nothing in them stay hidden.
+    expect(screen.queryByText('Writing')).not.toBeInTheDocument();
+    expect(screen.queryByText('Excerpts and points')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('workbench-start-add-sources'));
+    expect(await screen.findByTestId('stub-sources')).toHaveTextContent('add-open');
+    expect(tabKinds()).toEqual(['library']);
+  });
+
+  it('lists sources, previews on single click and keeps the tab on double click', async () => {
+    mount(await seed(2), makeAppLocation({ mode: 'research', surface: 'project', container }));
+    // A project with content opens on its overview.
+    expect(await screen.findByTestId('stub-overview')).toBeInTheDocument();
+    const sources = await screen.findByTestId('workbench-explorer-sources');
+    expect(within(sources).getAllByRole('button').map((b) => b.textContent)).toEqual(['Paper 1', 'Paper 2']);
+
+    fireEvent.click(within(sources).getByText('Paper 1'));
+    expect(await screen.findByTestId('stub-reader')).toHaveTextContent('w-1');
+    const previewTab = screen.getAllByTestId('workbench-tab')[1]!;
+    expect(previewTab.className).toContain('is-preview');
+
+    // Another single click replaces the preview instead of piling up tabs.
+    fireEvent.click(within(sources).getByText('Paper 2'));
+    await waitFor(() => expect(screen.getByTestId('stub-reader')).toHaveTextContent('w-2'));
+    expect(tabKinds()).toEqual(['overview', 'work']);
+
+    fireEvent.doubleClick(within(sources).getByText('Paper 2'));
+    await waitFor(() => expect(screen.getAllByTestId('workbench-tab')[1]!.className).not.toContain('is-preview'));
+  });
+
+  it('turns in-editor navigation into a new tab and keeps the URL on the active editor', async () => {
+    mount(await seed(2), makeAppLocation({ mode: 'research', surface: 'project', container }));
+    fireEvent.click(await screen.findByText('open w-2 from overview'));
+    expect(await screen.findByTestId('stub-reader')).toHaveTextContent('w-2');
+    expect(tabKinds()).toEqual(['overview', 'work']);
+    await waitFor(() => {
+      const loc = locationStore.getSnapshot();
+      expect(loc.surface).toBe('workbench');
+      expect(loc.params?.open).toBe('work:w-2');
+    });
+  });
+
+  it('redirects a legacy page link to the matching tab', async () => {
+    mount(await seed(1), makeAppLocation({ mode: 'research', surface: 'evidence', container }));
+    expect(await screen.findByTestId('stub-evidence')).toBeInTheDocument();
+    await waitFor(() => {
+      const loc = locationStore.getSnapshot();
+      expect(loc.surface).toBe('workbench');
+      expect(loc.params?.open).toBe(`evidence:${P}`);
+    });
+  });
+
+  it('opens what a later location asks for (e.g. the Add menu) without a loop', async () => {
+    mount(await seed(1), makeAppLocation({ mode: 'research', surface: 'project', container }));
+    await screen.findByTestId('stub-overview');
+    act(() => locationStore.push(makeAppLocation({ mode: 'research', surface: 'library', container, params: { add: '1' } })));
+    expect(await screen.findByTestId('stub-sources')).toHaveTextContent('add-open');
+    expect(tabKinds()).toEqual(['overview', 'library']);
+    await waitFor(() => expect(locationStore.getSnapshot().params?.open).toBe(`library:${P}`));
+  });
+
+  it('restores tabs after a remount but not one-shot requests', async () => {
+    const repo = await seed(1);
+    const first = mount(repo, makeAppLocation({ mode: 'research', surface: 'library', container, params: { add: '1' } }));
+    expect(await screen.findByTestId('stub-sources')).toHaveTextContent('add-open');
+    first.unmount();
+    expect(localStorage.getItem(WORKBENCH_STORAGE_PREFIX + P)).not.toBeNull();
+
+    mount(repo, makeAppLocation({ mode: 'research', surface: 'workbench', container }));
+    expect(await screen.findByTestId('stub-sources')).toHaveTextContent('list');
+    expect(tabKinds()).toEqual(['library']);
+  });
+
+  it('closes tabs from the tab bar', async () => {
+    mount(await seed(1), makeAppLocation({ mode: 'research', surface: 'project', container }));
+    await screen.findByTestId('stub-overview');
+    fireEvent.click(screen.getByRole('button', { name: 'Close Overview' }));
+    await waitFor(() => expect(tabKinds()).toEqual([]));
+  });
+});

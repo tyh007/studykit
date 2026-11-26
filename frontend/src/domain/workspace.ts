@@ -121,6 +121,7 @@ export type SurfaceKind =
   | 'research-canvas' // Research Canvas
   | 'cognitive-canvas' // Cognitive Canvas (WP-06, v0.4)
   | 'output'          // Output Editor
+  | 'workbench'       // v0.5 Research project workbench (ADR-003)
   | 'search'          // Global Search
   | 'settings';       // Settings
 
@@ -142,6 +143,7 @@ export function isSurfaceKind(value: unknown): value is SurfaceKind {
     case 'research-canvas':
     case 'cognitive-canvas':
     case 'output':
+    case 'workbench':
     case 'search':
     case 'settings':
       return true;
@@ -163,6 +165,7 @@ export const CONTAINER_SCOPED_SURFACES: ReadonlySet<SurfaceKind> = new Set<Surfa
   'research-canvas',
   'cognitive-canvas',
   'output',
+  'workbench',
 ]);
 
 /**
@@ -205,6 +208,7 @@ export const SURFACES_BY_MODE: Readonly<Record<WorkspaceMode, ReadonlySet<Surfac
     'research-canvas',
     'cognitive-canvas',
     'output',
+    'workbench',
   ]),
 };
 

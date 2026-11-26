@@ -110,6 +110,7 @@ interface WorkbenchState {
 - Desktop: `domain_records` namespace `workbench`, entity type `state`, id = projectId. It travels with the Workspace and its backups.
 - Web: a new Dexie table `workbenchStates` (Dexie v12), keyed by projectId.
 - Writes are debounced (500 ms) and flushed on blur and on unload.
+- Implemented in P1 behind a `WorkbenchStorage` port backed by `localStorage` (see “P1 implementation notes”); the Workspace-backed stores above replace it without touching callers.
 
 URL grammar keeps ADR-001's hash store and encodes only the active editor:
 
@@ -234,6 +235,18 @@ Applying a draft runs locally through the applying member's canonical use case. 
 - §4–§6 (AI threads) are decided now so P1–P3 do not paint the data model into a corner, but they are implemented in P4.
 - Every phase gate includes a zero-barrier check: a new user completes that phase's core task without help.
 - Legacy literature merge (P4) needs its own ADR: mapping `legacy/literature_project` and `legacy/literature_paper` rows to canonical `Work`, and annotations to Reader. Nothing is deleted before that mapping is tested.
+
+## P1 implementation notes (2026-11-25)
+
+What shipped in P1 and where it differs from the decisions above:
+
+- **Storage.** `WorkbenchState` persists through the `WorkbenchStorage` port with a `localStorage` adapter (`studykit.workbench.v1.<projectId>`), debounced 300 ms and flushed on `pagehide`, `visibilitychange` and unmount. It does not yet travel with Workspace backups; moving it to `domain_records` (`workbench`/`state`) is deferred until a phase needs it.
+- **One-shot params.** Editor params that only express an opening request (`add`, `details`) are marked transient and are not restored after reload.
+- **Editor kinds.** P1 registers `overview`, `library` (the existing `Sources` surface), `search`, `work`, `evidence` (the existing `EvidenceWorkspace`, covering both the planned `evidence-matrix` and `claim` kinds), `output`, `design`, `task` and `canvas`. Page headers and back buttons inside surfaces are kept for now; their callbacks open tabs.
+- **Mounting.** Only the active editor is mounted, so PDF readers and canvases do not stay alive in hidden tabs. Editor-internal state (scroll, unsaved form text) is therefore not kept across tab switches; revisit if users notice.
+- **URL ⇄ tabs.** The URL always names the active editor. Two guards prevent feedback loops: the key last written to the URL is ignored when it echoes back, and an editor requested by the URL suppresses URL writes until it is active.
+- **Progressive disclosure.** Explorer groups render only when non-empty; Canvas and Research design appear in a “Thinking” group once opened. A brand-new project shows a start screen with two actions. The shell sidebar is hidden while the workbench is active. AI panel, activity bar and bottom panel are not part of P1.
+- **Fix found on the way.** The Web Research, Study and Collaboration Dexie repositories registered change hooks with the Dexie 3 object form, which Dexie 4 silently ignores, so `subscribe` listeners never fired on Web. They now use the event form (as the Canvas repository already did), and the test fakes model Dexie 4's API.
 
 ## Alternatives rejected
 

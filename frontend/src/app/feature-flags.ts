@@ -44,7 +44,8 @@ export type FeatureFlagId =
   | 'v04Research'    // Research Mode longitudinal path (WP-05)
   | 'v04Canvas'      // Cognitive Canvas adapter: object placement, free nodes, relations, outline (WP-06)
   | 'v04Collaboration' // Collaboration Foundation: membership/roles, comments, mentions, shared tasks, activity, Private Scratch publish preview, presence/realtime spike (WP-08)
-  | 'v04CollabGateway'; // WP-08 Round 2: real async collaboration HTTP gateway (outbox/inbox). Off by default; the smoke test flips it on via the dev seam.
+  | 'v04CollabGateway' // WP-08 Round 2: real async collaboration HTTP gateway (outbox/inbox). Off by default; the smoke test flips it on via the dev seam.
+  | 'v05Workbench'; // v0.5 P1: project workbench for Research (explorer + tabbed editors). ADR-003.
 
 export const FEATURE_FLAGS: readonly FeatureFlagId[] = [
   'v04Shell',
@@ -54,6 +55,7 @@ export const FEATURE_FLAGS: readonly FeatureFlagId[] = [
   'v04Canvas',
   'v04Collaboration',
   'v04CollabGateway',
+  'v05Workbench',
 ] as const;
 
 export function isFeatureFlagId(value: unknown): value is FeatureFlagId {
@@ -64,7 +66,8 @@ export function isFeatureFlagId(value: unknown): value is FeatureFlagId {
     value === 'v04Research' ||
     value === 'v04Canvas' ||
     value === 'v04Collaboration' ||
-    value === 'v04CollabGateway'
+    value === 'v04CollabGateway' ||
+    value === 'v05Workbench'
   );
 }
 
@@ -77,6 +80,7 @@ export const FEATURE_FLAG_DEFAULTS: Readonly<Record<FeatureFlagId, boolean>> = O
   v04Canvas: false,
   v04Collaboration: false,
   v04CollabGateway: false,
+  v05Workbench: false,
 });
 
 /** Short description of each flag, for the future settings page and logs. */
@@ -95,6 +99,8 @@ export const FEATURE_FLAG_DESCRIPTIONS: Readonly<Record<FeatureFlagId, string>> 
     'Collaboration Foundation: project membership/roles, comments, mentions, shared tasks, activity history, Private Scratch publish preview, presence/realtime spike with async fallback, conflict detection. Single-user and offline use are not regressed.',
   v04CollabGateway:
     'WP-08 Round 2: HTTP async collaboration gateway (outbox/inbox) with conflict detection. The smoke test flips this on via the dev seam; production keeps it off until the production server (WP-10) ships. When off, the cross-user op log is a no-op and the slice behaves like the Round 1 build.',
+  v05Workbench:
+    'v0.5 Research workbench (ADR-003): a project opens as one workspace with an explorer and tabbed editors instead of separate full pages. Requires v04Research.',
 });
 
 // ---------------------------------------------------------------------------

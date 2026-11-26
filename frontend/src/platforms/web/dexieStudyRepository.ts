@@ -69,11 +69,7 @@ interface StudyDexieTable<T> {
   where(field: string): {
     equals(value: unknown): { toArray(): Promise<T[]>; first(): Promise<T | undefined> };
   };
-  hook(hooks: {
-    creating?: (key: string, obj: T) => void;
-    updating?: (modifications: Partial<T>, key: string, obj: T) => void;
-    deleting?: (key: string) => void;
-  }): void;
+  hook(event: 'creating' | 'updating' | 'deleting', subscriber: () => void): void;
   clear(): Promise<void>;
 }
 
@@ -106,11 +102,11 @@ class StudyDexieDB {
   constructor(private readonly tables: StudyTables) {
     const fire = (): void => this.scheduleNotify();
     for (const t of [tables.questions, tables.attempts, tables.feedback, tables.recovery]) {
-      t.hook({
-        creating: fire,
-        updating: fire,
-        deleting: fire,
-      });
+      // Dexie 4 only honours the event form; the object form is silently
+      // ignored (see dexieCanvasRepository), which left subscribers deaf.
+      t.hook('creating', fire);
+      t.hook('updating', fire);
+      t.hook('deleting', fire);
     }
   }
 

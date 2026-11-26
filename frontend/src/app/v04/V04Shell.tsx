@@ -43,6 +43,7 @@ import { CanvasUseCasesProvider } from './canvasWiringContext';
 import { useDesktopWorkspace } from './desktopWorkspaceContext';
 import { QuickCapturePanel } from './QuickCapturePanel';
 import { WorkspaceSidebar } from './WorkspaceSidebar';
+import { isWorkbenchLocation } from './workbenchRoutes';
 import { HeaderAskButton } from './HeaderAskButton';
 import { HeaderAddMenu } from './HeaderAddMenu';
 import { listen } from '@tauri-apps/api/event';
@@ -307,6 +308,8 @@ export function V04Shell(props: V04ShellProps): React.ReactElement {
   const auth = useAuth();
   const location = useLocation();
   const syncStatus = useStore((s) => s.syncStatus);
+  // v0.5: the Research workbench brings its own project explorer.
+  const workbenchActive = isWorkbenchLocation(location);
 
   return (
     <div className="app-layout v04-shell" data-testid="v04-shell" data-mode={location.mode} data-flavour={flavour}>
@@ -440,8 +443,8 @@ export function V04Shell(props: V04ShellProps): React.ReactElement {
           <ResearchWiring>
             <CollaborationWiring>
               <CanvasUseCasesProvider>
-                <div className="v04-workspace-layout">
-                  <WorkspaceSidebar />
+                <div className={`v04-workspace-layout${workbenchActive ? ' v04-workspace-layout--workbench' : ''}`}>
+                  {workbenchActive ? null : <WorkspaceSidebar />}
                   <div className="v04-active-surface" data-testid="v04-active-surface">
                     <React.Suspense fallback={<p className="v04-route-loading sk-delayed-fallback" role="status">Loading…</p>}>
                       <StudyRouter />

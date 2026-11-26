@@ -24,7 +24,7 @@ describe('feature flag contract', () => {
     }
   });
 
-  it('exposes the seven v0.4 flags from the handoff (WP-08 Round 2 added v04CollabGateway)', () => {
+  it('exposes the v0.4 flags plus the v0.5 workbench flag (ADR-003)', () => {
     expect([...FEATURE_FLAGS].sort()).toEqual([
       'v04Assistant',
       'v04Canvas',
@@ -33,6 +33,7 @@ describe('feature flag contract', () => {
       'v04Research',
       'v04Shell',
       'v04Study',
+      'v05Workbench',
     ]);
   });
 
@@ -132,6 +133,7 @@ describe('feature flag contract', () => {
       { id: 'v04Canvas', value: false, source: 'default' },
       { id: 'v04Collaboration', value: false, source: 'default' },
       { id: 'v04CollabGateway', value: false, source: 'default' },
+      { id: 'v05Workbench', value: false, source: 'default' },
     ]);
     // Flip one via storage.
     setFeatureFlagOverride('v04Assistant', true);
