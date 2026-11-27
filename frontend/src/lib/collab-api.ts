@@ -61,6 +61,7 @@
  */
 
 import type { AiDraftDecision, AiMessage, AiThread } from '../domain/aiThread';
+import type { Brainstorm, Disagreement, DisagreementPosition, Idea } from '../domain/brainstorm';
 import type {
   Activity,
   Collaborator,
@@ -102,7 +103,13 @@ export type CollabOpKind =
   | 'ai-thread-created'
   | 'ai-thread-updated'
   | 'ai-message-appended'
-  | 'ai-draft-decided';
+  | 'ai-draft-decided'
+  // v0.5 P5b: shared brainstorms and disagreements.
+  | 'brainstorm-saved'
+  | 'idea-saved'
+  | 'idea-removed'
+  | 'disagreement-saved'
+  | 'disagreement-position-saved';
 
 export const COLLAB_OP_KINDS: readonly CollabOpKind[] = [
   'membership-bootstrap',
@@ -120,6 +127,11 @@ export const COLLAB_OP_KINDS: readonly CollabOpKind[] = [
   'ai-thread-updated',
   'ai-message-appended',
   'ai-draft-decided',
+  'brainstorm-saved',
+  'idea-saved',
+  'idea-removed',
+  'disagreement-saved',
+  'disagreement-position-saved',
 ] as const;
 
 export interface CollabOp {
@@ -191,6 +203,11 @@ export interface CollabOpPayloads {
   'ai-thread-updated': AiThread;
   'ai-message-appended': AiMessage;
   'ai-draft-decided': AiDraftDecision;
+  'brainstorm-saved': Brainstorm;
+  'idea-saved': Idea;
+  'idea-removed': { readonly id: string; readonly projectId: string; readonly brainstormId: string; readonly authorId: string };
+  'disagreement-saved': Disagreement;
+  'disagreement-position-saved': DisagreementPosition;
 }
 
 // ---------------------------------------------------------------------------

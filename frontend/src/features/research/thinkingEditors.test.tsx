@@ -11,7 +11,9 @@ import { DisagreementEditor } from './DisagreementEditor';
 import { ResearchProvider, type ResearchContextValue } from './researchContext';
 import { MemoryResearchRepository } from '../../application/research/researchRepository';
 import { OpenAlexSearchProvider } from '../../application/research/openAlexProvider';
-import { addPosition, openDisagreement, startBrainstorm } from '../../application/research/brainstorm';
+import { addIdea, addPosition, openDisagreement, revealIdeas, setBrainstormMode, startBrainstorm } from '../../application/research/brainstorm';
+import { AgendaEditor } from './AgendaEditor';
+import { ThinkingCollabProvider, type ThinkingCollab } from './thinkingCollab';
 import { addPoint, orderPoints } from '../../application/research/argument';
 import type { ProviderRouter } from '../ai/kernel/providerRouter';
 import { makeEvidence, makeResearchLocator, makeResearchProject, makeWork } from '../../domain/__fixtures__/domain-fixtures';
@@ -19,14 +21,17 @@ import { makeEvidence, makeResearchLocator, makeResearchProject, makeWork } from
 const P = 'p-001';
 let repo: MemoryResearchRepository;
 
-function wrap(ui: React.ReactElement, router?: ProviderRouter) {
+function wrap(ui: React.ReactElement, router?: ProviderRouter, collab?: ThinkingCollab) {
   const value: ResearchContextValue = {
     repository: repo,
     openAlex: new OpenAlexSearchProvider({ fetchImpl: async () => new Response('{}', { status: 200 }) }),
     ...(router ? { providerRouter: router } : {}),
   };
-  return render(<ResearchProvider value={value}>{ui}</ResearchProvider>);
+  const inner = collab ? <ThinkingCollabProvider value={collab}>{ui}</ThinkingCollabProvider> : ui;
+  return render(<ResearchProvider value={value}>{inner}</ResearchProvider>);
 }
+
+const names = { 'u-1': 'Ana', 'u-2': 'Ben' };
 
 beforeEach(async () => {
   repo = new MemoryResearchRepository();
@@ -157,5 +162,114 @@ describe('DisagreementEditor', () => {
     // The record is read-only.
     expect(screen.queryByTestId('disagreement-stance')).not.toBeInTheDocument();
     expect(screen.queryByTestId('disagreement-back')).not.toBeInTheDocument();
+  });
+});
+
+describe('P5b: with project members', () => {
+  it('brainwriting: a member sees only how many ideas others wrote until the host reveals them', async () => {
+    const b = await startBrainstorm(repo, { projectId: P, prompt: 'Why?' }, { userId: 'u-1' });
+    await setBrainstormMode(repo, b.id, 'group', { userId: 'u-1' });
+    await addIdea(repo, { brainstormId: b.id, text: 'Host secret' }, { userId: 'u-1' });
+    wrap(<BrainstormEditor brainstormId={b.id} userId="u-2" onOpenArgument={() => undefined} />, undefined, {
+      access: 'contribute',
+      hasMembers: true,
+      memberNames: names,
+    });
+    expect(await screen.findByTestId('brainstorm-reveal-counts')).toHaveTextContent('You: 0 ideas · Ana: 1 idea');
+    expect(screen.getByTestId('brainstorm-reveal')).toHaveTextContent('Ana will reveal all the ideas at once.');
+    expect(screen.queryByText('Host secret')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('brainstorm-reveal-button')).not.toBeInTheDocument();
+    expect(screen.getByTestId('brainstorm-prompt-readonly')).toHaveTextContent('Why?');
+
+    await typeIdea('My own idea');
+    expect(screen.getAllByTestId('brainstorm-idea')).toHaveLength(1);
+
+    await revealIdeas(repo, b.id, { userId: 'u-1' });
+    await waitFor(() => expect(screen.getAllByTestId('brainstorm-idea')).toHaveLength(2));
+    const host = screen.getAllByTestId('brainstorm-idea').find((c) => within(c).queryByTestId('brainstorm-idea-author'))!;
+    expect(within(host).getByTestId('brainstorm-idea-author')).toHaveTextContent('Ana');
+    expect(within(host).getByLabelText('Idea')).toHaveAttribute('readonly');
+    // Only the host groups and converts.
+    expect(screen.queryByTestId('brainstorm-group-input')).not.toBeInTheDocument();
+  });
+
+  it('the host chooses group mode before the first idea and reveals', async () => {
+    const b = await startBrainstorm(repo, { projectId: P, prompt: 'Why?' }, { userId: 'u-1' });
+    wrap(<BrainstormEditor brainstormId={b.id} userId="u-1" onOpenArgument={() => undefined} />, undefined, {
+      access: 'manage',
+      hasMembers: true,
+      memberNames: names,
+    });
+    fireEvent.click(await screen.findByTestId('brainstorm-mode-group'));
+    expect(await screen.findByTestId('brainstorm-reveal-button')).toBeDisabled();
+    await typeIdea('Replay');
+    expect(screen.queryByTestId('brainstorm-mode')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('brainstorm-reveal-button'));
+    await waitFor(() => expect(screen.queryByTestId('brainstorm-reveal')).not.toBeInTheDocument());
+    expect(screen.getByTestId('brainstorm-group-input')).toBeInTheDocument();
+  });
+
+  it('a commenter adds a view but cannot settle; excerpts they lack show from the kept copy', async () => {
+    const d = await openDisagreement(repo, { projectId: P, question: 'Older adults?' }, { userId: 'u-1' });
+    await repo.transact(async (tx) =>
+      tx.putDisagreementPosition({
+        id: 'v-remote',
+        projectId: P,
+        disagreementId: d.id,
+        stance: 'No, only students',
+        evidenceIds: ['e-elsewhere'],
+        citations: [{ evidenceId: 'e-elsewhere', quote: 'Participants were 18–25.', source: 'Mander 2013', pageNumber: 4 }],
+        authorId: 'u-1',
+        holder: 'Supervisor',
+        createdAt: '2026-11-01T00:00:00.000Z',
+        updatedAt: '2026-11-01T00:00:00.000Z',
+      }),
+    );
+    wrap(
+      <DisagreementEditor disagreementId={d.id} userId="u-2" onOpenSource={() => undefined} onOpenPoint={() => undefined} onOpenSources={() => undefined} />,
+      undefined,
+      { access: 'contribute', hasMembers: true, memberNames: names },
+    );
+    const [remote] = await screen.findAllByTestId('disagreement-position');
+    expect(within(remote!).getByTestId('disagreement-evidence')).toHaveTextContent('Participants were 18–25.');
+    expect(within(remote!).getByTestId('disagreement-evidence')).toHaveTextContent('Mander 2013, p. 4');
+    expect(within(remote!).getByTestId('disagreement-position-byline')).toHaveTextContent('— Supervisor · added by Ana');
+    expect(within(remote!).queryByTestId('disagreement-back')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('disagreement-settle')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId('disagreement-stance'), { target: { value: 'Yes, the mechanism is general' } });
+    fireEvent.click(screen.getByTestId('disagreement-add-position'));
+    await waitFor(() => expect(screen.getAllByTestId('disagreement-position')).toHaveLength(2));
+    expect(within(screen.getAllByTestId('disagreement-position')[1]!).getByTestId('disagreement-back')).toBeInTheDocument();
+  });
+
+  it('the moderator summarises the views on request, labelled as not part of the record', async () => {
+    const d = await openDisagreement(repo, { projectId: P, question: 'Older adults?' }, { userId: 'u-1' });
+    await addPosition(repo, { disagreementId: d.id, stance: 'Yes' }, { userId: 'u-1' });
+    await addPosition(repo, { disagreementId: d.id, stance: 'No' }, { userId: 'u-1' });
+    const chat = vi.fn(async () => ({ content: 'Neither view has evidence yet.', provider: 'cloud' as const }));
+    const router: ProviderRouter = { probe: async () => ({ aiAvailable: true, providerName: 'cloud' }), chat };
+    wrap(
+      <DisagreementEditor disagreementId={d.id} userId="u-1" onOpenSource={() => undefined} onOpenPoint={() => undefined} onOpenSources={() => undefined} />,
+      router,
+    );
+    fireEvent.click(await screen.findByTestId('disagreement-moderate'));
+    expect(await screen.findByTestId('disagreement-moderator-text')).toHaveTextContent('Neither view has evidence yet.');
+    expect(screen.getByTestId('disagreement-moderator')).toHaveTextContent('not part of the record');
+    expect((await repo.getDisagreement(d.id))?.outcome).toBeUndefined();
+  });
+});
+
+describe('AgendaEditor', () => {
+  it('lists open disagreements, opens them, and marks the meeting held', async () => {
+    const d = await openDisagreement(repo, { projectId: P, question: 'Does it hold for older adults?' }, { userId: 'u-1' });
+    const onOpen = vi.fn();
+    wrap(<AgendaEditor projectId={P} onOpen={onOpen} />);
+    const section = await screen.findByTestId('agenda-section-decide');
+    fireEvent.click(within(section).getByText('Does it hold for older adults?'));
+    expect(onOpen).toHaveBeenCalledWith({ kind: 'disagreement', id: d.id });
+    fireEvent.click(screen.getByTestId('agenda-held'));
+    expect(await screen.findByText('Marked as held. The next agenda counts from now.')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('agenda-since')).toHaveTextContent('since the last meeting'));
   });
 });

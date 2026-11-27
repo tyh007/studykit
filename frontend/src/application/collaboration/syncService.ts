@@ -73,6 +73,17 @@ import {
   type AiThread,
 } from '../../domain/aiThread';
 import {
+  isBrainstorm,
+  isDisagreement,
+  isDisagreementPosition,
+  isIdea,
+  type Brainstorm,
+  type Disagreement,
+  type DisagreementPosition,
+  type Idea,
+} from '../../domain/brainstorm';
+import type { IdeaRemoved } from '../research/thinkingSync';
+import {
   type CollabGateway,
   type CollabOp,
   type CollabOpKind,
@@ -246,6 +257,12 @@ export interface ResearchApplyTarget {
   applyAiMessage?(row: AiMessage): Promise<void>;
   /** Append a remote draft decision; an existing one is skipped. */
   applyAiDraftDecision?(row: AiDraftDecision): Promise<void>;
+  /** v0.5 P5b: shared brainstorms and disagreements (last write wins). */
+  applyBrainstorm?(row: Brainstorm): Promise<void>;
+  applyIdea?(row: Idea): Promise<void>;
+  applyIdeaRemoved?(row: IdeaRemoved): Promise<void>;
+  applyDisagreement?(row: Disagreement): Promise<void>;
+  applyDisagreementPosition?(row: DisagreementPosition): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -557,6 +574,41 @@ async function applyRemoteOp(
       if (!deps.researchRepository?.applyAiDraftDecision) return false;
       if (!isAiDraftDecision(payload) || payload.projectId !== op.projectId) return false;
       await deps.researchRepository.applyAiDraftDecision(payload);
+      return false;
+    }
+    // v0.5 P5b: shared brainstorms and disagreements. Shape is checked
+    // here; the server checks who may send what.
+    case 'brainstorm-saved': {
+      if (!deps.researchRepository?.applyBrainstorm) return false;
+      if (!isBrainstorm(payload) || payload.mode !== 'group' || payload.projectId !== op.projectId) return false;
+      await deps.researchRepository.applyBrainstorm(payload);
+      return false;
+    }
+    case 'idea-saved': {
+      if (!deps.researchRepository?.applyIdea) return false;
+      if (!isIdea(payload) || payload.projectId !== op.projectId) return false;
+      await deps.researchRepository.applyIdea(payload);
+      return false;
+    }
+    case 'idea-removed': {
+      if (!deps.researchRepository?.applyIdeaRemoved) return false;
+      const p = payload as Partial<IdeaRemoved> | null;
+      if (!p || typeof p.id !== 'string' || typeof p.brainstormId !== 'string' || typeof p.authorId !== 'string' || p.projectId !== op.projectId) {
+        return false;
+      }
+      await deps.researchRepository.applyIdeaRemoved(p as IdeaRemoved);
+      return false;
+    }
+    case 'disagreement-saved': {
+      if (!deps.researchRepository?.applyDisagreement) return false;
+      if (!isDisagreement(payload) || payload.projectId !== op.projectId) return false;
+      await deps.researchRepository.applyDisagreement(payload);
+      return false;
+    }
+    case 'disagreement-position-saved': {
+      if (!deps.researchRepository?.applyDisagreementPosition) return false;
+      if (!isDisagreementPosition(payload) || payload.projectId !== op.projectId) return false;
+      await deps.researchRepository.applyDisagreementPosition(payload);
       return false;
     }
   }

@@ -256,6 +256,9 @@ export interface ResearchProject {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly authorType: 'user' | 'imported';
+  /** v0.5 P5b: when this user last marked a group meeting as held. The
+   *  meeting agenda lists what changed since then. */
+  readonly lastMeetingAt?: string;
 }
 
 export function isResearchProject(value: unknown): value is ResearchProject {

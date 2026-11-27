@@ -80,7 +80,12 @@ export interface CollaborationDeps {
       | 'ai-thread-created'
       | 'ai-thread-updated'
       | 'ai-message-appended'
-      | 'ai-draft-decided';
+      | 'ai-draft-decided'
+      | 'brainstorm-saved'
+      | 'idea-saved'
+      | 'idea-removed'
+      | 'disagreement-saved'
+      | 'disagreement-position-saved';
     readonly payload: unknown;
     readonly baseVersion?: number | string;
   }) => void;

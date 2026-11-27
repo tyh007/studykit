@@ -4,6 +4,12 @@
  * State what's in dispute, put each view side by side with the checked
  * excerpts behind it, then settle it in writing. A view can only
  * prevail with evidence. Settled disagreements stay as a record.
+ *
+ * P5b, with project members: owners and editors run it (views, evidence,
+ * settling); commenters add and back their own views; viewers read.
+ * Excerpts a member doesn't have show from the copy kept on the view.
+ * The AI moderator restates the views and what would settle it; it
+ * never picks a side and its summary is not part of the record.
  */
 
 import React from 'react';
@@ -16,7 +22,9 @@ import {
   detachEvidence,
   settleDisagreement,
 } from '../../application/research/brainstorm';
+import { MIN_VIEWS_TO_MODERATE, moderateDisagreement } from '../../application/research/moderator';
 import type { Disagreement, DisagreementPosition } from '../../domain/brainstorm';
+import { memberName, useThinkingCollab } from './thinkingCollab';
 import type { Claim, Evidence } from '../../domain/research';
 import { Button } from '../../shared/ui/Button';
 
@@ -78,9 +86,12 @@ function useDisagreement(disagreementId: string): Data {
 
 export function DisagreementEditor(props: DisagreementEditorProps): React.ReactElement {
   const { disagreementId } = props;
-  const { repository } = useResearchDeps();
+  const { repository, providerRouter } = useResearchDeps();
   const deps = React.useMemo(() => ({ userId: props.userId }), [props.userId]);
   const data = useDisagreement(disagreementId);
+  const collab = useThinkingCollab();
+  const [moderator, setModerator] = React.useState<string | null>(null);
+  const [moderating, setModerating] = React.useState(false);
   const [stance, setStance] = React.useState('');
   const [holder, setHolder] = React.useState('');
   const [winner, setWinner] = React.useState<string | null | undefined>(undefined);
@@ -102,6 +113,18 @@ export function DisagreementEditor(props: DisagreementEditorProps): React.ReactE
   const d = data.disagreement;
   if (!d) return <p className="thinking-muted">This disagreement no longer exists.</p>;
   const open = d.status === 'open';
+  const manage = collab.access === 'manage';
+  const canAddView = open && collab.access !== 'read';
+  const canBack = (p: DisagreementPosition): boolean =>
+    open && (manage || (collab.access === 'contribute' && p.authorId === props.userId));
+  const addedBy = (p: DisagreementPosition): string | null =>
+    collab.hasMembers && p.authorId !== props.userId ? memberName(collab, p.authorId) : null;
+  const moderate = async (): Promise<void> => {
+    if (!providerRouter) return;
+    setModerating(true);
+    await run(async () => setModerator(await moderateDisagreement(repository, providerRouter, disagreementId)));
+    setModerating(false);
+  };
   const byId = new Map(data.evidence.map((e) => [e.id, e]));
   const title = (workId: string): string => data.works.find((w) => w.id === workId)?.title ?? 'Untitled source';
   const positionLabel = (p: DisagreementPosition): string => (p.holder ? `${p.stance} — ${p.holder}` : p.stance);
@@ -119,6 +142,10 @@ export function DisagreementEditor(props: DisagreementEditorProps): React.ReactE
             <button type="button" className="thinking-link" onClick={() => props.onOpenPoint(data.claim!.id)}>
               {data.claim.title}
             </button>
+          </p>
+        ) : d.pointTitle ? (
+          <p className="thinking-muted" data-testid="disagreement-point-title">
+            About “{d.pointTitle}”
           </p>
         ) : null}
       </header>
@@ -155,13 +182,33 @@ export function DisagreementEditor(props: DisagreementEditorProps): React.ReactE
             isWinner={d.outcome?.positionId === p.id}
             onOpenSource={props.onOpenSource}
             onOpenSources={props.onOpenSources}
+            canBack={canBack(p)}
+            addedBy={addedBy(p)}
             onAttach={(evidenceId) => run(() => attachEvidence(repository, { disagreementId, positionId: p.id, evidenceId }))}
             onDetach={(evidenceId) => run(() => detachEvidence(repository, { disagreementId, positionId: p.id, evidenceId }))}
           />
         ))}
       </ol>
 
-      {open ? (
+      {open && providerRouter && data.positions.length >= MIN_VIEWS_TO_MODERATE ? (
+        <section className="thinking-moderator" aria-label="Moderator" data-testid="disagreement-moderator">
+          {moderator ? (
+            <>
+              <p data-testid="disagreement-moderator-text">{moderator}</p>
+              <p className="thinking-muted">AI moderator · a summary to help you discuss it, not part of the record.</p>
+              <button type="button" className="thinking-link" onClick={() => setModerator(null)}>
+                Dismiss
+              </button>
+            </>
+          ) : (
+            <Button variant="secondary" size="sm" disabled={moderating} onClick={() => void moderate()} data-testid="disagreement-moderate">
+              {moderating ? 'Reading the views…' : 'Where do we stand?'}
+            </Button>
+          )}
+        </section>
+      ) : null}
+
+      {canAddView ? (
         <>
           <form
             className="disagreement-add"
@@ -198,7 +245,7 @@ export function DisagreementEditor(props: DisagreementEditorProps): React.ReactE
             </Button>
           </form>
 
-          {data.positions.length > 0 ? (
+          {data.positions.length > 0 && manage ? (
             <section className="disagreement-settle" aria-label="Settle" data-testid="disagreement-settle">
               <h2>Settle it</h2>
               <fieldset>
@@ -257,6 +304,8 @@ function PositionCard(props: {
   readonly isWinner: boolean;
   readonly onOpenSource: (input: { workId: string; pageNumber?: number }) => void;
   readonly onOpenSources: () => void;
+  readonly canBack: boolean;
+  readonly addedBy: string | null;
   readonly onAttach: (evidenceId: string) => Promise<boolean>;
   readonly onDetach: (evidenceId: string) => Promise<boolean>;
 }): React.ReactElement {
@@ -265,12 +314,38 @@ function PositionCard(props: {
   return (
     <li className={`disagreement-position${props.isWinner ? ' is-winner' : ''}`} data-testid="disagreement-position">
       <p className="disagreement-stance">{p.stance}</p>
-      {p.holder ? <p className="thinking-muted">— {p.holder}</p> : null}
+      {p.holder || props.addedBy ? (
+        <p className="thinking-muted" data-testid="disagreement-position-byline">
+          {p.holder ? `— ${p.holder}` : ''}
+          {p.holder && props.addedBy ? ' · ' : ''}
+          {props.addedBy ? `added by ${props.addedBy}` : ''}
+        </p>
+      ) : null}
       {p.evidenceIds.length > 0 ? (
         <ul className="disagreement-evidence">
           {p.evidenceIds.map((id) => {
             const e = props.byId.get(id);
-            if (!e) return null;
+            if (!e) {
+              // Not on this device (another member's excerpt, or removed): show the copy kept on the view.
+              const c = p.citations?.find((x) => x.evidenceId === id);
+              if (!c) return null;
+              return (
+                <li key={id} data-testid="disagreement-evidence">
+                  <span className="disagreement-citation">
+                    <span>“{c.quote.length > 160 ? `${c.quote.slice(0, 160)}…` : c.quote}”</span>
+                    <span className="thinking-muted">
+                      {c.source}
+                      {c.pageNumber ? `, p. ${c.pageNumber}` : ''}
+                    </span>
+                  </span>
+                  {props.canBack ? (
+                    <button type="button" className="thinking-icon" aria-label="Remove excerpt" onClick={() => void props.onDetach(id)}>
+                      ×
+                    </button>
+                  ) : null}
+                </li>
+              );
+            }
             return (
               <li key={id} data-testid="disagreement-evidence">
                 <button
@@ -284,7 +359,7 @@ function PositionCard(props: {
                     {e.locator.pageNumber ? `, p. ${e.locator.pageNumber}` : ''}
                   </span>
                 </button>
-                {props.open ? (
+                {props.canBack ? (
                   <button type="button" className="thinking-icon" aria-label="Remove excerpt" onClick={() => void props.onDetach(id)}>
                     ×
                   </button>
@@ -296,7 +371,7 @@ function PositionCard(props: {
       ) : (
         <p className="thinking-gap">No evidence behind this view yet.</p>
       )}
-      {props.open ? (
+      {props.canBack ? (
         <button type="button" className="thinking-link" onClick={() => setPicking((v) => !v)} aria-expanded={picking} data-testid="disagreement-back">
           + Back with an excerpt
         </button>

@@ -74,6 +74,8 @@ const EXPECTED: Readonly<Record<typeof COLLABORATOR_ROLES[number], ReadonlySet<s
     'ai.run-cloud',
     'ai-thread.read',
     'ai-thread.post',
+    'thinking.contribute',
+    'thinking.manage',
   ]),
   editor: new Set([
     'project.read',
@@ -110,6 +112,8 @@ const EXPECTED: Readonly<Record<typeof COLLABORATOR_ROLES[number], ReadonlySet<s
     'ai.run-cloud',
     'ai-thread.read',
     'ai-thread.post',
+    'thinking.contribute',
+    'thinking.manage',
   ]),
   commenter: new Set([
     'project.read',
@@ -129,6 +133,7 @@ const EXPECTED: Readonly<Record<typeof COLLABORATOR_ROLES[number], ReadonlySet<s
     'output.read',
     'ai.read-context',
     'ai-thread.read',
+    'thinking.contribute',
   ]),
   viewer: new Set([
     'project.read',

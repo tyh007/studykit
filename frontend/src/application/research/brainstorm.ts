@@ -13,7 +13,16 @@
  */
 
 import { nowIso, type Claim } from '../../domain/research';
-import type { Brainstorm, Disagreement, DisagreementPosition, Idea, IdeaGroup } from '../../domain/brainstorm';
+import {
+  isHiddenUntilReveal,
+  type Brainstorm,
+  type BrainstormMode,
+  type Disagreement,
+  type DisagreementPosition,
+  type Idea,
+  type IdeaGroup,
+  type PositionCitation,
+} from '../../domain/brainstorm';
 import type { ProviderRouter } from '../../features/ai/kernel/providerRouter';
 import type { ResearchRepository } from './researchRepository';
 import { orderPoints } from './argument';
@@ -34,6 +43,20 @@ async function requireBrainstorm(repository: ResearchRepository, brainstormId: s
   const b = await repository.getBrainstorm(brainstormId);
   if (!b) throw new Error(`brainstorm ${brainstormId} not found.`);
   return b;
+}
+
+/**
+ * In a group brainstorm the person who started it runs it: the prompt,
+ * the groups, the reveal and the conversion are theirs. Members add,
+ * edit and group their own ideas.
+ */
+function requireFacilitator(b: Brainstorm, deps: P5Deps | undefined, action: string): void {
+  if (b.mode !== 'group') return;
+  if (deps?.userId !== b.createdBy) throw new Error(`${action}: only the person who started this group brainstorm can do that.`);
+}
+
+function requireRevealed(b: Brainstorm, action: string): void {
+  if (isHiddenUntilReveal(b)) throw new Error(`${action}: reveal everyone's ideas first.`);
 }
 
 async function putBrainstorm(repository: ResearchRepository, b: Brainstorm): Promise<Brainstorm> {
@@ -62,9 +85,54 @@ export async function startBrainstorm(
   });
 }
 
-export async function updatePrompt(repository: ResearchRepository, brainstormId: string, prompt: string): Promise<Brainstorm> {
+export async function updatePrompt(repository: ResearchRepository, brainstormId: string, prompt: string, deps?: P5Deps): Promise<Brainstorm> {
   const b = await requireBrainstorm(repository, brainstormId);
+  requireFacilitator(b, deps, 'updatePrompt');
   return putBrainstorm(repository, { ...b, prompt: prompt.trim(), updatedAt: nowIso() });
+}
+
+/**
+ * Solo (this device only) or group (brainwriting: everyone writes on
+ * their own, then the ideas are revealed together). Chosen before the
+ * first idea; fixed after that.
+ */
+export async function setBrainstormMode(
+  repository: ResearchRepository,
+  brainstormId: string,
+  mode: BrainstormMode,
+  deps: P5Deps,
+): Promise<Brainstorm> {
+  const b = await requireBrainstorm(repository, brainstormId);
+  if (b.createdBy !== deps.userId) throw new Error('setBrainstormMode: only the person who started it can change who writes.');
+  if ((b.mode ?? 'solo') === mode) return b;
+  if ((await repository.listIdeas({ brainstormId })).length > 0) {
+    throw new Error('setBrainstormMode: choose who writes before the first idea.');
+  }
+  return putBrainstorm(repository, { ...b, mode, updatedAt: nowIso() });
+}
+
+/** Brainwriting: show everyone's ideas at once. One-way. */
+export async function revealIdeas(repository: ResearchRepository, brainstormId: string, deps: P5Deps): Promise<Brainstorm> {
+  const b = await requireBrainstorm(repository, brainstormId);
+  if (b.mode !== 'group') throw new Error('revealIdeas: only a group brainstorm has ideas to reveal.');
+  requireFacilitator(b, deps, 'revealIdeas');
+  if (b.revealedAt) return b;
+  const now = nowIso();
+  return putBrainstorm(repository, { ...b, revealedAt: now, updatedAt: now });
+}
+
+/** The ideas this user may see: before the reveal, only their own. */
+export function visibleIdeas(b: Brainstorm, ideas: readonly Idea[], userId: string): Idea[] {
+  return isHiddenUntilReveal(b) ? ideas.filter((i) => i.authorId === userId) : [...ideas];
+}
+
+/**
+ * The moderator's note after a reveal: ideas nobody has picked up yet
+ * (not in any group), and how many of them came from other members.
+ */
+export function unpickedIdeas(ideas: readonly Idea[], userId: string): { readonly total: number; readonly fromOthers: number } {
+  const loose = ideas.filter((i) => i.groupId === null);
+  return { total: loose.length, fromOthers: loose.filter((i) => i.authorId !== userId).length };
 }
 
 export async function addIdea(
@@ -76,6 +144,7 @@ export async function addIdea(
   if (!text) throw new Error('addIdea: an idea needs some words.');
   const b = await requireBrainstorm(repository, input.brainstormId);
   if (input.groupId && !b.groups.some((g) => g.id === input.groupId)) throw new Error('addIdea: unknown group.');
+  if (input.groupId) requireRevealed(b, 'addIdea');
   const ideas = await repository.listIdeas({ brainstormId: b.id });
   const now = nowIso();
   const idea: Idea = {
@@ -94,22 +163,39 @@ export async function addIdea(
   };
   await repository.transact(async (tx) => {
     tx.putIdea(idea);
-    tx.putBrainstorm({ ...b, updatedAt: now });
+    // A group brainstorm's row is the facilitator's; members only add ideas.
+    if (b.mode !== 'group') tx.putBrainstorm({ ...b, updatedAt: now });
   });
   return idea;
 }
 
-export async function editIdea(repository: ResearchRepository, ideaId: string, text: string, brainstormId: string): Promise<void> {
+function requireOwnIdea(b: Brainstorm, idea: Idea, deps: P5Deps | undefined, action: string): void {
+  if (b.mode === 'group' && deps?.userId !== idea.authorId) throw new Error(`${action}: you can only change your own ideas.`);
+}
+
+export async function editIdea(
+  repository: ResearchRepository,
+  ideaId: string,
+  text: string,
+  brainstormId: string,
+  deps?: P5Deps,
+): Promise<void> {
   const t = text.trim();
+  const b = await requireBrainstorm(repository, brainstormId);
   const idea = (await repository.listIdeas({ brainstormId })).find((i) => i.id === ideaId);
   if (!idea) throw new Error(`editIdea: idea ${ideaId} not found.`);
+  requireOwnIdea(b, idea, deps, 'editIdea');
   await repository.transact(async (tx) => {
     if (t) tx.putIdea({ ...idea, text: t.slice(0, 2000), updatedAt: nowIso() });
     else tx.deleteIdea(ideaId);
   });
 }
 
-export async function removeIdea(repository: ResearchRepository, ideaId: string): Promise<void> {
+export async function removeIdea(repository: ResearchRepository, ideaId: string, brainstormId: string, deps?: P5Deps): Promise<void> {
+  const b = await requireBrainstorm(repository, brainstormId);
+  const idea = (await repository.listIdeas({ brainstormId })).find((i) => i.id === ideaId);
+  if (!idea) return;
+  requireOwnIdea(b, idea, deps, 'removeIdea');
   await repository.transact(async (tx) => tx.deleteIdea(ideaId));
 }
 
@@ -119,6 +205,7 @@ export async function moveIdea(
   input: { brainstormId: string; ideaId: string; groupId: string | null },
 ): Promise<void> {
   const b = await requireBrainstorm(repository, input.brainstormId);
+  requireRevealed(b, 'moveIdea');
   if (input.groupId && !b.groups.some((g) => g.id === input.groupId)) throw new Error('moveIdea: unknown group.');
   const idea = (await repository.listIdeas({ brainstormId: b.id })).find((i) => i.id === input.ideaId);
   if (!idea) throw new Error(`moveIdea: idea ${input.ideaId} not found.`);
@@ -134,6 +221,8 @@ export async function addGroup(
   const title = input.title.trim();
   if (!title) throw new Error('addGroup: a group needs a name.');
   const b = await requireBrainstorm(repository, input.brainstormId);
+  requireFacilitator(b, deps, 'addGroup');
+  requireRevealed(b, 'addGroup');
   const group: IdeaGroup = { id: id(deps, 'grp'), title, order: b.groups.reduce((m, g) => Math.max(m, g.order + 1), 0) };
   const now = nowIso();
   const ideas = input.ideaIds?.length ? await repository.listIdeas({ brainstormId: b.id }) : [];
@@ -144,10 +233,17 @@ export async function addGroup(
   return group;
 }
 
-export async function renameGroup(repository: ResearchRepository, brainstormId: string, groupId: string, title: string): Promise<void> {
+export async function renameGroup(
+  repository: ResearchRepository,
+  brainstormId: string,
+  groupId: string,
+  title: string,
+  deps?: P5Deps,
+): Promise<void> {
   const t = title.trim();
   if (!t) throw new Error('renameGroup: a group needs a name.');
   const b = await requireBrainstorm(repository, brainstormId);
+  requireFacilitator(b, deps, 'renameGroup');
   await putBrainstorm(repository, {
     ...b,
     groups: b.groups.map((g) => (g.id === groupId ? { ...g, title: t } : g)),
@@ -156,8 +252,9 @@ export async function renameGroup(repository: ResearchRepository, brainstormId: 
 }
 
 /** Remove a group; its ideas go back to ungrouped. */
-export async function removeGroup(repository: ResearchRepository, brainstormId: string, groupId: string): Promise<void> {
+export async function removeGroup(repository: ResearchRepository, brainstormId: string, groupId: string, deps?: P5Deps): Promise<void> {
   const b = await requireBrainstorm(repository, brainstormId);
+  requireFacilitator(b, deps, 'removeGroup');
   const ideas = await repository.listIdeas({ brainstormId });
   const now = nowIso();
   await repository.transact(async (tx) => {
@@ -166,8 +263,15 @@ export async function removeGroup(repository: ResearchRepository, brainstormId: 
   });
 }
 
-export async function moveGroup(repository: ResearchRepository, brainstormId: string, groupId: string, offset: -1 | 1): Promise<void> {
+export async function moveGroup(
+  repository: ResearchRepository,
+  brainstormId: string,
+  groupId: string,
+  offset: -1 | 1,
+  deps?: P5Deps,
+): Promise<void> {
   const b = await requireBrainstorm(repository, brainstormId);
+  requireFacilitator(b, deps, 'moveGroup');
   const groups = [...b.groups].sort((x, y) => x.order - y.order);
   const from = groups.findIndex((g) => g.id === groupId);
   const to = from + offset;
@@ -189,6 +293,8 @@ export async function convertToArgument(
   deps: P5Deps,
 ): Promise<readonly Claim[]> {
   const b = await requireBrainstorm(repository, brainstormId);
+  requireFacilitator(b, deps, 'convertToArgument');
+  requireRevealed(b, 'convertToArgument');
   const ideas = await repository.listIdeas({ brainstormId });
   const existing = orderPoints(await repository.listClaims({ projectId: b.projectId }));
   const now = nowIso();
@@ -232,14 +338,17 @@ export async function convertToArgument(
 export async function suggestDirections(
   repository: ResearchRepository,
   router: ProviderRouter,
-  input: { brainstormId: string; early: boolean },
+  input: { brainstormId: string; early: boolean; userId?: string },
 ): Promise<string[]> {
   const b = await requireBrainstorm(repository, input.brainstormId);
-  const ideas = (await repository.listIdeas({ brainstormId: b.id })).filter((i) => i.authorType === 'user');
+  // Before a reveal the AI sees only this member's ideas, like they do.
+  const ideas = (await repository.listIdeas({ brainstormId: b.id })).filter(
+    (i) => i.authorType === 'user' && (!isHiddenUntilReveal(b) || i.authorId === input.userId),
+  );
   if (!input.early && ideas.length < OWN_IDEAS_BEFORE_AI) {
     throw new Error(`suggestDirections: write ${OWN_IDEAS_BEFORE_AI} ideas of your own first.`);
   }
-  if (input.early && !b.askedAiEarly) await putBrainstorm(repository, { ...b, askedAiEarly: true, updatedAt: nowIso() });
+  if (input.early && !b.askedAiEarly && b.mode !== 'group') await putBrainstorm(repository, { ...b, askedAiEarly: true, updatedAt: nowIso() });
   const response = await router.chat({
     messages: [
       {
@@ -281,15 +390,18 @@ export async function openDisagreement(
 ): Promise<Disagreement> {
   const question = input.question.trim();
   if (!question) throw new Error('openDisagreement: say what is in dispute.');
+  let pointTitle: string | undefined;
   if (input.claimId) {
     const claim = await repository.getClaim(input.claimId);
     if (!claim || claim.projectId !== input.projectId) throw new Error('openDisagreement: unknown point.');
+    pointTitle = claim.title;
   }
   const now = nowIso();
   const d: Disagreement = {
     id: id(deps, 'dis'),
     projectId: input.projectId,
     claimId: input.claimId ?? null,
+    ...(pointTitle ? { pointTitle } : {}),
     question,
     status: 'open',
     createdBy: deps.userId,
@@ -344,9 +456,21 @@ export async function attachEvidence(
   if (!e || e.projectId !== d.projectId) throw new Error('attachEvidence: excerpt not found in this project.');
   if (e.status !== 'verified') throw new Error('attachEvidence: only checked excerpts can back a position.');
   if (p.evidenceIds.includes(e.id)) return;
+  const work = await repository.getWork(e.workId);
+  const citation: PositionCitation = {
+    evidenceId: e.id,
+    quote: e.exactQuote.slice(0, 4000),
+    source: work?.title || 'Untitled source',
+    ...(e.locator.pageNumber ? { pageNumber: e.locator.pageNumber } : {}),
+  };
   const now = nowIso();
   await repository.transact(async (tx) => {
-    tx.putDisagreementPosition({ ...p, evidenceIds: [...p.evidenceIds, e.id], updatedAt: now });
+    tx.putDisagreementPosition({
+      ...p,
+      evidenceIds: [...p.evidenceIds, e.id],
+      citations: [...(p.citations ?? []).filter((c) => c.evidenceId !== e.id), citation],
+      updatedAt: now,
+    });
     tx.putDisagreement({ ...d, updatedAt: now });
   });
 }
@@ -358,7 +482,12 @@ export async function detachEvidence(
   const d = await requireOpen(repository, input.disagreementId);
   const p = await requirePosition(repository, input.positionId, d.id);
   await repository.transact(async (tx) =>
-    tx.putDisagreementPosition({ ...p, evidenceIds: p.evidenceIds.filter((x) => x !== input.evidenceId), updatedAt: nowIso() }),
+    tx.putDisagreementPosition({
+      ...p,
+      evidenceIds: p.evidenceIds.filter((x) => x !== input.evidenceId),
+      ...(p.citations ? { citations: p.citations.filter((c) => c.evidenceId !== input.evidenceId) } : {}),
+      updatedAt: nowIso(),
+    }),
   );
 }
 

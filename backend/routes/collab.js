@@ -181,6 +181,90 @@ async function checkAiThreadOp(kind, parsed, rawPayload, projectId, userId) {
   }
 }
 
+// v0.5 P5b: shared brainstorms (brainwriting) and disagreements.
+// Owners and editors run them; commenters add and change their own ideas
+// and views; viewers read. Nobody writes as someone else.
+const THINKING_OPS = ['brainstorm-saved', 'idea-saved', 'idea-removed', 'disagreement-saved', 'disagreement-position-saved'];
+const THINKING_CONTRIBUTOR_OPS = ['idea-saved', 'idea-removed', 'disagreement-position-saved'];
+const THINKING_MANAGERS = new Set(['owner', 'editor']);
+
+/** The latest payload pushed for row `id` with op `kind`, or null. */
+async function findLatestPayload(projectId, kind, id) {
+  const result = await db.query(
+    'SELECT payload_json FROM collab_op_log WHERE project_id = $1 AND kind = $2 ORDER BY created_at ASC',
+    [projectId, kind],
+  );
+  let latest = null;
+  for (const row of result.rows) {
+    try {
+      const p = JSON.parse(row.payload_json);
+      if (p && p.id === id) latest = p;
+    } catch {
+      /* ignore malformed rows */
+    }
+  }
+  return latest;
+}
+
+/**
+ * Validate a brainstorm or disagreement op against the caller. Returns a
+ * rejection reason, or null when the op may be stored. A member may
+ * change someone else's row only as an owner or editor, and only a row
+ * that already exists with that author (grouping an idea, backing a view).
+ */
+async function checkThinkingOp(kind, parsed, rawPayload, projectId, userId, role) {
+  if (Buffer.byteLength(rawPayload, 'utf8') > AI_OP_MAX_BYTES) return 'payload exceeds 256 KiB';
+  if (!parsed || typeof parsed !== 'object') return 'invalid payload';
+  if (parsed.projectId !== projectId) return 'payload projectId mismatch';
+  if (typeof parsed.id !== 'string' || !parsed.id) return 'id missing';
+  const manager = THINKING_MANAGERS.has(role);
+  switch (kind) {
+    case 'brainstorm-saved': {
+      if (parsed.mode !== 'group') return 'only group brainstorms are synced';
+      if (parsed.createdBy !== userId) return 'only the person who started a brainstorm can change it';
+      const existing = await findLatestPayload(projectId, 'brainstorm-saved', parsed.id);
+      if (existing && existing.createdBy !== userId) return 'brainstorm id already taken';
+      if (existing && existing.revealedAt && !parsed.revealedAt) return 'a reveal cannot be undone';
+      return null;
+    }
+    case 'idea-saved':
+    case 'idea-removed': {
+      if (typeof parsed.brainstormId !== 'string') return 'brainstormId missing';
+      if (!(await findLatestPayload(projectId, 'brainstorm-saved', parsed.brainstormId))) return 'not a group brainstorm in this project';
+      if (parsed.authorId === userId) return null;
+      if (!manager) return 'you can only change your own ideas';
+      const existing = await findLatestPayload(projectId, 'idea-saved', parsed.id);
+      if (!existing || existing.authorId !== parsed.authorId) return 'idea author mismatch';
+      return null;
+    }
+    case 'disagreement-saved': {
+      const existing = await findLatestPayload(projectId, 'disagreement-saved', parsed.id);
+      if (!existing) {
+        if (parsed.createdBy !== userId) return 'disagreement creator mismatch';
+        return null;
+      }
+      if (existing.createdBy !== parsed.createdBy) return 'disagreement creator cannot change';
+      if (existing.status === 'settled' && parsed.status !== 'settled') return 'a settled disagreement cannot be reopened';
+      if (existing.status !== 'settled' && parsed.status === 'settled' && parsed.outcome?.settledBy !== userId) {
+        return 'outcome must name the member who settled it';
+      }
+      return null;
+    }
+    case 'disagreement-position-saved': {
+      if (typeof parsed.disagreementId !== 'string') return 'disagreementId missing';
+      const d = await findLatestPayload(projectId, 'disagreement-saved', parsed.disagreementId);
+      if (!d) return 'unknown disagreement';
+      if (parsed.authorId === userId) return null;
+      if (!manager) return 'you can only change your own views';
+      const existing = await findLatestPayload(projectId, 'disagreement-position-saved', parsed.id);
+      if (!existing || existing.authorId !== parsed.authorId) return 'view author mismatch';
+      return null;
+    }
+    default:
+      return 'unknown op';
+  }
+}
+
 const ROLE_ALLOWED_OPS = {
   owner: new Set([
     'member-added', 'member-role-changed', 'member-removed',
@@ -188,14 +272,16 @@ const ROLE_ALLOWED_OPS = {
     'task-shared', 'task-assigned', 'task-status-changed',
     'conflict-detected',
     ...AI_THREAD_OPS,
+    ...THINKING_OPS,
   ]),
   editor: new Set([
     'comment-posted', 'comment-resolved', 'activity-logged',
     'task-shared', 'task-assigned', 'task-status-changed',
     'conflict-detected',
     ...AI_THREAD_OPS,
+    ...THINKING_OPS,
   ]),
-  commenter: new Set(['comment-posted', 'activity-logged']),
+  commenter: new Set(['comment-posted', 'activity-logged', ...THINKING_CONTRIBUTOR_OPS]),
   viewer: new Set(),
 };
 
@@ -618,6 +704,13 @@ router.post('/projects/:id/push', asyncHandler(async (req, res) => {
       const parsed = JSON.parse(payload);
       if (AI_THREAD_OPS.includes(op.kind)) {
         const reason = await checkAiThreadOp(op.kind, parsed, payload, projectId, req.user.id);
+        if (reason) {
+          rejected.push({ id: op.id, reason });
+          continue;
+        }
+      }
+      if (THINKING_OPS.includes(op.kind)) {
+        const reason = await checkThinkingOp(op.kind, parsed, payload, projectId, req.user.id, membership.role);
         if (reason) {
           rejected.push({ id: op.id, reason });
           continue;

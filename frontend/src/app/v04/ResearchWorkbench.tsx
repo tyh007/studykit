@@ -29,6 +29,9 @@ import { contextForFocus } from '../../application/research/aiContext';
 import { setCapsuleOverride } from '../../features/ai/ui/openCapsule';
 import { useCurrentUserId } from '../../lib/auth';
 import { useAiSync } from './useAiSync';
+import { useThinkingSync } from './useThinkingSync';
+import { thinkingAccess } from '../../application/research/thinkingSync';
+import { ThinkingCollabProvider, type ThinkingCollab } from '../../features/research/thinkingCollab';
 import { openDisagreement, startBrainstorm } from '../../application/research/brainstorm';
 import type { Disagreement } from '../../domain/brainstorm';
 
@@ -40,6 +43,7 @@ const EvidenceWorkspace = React.lazy(() => import('../../features/research/Evide
 const ProjectAiPanel = React.lazy(() => import('../../features/research/ProjectAiPanel').then((m) => ({ default: m.ProjectAiPanel })));
 const BrainstormEditor = React.lazy(() => import('../../features/research/BrainstormEditor').then((m) => ({ default: m.BrainstormEditor })));
 const DisagreementEditor = React.lazy(() => import('../../features/research/DisagreementEditor').then((m) => ({ default: m.DisagreementEditor })));
+const AgendaEditor = React.lazy(() => import('../../features/research/AgendaEditor').then((m) => ({ default: m.AgendaEditor })));
 const ArgumentEditor = React.lazy(() => import('../../features/research/ArgumentEditor').then((m) => ({ default: m.ArgumentEditor })));
 const OutputWorkspace = React.lazy(() => import('../../features/research/OutputWorkspace').then((m) => ({ default: m.OutputWorkspace })));
 const DesignWorkspace = React.lazy(() => import('../../features/research/DesignWorkspace').then((m) => ({ default: m.DesignWorkspace })));
@@ -219,6 +223,13 @@ export function ResearchWorkbench(props: ResearchWorkbenchProps): React.ReactEle
   const userId = useCurrentUserId();
   userIdRef.current = userId;
   const aiSync = useAiSync(projectId, userId);
+  // P5b: brainstorms and disagreements follow project members.
+  const access = thinkingAccess(aiSync.role);
+  useThinkingSync({ projectId, userId, access, ...(aiSync.thinking ? { port: aiSync.thinking } : {}) });
+  const thinkingCollab = React.useMemo<ThinkingCollab>(
+    () => ({ access, hasMembers: aiSync.hasMembers, memberNames: aiSync.memberNames }),
+    [access, aiSync.hasMembers, aiSync.memberNames],
+  );
   const setAiOpen = controller.setAiOpen;
   React.useEffect(
     () =>
@@ -268,6 +279,8 @@ export function ResearchWorkbench(props: ResearchWorkbenchProps): React.ReactEle
         return index.brainstorms.find((b) => b.id === input.id)?.title ?? 'Brainstorm';
       case 'disagreement':
         return index.disagreements.find((d) => d.id === input.id)?.question ?? 'Disagreement';
+      case 'agenda':
+        return 'Meeting agenda';
       case 'design':
         return 'Research design';
       case 'task':
@@ -280,6 +293,7 @@ export function ResearchWorkbench(props: ResearchWorkbenchProps): React.ReactEle
   };
 
   return (
+    <ThinkingCollabProvider value={thinkingCollab}>
     <Workbench
       controller={controller}
       editors={editors}
@@ -305,7 +319,14 @@ export function ResearchWorkbench(props: ResearchWorkbenchProps): React.ReactEle
         ),
       }}
       explorer={
-        <ResearchExplorer projectId={projectId} index={index} controller={controller} open={open} onNewBrainstorm={newBrainstorm} />
+        <ResearchExplorer
+          projectId={projectId}
+          index={index}
+          controller={controller}
+          open={open}
+          onNewBrainstorm={newBrainstorm}
+          showAgenda={aiSync.hasMembers || index.disagreements.length > 0}
+        />
       }
       panel={
         ledger.points.length > 0 || ledger.excerptCount > 0 || openDisagreements.length > 0
@@ -341,6 +362,7 @@ export function ResearchWorkbench(props: ResearchWorkbenchProps): React.ReactEle
         </div>
       }
     />
+    </ThinkingCollabProvider>
   );
 }
 
@@ -354,6 +376,8 @@ interface ExplorerProps {
   readonly controller: WorkbenchController;
   readonly open: (input: EditorInput) => void;
   readonly onNewBrainstorm: () => void;
+  /** P5b: once the project has members or disagreements. */
+  readonly showAgenda: boolean;
 }
 
 function ResearchExplorer(props: ExplorerProps): React.ReactElement {
@@ -453,6 +477,7 @@ function ResearchExplorer(props: ExplorerProps): React.ReactElement {
         isRevealed(controller.state, 'design') ||
         index.brainstorms.length > 0 ||
         index.disagreements.length > 0 ||
+        props.showAgenda ||
         index.works.length > 0 ||
         points > 0) && (
         <section className="workbench-explorer-group" aria-labelledby="workbench-group-thinking">
@@ -469,6 +494,7 @@ function ResearchExplorer(props: ExplorerProps): React.ReactElement {
             </button>
           </div>
           <ul className="workbench-explorer-list" data-testid="workbench-explorer-thinking">
+            {props.showAgenda && item({ kind: 'agenda', id: projectId }, 'Meeting agenda', 'workbench-explorer-agenda')}
             {index.brainstorms.map((b) => item({ kind: 'brainstorm', id: b.id }, b.title, 'workbench-explorer-brainstorm'))}
             {index.disagreements.map((d) =>
               item(
@@ -719,6 +745,19 @@ function useResearchEditors(
             brainstormId={input.id}
             userId={p5.userId}
             onOpenArgument={() => open({ kind: 'argument', id: projectId })}
+          />
+        ),
+      },
+      agenda: {
+        render: () => (
+          <AgendaEditor
+            projectId={projectId}
+            onOpen={(target) => {
+              if (target.kind === 'disagreement') open({ kind: 'disagreement', id: target.id });
+              else if (target.kind === 'brainstorm') open({ kind: 'brainstorm', id: target.id });
+              else if (target.kind === 'point') argumentAt(target.claimId);
+              else source(target.workId, target.pageNumber);
+            }}
           />
         ),
       },

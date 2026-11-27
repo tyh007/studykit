@@ -31,7 +31,17 @@ export interface Brainstorm {
   /** “Think first, then look”: true when the user asked the AI for
    *  directions before writing their own. Recorded, never blocked. */
   readonly askedAiEarly?: boolean;
+  /**
+   * P5b. 'group' is brainwriting: every member writes on their own and
+   * sees only their own ideas until the person who started it reveals
+   * them all at once. Missing means 'solo' (only on this device).
+   */
+  readonly mode?: BrainstormMode;
+  /** Group mode: when everyone's ideas were revealed. One-way. */
+  readonly revealedAt?: string;
 }
+
+export type BrainstormMode = 'solo' | 'group';
 
 export interface Idea {
   readonly id: string;
@@ -61,6 +71,9 @@ export interface Disagreement {
   readonly createdBy: string;
   readonly createdAt: string;
   readonly updatedAt: string;
+  /** P5b: the point's title when it was raised, so members without the
+   *  point on their device (and the record) still know what it was about. */
+  readonly pointTitle?: string;
   /** Required when settled: what was decided and why. */
   readonly outcome?: {
     readonly summary: string;
@@ -79,11 +92,24 @@ export interface DisagreementPosition {
   readonly stance: string;
   /** Checked excerpts backing the view. */
   readonly evidenceIds: readonly string[];
+  /**
+   * P5b: a copy of each backing excerpt (quote, source, page), taken when
+   * it was attached. Members who don't have the excerpt see this, and a
+   * settled record keeps it even if the excerpt is later removed.
+   */
+  readonly citations?: readonly PositionCitation[];
   readonly authorId: string;
   /** Who holds it, when the user records someone else's view (e.g. a supervisor). */
   readonly holder: string;
   readonly createdAt: string;
   readonly updatedAt: string;
+}
+
+export interface PositionCitation {
+  readonly evidenceId: string;
+  readonly quote: string;
+  readonly source: string;
+  readonly pageNumber?: number;
 }
 
 const str = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
@@ -110,7 +136,9 @@ export function isBrainstorm(value: unknown): value is Brainstorm {
     iso(v.createdAt) &&
     iso(v.updatedAt) &&
     (v.convertedAt === undefined || iso(v.convertedAt)) &&
-    (v.askedAiEarly === undefined || typeof v.askedAiEarly === 'boolean')
+    (v.askedAiEarly === undefined || typeof v.askedAiEarly === 'boolean') &&
+    (v.mode === undefined || v.mode === 'solo' || v.mode === 'group') &&
+    (v.revealedAt === undefined || iso(v.revealedAt))
   );
 }
 
@@ -138,6 +166,7 @@ export function isDisagreement(value: unknown): value is Disagreement {
   const v = value as Record<string, unknown>;
   if (!(str(v.id) && str(v.projectId) && str(v.createdBy) && iso(v.createdAt) && iso(v.updatedAt))) return false;
   if (v.claimId !== null && !str(v.claimId)) return false;
+  if (v.pointTitle !== undefined && typeof v.pointTitle !== 'string') return false;
   if (typeof v.question !== 'string' || !v.question.trim()) return false;
   if (v.status !== 'open' && v.status !== 'settled') return false;
   if (v.status === 'settled') {
@@ -162,9 +191,27 @@ export function isDisagreementPosition(value: unknown): value is DisagreementPos
     v.stance.trim().length > 0 &&
     Array.isArray(v.evidenceIds) &&
     v.evidenceIds.every(str) &&
+    (v.citations === undefined || (Array.isArray(v.citations) && v.citations.every(isCitation))) &&
     str(v.authorId) &&
     typeof v.holder === 'string' &&
     iso(v.createdAt) &&
     iso(v.updatedAt)
   );
+}
+
+function isCitation(v: unknown): v is PositionCitation {
+  if (typeof v !== 'object' || v === null) return false;
+  const c = v as Record<string, unknown>;
+  return (
+    str(c.evidenceId) &&
+    typeof c.quote === 'string' &&
+    c.quote.length <= 4000 &&
+    typeof c.source === 'string' &&
+    (c.pageNumber === undefined || num(c.pageNumber))
+  );
+}
+
+/** Brainwriting: ideas stay private to their author until revealed. */
+export function isHiddenUntilReveal(b: Brainstorm): boolean {
+  return b.mode === 'group' && !b.revealedAt;
 }

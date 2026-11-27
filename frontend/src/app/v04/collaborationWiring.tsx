@@ -59,6 +59,7 @@
  */
 
 import { aiApplyTarget } from '../../application/research/aiSync';
+import { thinkingApplyTarget } from '../../application/research/thinkingSync';
 import React from 'react';
 import { isFeatureEnabled } from '../feature-flags';
 import { useAuth } from '../../lib/auth';
@@ -358,6 +359,8 @@ export function CollaborationWiring(
         },
         // v0.5 P4b: shared AI threads from other members.
         ...aiApplyTarget(sharedResearchRepo),
+        // v0.5 P5b: shared brainstorms and disagreements.
+        ...thinkingApplyTarget(sharedResearchRepo),
       }
     : null;
 

@@ -720,3 +720,53 @@ test('P4b: messages need a shared thread in the same project; private threads ne
   assert.equal(await push('u-a', 'ai-message-appended', 'null'), 'invalid payload');
   assert.equal(await push('u-a', 'ai-message-appended', message({ body: 'x'.repeat(300 * 1024) })), 'payload exceeds 256 KiB');
 });
+
+// ---------------------------------------------------------------------------
+// v0.5 P5b: shared brainstorms and disagreements
+// ---------------------------------------------------------------------------
+
+const groupBs = (over = {}) => ({ id: 'bs-1', projectId: 'p-1', prompt: 'Why?', groups: [], mode: 'group', createdBy: 'u-a', createdAt: 'x', updatedAt: 'x', ...over });
+const idea = (over = {}) => ({ id: 'i-1', projectId: 'p-1', brainstormId: 'bs-1', text: 'Replay', groupId: null, order: 1, authorId: 'u-c', authorType: 'user', createdAt: 'x', updatedAt: 'x', ...over });
+const dis = (over = {}) => ({ id: 'd-1', projectId: 'p-1', claimId: null, question: 'Older adults?', status: 'open', createdBy: 'u-e', createdAt: 'x', updatedAt: 'x', ...over });
+const view = (over = {}) => ({ id: 'v-1', projectId: 'p-1', disagreementId: 'd-1', stance: 'No', evidenceIds: [], authorId: 'u-c', holder: '', createdAt: 'x', updatedAt: 'x', ...over });
+
+test('P5b: only the person who started a group brainstorm changes it; reveals stick', async () => {
+  const { push } = await aiHarness();
+  assert.equal(await push('u-a', 'brainstorm-saved', groupBs({ mode: 'solo' })), 'only group brainstorms are synced');
+  assert.equal(await push('u-e', 'brainstorm-saved', groupBs()), 'only the person who started a brainstorm can change it');
+  assert.equal(await push('u-a', 'brainstorm-saved', groupBs()), 'accepted');
+  assert.equal(await push('u-e', 'brainstorm-saved', groupBs({ createdBy: 'u-e' })), 'brainstorm id already taken');
+  assert.match(await push('u-c', 'brainstorm-saved', groupBs({ createdBy: 'u-c', id: 'bs-2' })), /role commenter cannot push/);
+  assert.equal(await push('u-a', 'brainstorm-saved', groupBs({ revealedAt: 'y' })), 'accepted');
+  assert.equal(await push('u-a', 'brainstorm-saved', groupBs()), 'a reveal cannot be undone');
+});
+
+test('P5b: commenters write their own ideas and views; editors may group or back them; viewers read', async () => {
+  const { push } = await aiHarness();
+  assert.equal(await push('u-c', 'idea-saved', idea()), 'not a group brainstorm in this project');
+  assert.equal(await push('u-a', 'brainstorm-saved', groupBs()), 'accepted');
+  assert.equal(await push('u-c', 'idea-saved', idea()), 'accepted');
+  assert.equal(await push('u-c', 'idea-saved', idea({ id: 'i-2', authorId: 'u-a' })), 'you can only change your own ideas');
+  assert.equal(await push('u-e', 'idea-saved', idea({ groupId: 'g-1' })), 'accepted');
+  assert.equal(await push('u-e', 'idea-saved', idea({ id: 'i-3', authorId: 'u-a' })), 'idea author mismatch');
+  assert.match(await push('u-v', 'idea-saved', idea({ id: 'i-4', authorId: 'u-v' })), /role viewer cannot push/);
+  assert.equal(await push('u-c', 'idea-removed', { id: 'i-1', projectId: 'p-1', brainstormId: 'bs-1', authorId: 'u-c' }), 'accepted');
+
+  assert.equal(await push('u-c', 'disagreement-position-saved', view()), 'unknown disagreement');
+  assert.match(await push('u-c', 'disagreement-saved', dis({ createdBy: 'u-c' })), /role commenter cannot push/);
+  assert.equal(await push('u-e', 'disagreement-saved', dis()), 'accepted');
+  assert.equal(await push('u-c', 'disagreement-position-saved', view()), 'accepted');
+  assert.equal(await push('u-c', 'disagreement-position-saved', view({ id: 'v-2', authorId: 'u-e' })), 'you can only change your own views');
+  assert.equal(await push('u-a', 'disagreement-position-saved', view({ evidenceIds: ['e-1'] })), 'accepted');
+});
+
+test('P5b: a disagreement keeps its creator, and a settled one stays settled', async () => {
+  const { push } = await aiHarness();
+  assert.equal(await push('u-a', 'disagreement-saved', dis()), 'disagreement creator mismatch');
+  assert.equal(await push('u-e', 'disagreement-saved', dis()), 'accepted');
+  assert.equal(await push('u-a', 'disagreement-saved', dis({ createdBy: 'u-a' })), 'disagreement creator cannot change');
+  const outcome = { summary: 'Narrow it', positionId: null, settledBy: 'u-e', settledAt: 'y' };
+  assert.equal(await push('u-a', 'disagreement-saved', dis({ status: 'settled', outcome })), 'outcome must name the member who settled it');
+  assert.equal(await push('u-a', 'disagreement-saved', dis({ status: 'settled', outcome: { ...outcome, settledBy: 'u-a' } })), 'accepted');
+  assert.equal(await push('u-e', 'disagreement-saved', dis()), 'a settled disagreement cannot be reopened');
+});

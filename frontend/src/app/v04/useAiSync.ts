@@ -8,6 +8,7 @@
 import React from 'react';
 import { useCollaborationDepsOptional } from '../../features/collaboration/collaborationContext';
 import type { AiSyncPort } from '../../application/research/aiSync';
+import type { ThinkingSyncPort } from '../../application/research/thinkingSync';
 import type { Collaborator } from '../../domain/collaboration';
 
 export interface AiSyncState {
@@ -16,9 +17,14 @@ export interface AiSyncState {
   readonly role: Collaborator['role'] | null;
   /** userId → display name, for messages written by other members. */
   readonly memberNames: Readonly<Record<string, string>>;
+  /** v0.5 P5b: the outbox for brainstorms and disagreements, while the
+   *  project has other members. */
+  readonly thinking?: ThinkingSyncPort;
+  /** True while the project has members other than this user. */
+  readonly hasMembers: boolean;
 }
 
-const NONE: AiSyncState = { role: null, memberNames: {} };
+const NONE: AiSyncState = { role: null, memberNames: {}, hasMembers: false };
 
 export function useAiSync(projectId: string, userId: string): AiSyncState {
   const collab = useCollaborationDepsOptional();
@@ -61,6 +67,18 @@ export function useAiSync(projectId: string, userId: string): AiSyncState {
             },
           }
         : undefined;
-    return { ...(sync ? { sync } : {}), role, memberNames };
+    const thinking: ThinkingSyncPort | undefined =
+      record && others.length > 0
+        ? {
+            record: (op) => {
+              try {
+                record({ kind: op.kind, payload: op.payload });
+              } catch {
+                // Best effort: the local write is the durable record.
+              }
+            },
+          }
+        : undefined;
+    return { ...(sync ? { sync } : {}), ...(thinking ? { thinking } : {}), role, memberNames, hasMembers: others.length > 0 };
   }, [collab, members, userId]);
 }

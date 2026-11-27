@@ -255,6 +255,11 @@ function makeMockDb() {
       return { rows: [row] };
     }
 
+    if (/^SELECT payload_json FROM collab_op_log WHERE project_id = \$1 AND kind = \$2/i.test(sql)) {
+      const [pid, kind] = params;
+      return { rows: opLogRows().filter((o) => o.project_id === pid && o.kind === kind) };
+    }
+
     if (/^SELECT payload_json FROM collab_op_log WHERE project_id = \$1 AND kind = 'ai-thread-created'/i.test(sql)) {
       const [pid] = params;
       return { rows: opLogRows().filter((o) => o.project_id === pid && o.kind === 'ai-thread-created') };

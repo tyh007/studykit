@@ -120,6 +120,8 @@ const ROLE_CAPABILITIES: Readonly<Record<CollaboratorRole, ReadonlySet<Capabilit
     'ai.run-cloud',
     'ai-thread.read',
     'ai-thread.post',
+    'thinking.contribute',
+    'thinking.manage',
   ]),
   editor: new Set<Capability>([
     'project.read',
@@ -156,6 +158,8 @@ const ROLE_CAPABILITIES: Readonly<Record<CollaboratorRole, ReadonlySet<Capabilit
     'ai.run-cloud',
     'ai-thread.read',
     'ai-thread.post',
+    'thinking.contribute',
+    'thinking.manage',
   ]),
   commenter: new Set<Capability>([
     'project.read',
@@ -175,6 +179,7 @@ const ROLE_CAPABILITIES: Readonly<Record<CollaboratorRole, ReadonlySet<Capabilit
     'output.read',
     'ai.read-context',
     'ai-thread.read',
+    'thinking.contribute',
   ]),
   viewer: new Set<Capability>([
     'project.read',
