@@ -1,0 +1,405 @@
+/* v0.5 P5 — brainstorm and disagreement editors */
+
+.thinking {
+  height: 100%;
+  overflow: auto;
+  padding: 24px clamp(16px, 4vw, 40px) 48px;
+  box-sizing: border-box;
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+
+.thinking-header {
+  display: grid;
+  gap: 4px;
+}
+
+.thinking-kicker {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+.thinking-title {
+  margin: 0;
+  font-size: 1.3rem;
+  color: var(--text);
+}
+
+.thinking-title-input {
+  font: inherit;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs, 6px);
+  padding: 2px 4px;
+  margin-left: -4px;
+}
+
+.thinking-title-input:hover,
+.thinking-title-input:focus {
+  border-color: var(--border-glass);
+  outline: none;
+}
+
+.thinking-muted {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.thinking-gap {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  padding: 6px 8px;
+  border: 1px dashed var(--warning-border, var(--border-glass));
+  border-radius: var(--radius-sm, 8px);
+  background: var(--warning-subtle, transparent);
+}
+
+.thinking-error {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--warning-subtle, transparent);
+  color: var(--text);
+}
+
+.thinking-link {
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.thinking-link:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.thinking-icon {
+  flex: none;
+  font: inherit;
+  line-height: 1;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-radius: var(--radius-xs, 6px);
+  padding: 4px 6px;
+  cursor: pointer;
+}
+
+.thinking-icon:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--border-glass);
+}
+
+.thinking-icon:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.thinking-tag {
+  flex: none;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-full, 999px);
+  padding: 0 6px;
+}
+
+/* Brainstorm */
+
+.brainstorm-add input,
+.brainstorm-new-group input,
+.disagreement-add input,
+.disagreement-settle textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-sm, 8px);
+  padding: 8px 10px;
+}
+
+.brainstorm-add input {
+  font-size: 1rem;
+  padding: 10px 12px;
+}
+
+.brainstorm-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.brainstorm-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--surface-elevated, var(--surface));
+}
+
+.brainstorm-card.is-ai,
+.brainstorm-card--suggestion {
+  border-style: dashed;
+}
+
+.brainstorm-card-text {
+  flex: 1 1 100%;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  padding: 2px;
+  resize: none;
+  field-sizing: content;
+}
+
+span.brainstorm-card-text {
+  flex: 1 1 auto;
+}
+
+.brainstorm-card-text:focus {
+  outline: 1px solid var(--border-glass);
+  border-radius: 4px;
+}
+
+.brainstorm-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.brainstorm-card-group {
+  font: inherit;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-xs, 6px);
+  max-width: 140px;
+}
+
+.brainstorm-groups {
+  display: grid;
+  gap: 10px;
+}
+
+.brainstorm-new-group,
+.disagreement-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.brainstorm-group-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.brainstorm-group {
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md, 12px);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.brainstorm-group .brainstorm-cards {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.brainstorm-group-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.brainstorm-group-title {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs, 6px);
+  padding: 2px 4px;
+}
+
+.brainstorm-group-title:focus {
+  border-color: var(--border-glass);
+  outline: none;
+}
+
+.brainstorm-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-glass);
+}
+
+.brainstorm-footer p {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+/* Disagreement */
+
+.disagreement-outcome {
+  padding: 10px 12px;
+  border: 1px solid var(--success-border, var(--border-glass));
+  border-radius: var(--radius-md, 12px);
+  background: var(--success-subtle, transparent);
+}
+
+.disagreement-outcome h2,
+.disagreement-settle h2 {
+  margin: 0 0 4px;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+}
+
+.disagreement-outcome p {
+  margin: 0 0 4px;
+}
+
+.disagreement-positions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.disagreement-position {
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md, 12px);
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.disagreement-position.is-winner {
+  border-color: var(--success-border, var(--border-glass-strong));
+}
+
+.disagreement-stance {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.disagreement-evidence {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.disagreement-evidence li {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.disagreement-evidence-open {
+  flex: 1;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs, 6px);
+  padding: 4px 6px;
+  cursor: pointer;
+}
+
+.disagreement-evidence-open:hover {
+  background: var(--border-glass);
+}
+
+.disagreement-add input:first-child {
+  flex: 2;
+}
+
+.disagreement-add input:nth-child(2) {
+  flex: 1;
+}
+
+.disagreement-settle {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-glass);
+}
+
+.disagreement-settle fieldset {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.disagreement-settle legend {
+  font-size: 0.9rem;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.disagreement-settle label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.disagreement-settle label.is-disabled {
+  color: var(--text-muted);
+}
+
+.disagreement-settle button {
+  justify-self: start;
+}

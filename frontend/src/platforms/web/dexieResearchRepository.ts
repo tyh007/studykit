@@ -80,6 +80,7 @@ import type {
 import { stableSectionOrder, stableStatementOrder, supportDedupKey } from '../../domain/output';
 import type { StatementCitation } from '../../domain/citation';
 import type { AiDraftDecision, AiMessage, AiThread } from '../../domain/aiThread';
+import type { Brainstorm, Disagreement, DisagreementPosition, Idea } from '../../domain/brainstorm';
 import { citationDedupKey } from '../../domain/citation';
 import type {
   ResearchRepository,
@@ -99,6 +100,13 @@ import {
   sortByCreated,
   type AiThreadQuery,
   type AiMessageQuery,
+  assertBrainstormInvariants,
+  assertIdeaInvariants,
+  assertDisagreementInvariants,
+  assertDisagreementPositionInvariants,
+  p5Queries,
+  type IdeaQuery,
+  type DisagreementPositionQuery,
   assertStatementSupportInvariants,
   assertTaskInvariants,
 } from '../../application/research/researchRepository';
@@ -148,6 +156,10 @@ function readResearchTables(): ResearchTables {
     researchAiThreads: Table<AiThread, string>;
     researchAiMessages: Table<AiMessage, string>;
     researchAiDraftDecisions: Table<AiDraftDecision, string>;
+    researchBrainstorms: Table<Brainstorm, string>;
+    researchIdeas: Table<Idea, string>;
+    researchDisagreements: Table<Disagreement, string>;
+    researchDisagreementPositions: Table<DisagreementPosition, string>;
   };
   return {
     projects: extended.researchProjects as unknown as ResearchDexieTable<ResearchProject>,
@@ -175,6 +187,10 @@ function readResearchTables(): ResearchTables {
     aiThreads: extended.researchAiThreads as unknown as ResearchDexieTable<AiThread>,
     aiMessages: extended.researchAiMessages as unknown as ResearchDexieTable<AiMessage>,
     aiDraftDecisions: extended.researchAiDraftDecisions as unknown as ResearchDexieTable<AiDraftDecision>,
+    brainstorms: extended.researchBrainstorms as unknown as ResearchDexieTable<Brainstorm>,
+    ideas: extended.researchIdeas as unknown as ResearchDexieTable<Idea>,
+    disagreements: extended.researchDisagreements as unknown as ResearchDexieTable<Disagreement>,
+    disagreementPositions: extended.researchDisagreementPositions as unknown as ResearchDexieTable<DisagreementPosition>,
   };
 }
 
@@ -204,6 +220,10 @@ interface ResearchTables {
   aiThreads: ResearchDexieTable<AiThread>;
   aiMessages: ResearchDexieTable<AiMessage>;
   aiDraftDecisions: ResearchDexieTable<AiDraftDecision>;
+  brainstorms: ResearchDexieTable<Brainstorm>;
+  ideas: ResearchDexieTable<Idea>;
+  disagreements: ResearchDexieTable<Disagreement>;
+  disagreementPositions: ResearchDexieTable<DisagreementPosition>;
 }
 
 class ResearchDexieDB {
@@ -238,6 +258,10 @@ class ResearchDexieDB {
       tables.aiThreads,
       tables.aiMessages,
       tables.aiDraftDecisions,
+      tables.brainstorms,
+      tables.ideas,
+      tables.disagreements,
+      tables.disagreementPositions,
     ];
     for (const t of tArr) {
       // Dexie 4 only honours the event form; the object form is silently
@@ -291,6 +315,10 @@ class ResearchDexieDB {
       aiThreads,
       aiMessages,
       aiDraftDecisions,
+      brainstorms,
+      ideas,
+      disagreements,
+      disagreementPositions,
     ] = await Promise.all([
       t.projects.toArray(),
       t.querySpecs.toArray(),
@@ -317,6 +345,10 @@ class ResearchDexieDB {
       t.aiThreads.toArray(),
       t.aiMessages.toArray(),
       t.aiDraftDecisions.toArray(),
+      t.brainstorms.toArray(),
+      t.ideas.toArray(),
+      t.disagreements.toArray(),
+      t.disagreementPositions.toArray(),
     ]);
     const snap: ResearchSnapshot = {
       projects,
@@ -344,6 +376,10 @@ class ResearchDexieDB {
       aiThreads,
       aiMessages,
       aiDraftDecisions,
+      brainstorms,
+      ideas,
+      disagreements,
+      disagreementPositions,
     };
     for (const l of this.listeners) l(snap);
   }
@@ -756,6 +792,42 @@ class DexieResearchRepository implements ResearchRepository {
     return sortByCreated(all);
   }
 
+  async getBrainstorm(id: string): Promise<Brainstorm | null> {
+    return (await readResearchTables().brainstorms.get(id)) ?? null;
+  }
+
+  async listBrainstorms(query: { readonly projectId: string }): Promise<Brainstorm[]> {
+    return p5Queries.brainstorms(await readResearchTables().brainstorms.where('projectId').equals(query.projectId).toArray(), query.projectId);
+  }
+
+  async listIdeas(query: IdeaQuery): Promise<Idea[]> {
+    const t = readResearchTables().ideas;
+    const rows = query.brainstormId
+      ? await t.where('brainstormId').equals(query.brainstormId).toArray()
+      : query.projectId
+        ? await t.where('projectId').equals(query.projectId).toArray()
+        : await t.toArray();
+    return p5Queries.ideas(rows, query);
+  }
+
+  async getDisagreement(id: string): Promise<Disagreement | null> {
+    return (await readResearchTables().disagreements.get(id)) ?? null;
+  }
+
+  async listDisagreements(query: { readonly projectId: string }): Promise<Disagreement[]> {
+    return p5Queries.disagreements(await readResearchTables().disagreements.where('projectId').equals(query.projectId).toArray(), query.projectId);
+  }
+
+  async listDisagreementPositions(query: DisagreementPositionQuery): Promise<DisagreementPosition[]> {
+    const t = readResearchTables().disagreementPositions;
+    const rows = query.disagreementId
+      ? await t.where('disagreementId').equals(query.disagreementId).toArray()
+      : query.projectId
+        ? await t.where('projectId').equals(query.projectId).toArray()
+        : await t.toArray();
+    return p5Queries.positions(rows, query);
+  }
+
   async transact<T>(fn: (tx: ResearchRepositoryTransaction) => T | Promise<T>): Promise<T> {
     const tables = readResearchTables();
     return db.transaction(
@@ -786,6 +858,10 @@ class DexieResearchRepository implements ResearchRepository {
         tables.aiThreads as unknown as Table<unknown, string>,
         tables.aiMessages as unknown as Table<unknown, string>,
         tables.aiDraftDecisions as unknown as Table<unknown, string>,
+        tables.brainstorms as unknown as Table<unknown, string>,
+        tables.ideas as unknown as Table<unknown, string>,
+        tables.disagreements as unknown as Table<unknown, string>,
+        tables.disagreementPositions as unknown as Table<unknown, string>,
       ],
       async () => {
         const staged = {
@@ -814,6 +890,10 @@ class DexieResearchRepository implements ResearchRepository {
           aiThreads: new Map<string, AiThread | null>(),
           aiMessages: new Map<string, AiMessage>(),
           aiDraftDecisions: new Map<string, AiDraftDecision>(),
+          brainstorms: new Map<string, Brainstorm | null>(),
+          ideas: new Map<string, Idea | null>(),
+          disagreements: new Map<string, Disagreement | null>(),
+          disagreementPositions: new Map<string, DisagreementPosition | null>(),
         };
         const tx: ResearchRepositoryTransaction = {
           putProject: (p) => {
@@ -966,6 +1046,26 @@ class DexieResearchRepository implements ResearchRepository {
             }
             staged.aiDraftDecisions.set(d.id, d);
           },
+          putBrainstorm: (b) => {
+            assertBrainstormInvariants(b);
+            staged.brainstorms.set(b.id, b);
+          },
+          deleteBrainstorm: (id) => staged.brainstorms.set(id, null),
+          putIdea: (i) => {
+            assertIdeaInvariants(i);
+            staged.ideas.set(i.id, i);
+          },
+          deleteIdea: (id) => staged.ideas.set(id, null),
+          putDisagreement: (d) => {
+            assertDisagreementInvariants(d);
+            staged.disagreements.set(d.id, d);
+          },
+          deleteDisagreement: (id) => staged.disagreements.set(id, null),
+          putDisagreementPosition: (p) => {
+            assertDisagreementPositionInvariants(p);
+            staged.disagreementPositions.set(p.id, p);
+          },
+          deleteDisagreementPosition: (id) => staged.disagreementPositions.set(id, null),
         };
         const result = await fn(tx);
         for (const id of staged.aiMessages.keys()) {
@@ -1083,6 +1183,18 @@ class DexieResearchRepository implements ResearchRepository {
           ),
           ...Array.from(staged.aiMessages.values()).map((v) => tables.aiMessages.put(v)),
           ...Array.from(staged.aiDraftDecisions.values()).map((v) => tables.aiDraftDecisions.put(v)),
+          ...Array.from(staged.brainstorms).map(([id, v]) =>
+            v === null ? tables.brainstorms.delete(id) : tables.brainstorms.put(v),
+          ),
+          ...Array.from(staged.ideas).map(([id, v]) =>
+            v === null ? tables.ideas.delete(id) : tables.ideas.put(v),
+          ),
+          ...Array.from(staged.disagreements).map(([id, v]) =>
+            v === null ? tables.disagreements.delete(id) : tables.disagreements.put(v),
+          ),
+          ...Array.from(staged.disagreementPositions).map(([id, v]) =>
+            v === null ? tables.disagreementPositions.delete(id) : tables.disagreementPositions.put(v),
+          ),
         ]);
         return result;
       },

@@ -48,6 +48,7 @@ import type {
 } from '../domain/output';
 import type { StatementCitation } from '../domain/citation';
 import type { AiDraftDecision, AiMessage, AiThread } from '../domain/aiThread';
+import type { Brainstorm, Disagreement, DisagreementPosition, Idea } from '../domain/brainstorm';
 import type {
   CanvasView,
   FreeNode,
@@ -166,6 +167,10 @@ export class StudyKitDB extends Dexie {
   researchAiThreads!: EntityTable<AiThread, 'id'>;
   researchAiMessages!: EntityTable<AiMessage, 'id'>;
   researchAiDraftDecisions!: EntityTable<AiDraftDecision, 'id'>;
+  researchBrainstorms!: EntityTable<Brainstorm, 'id'>;
+  researchIdeas!: EntityTable<Idea, 'id'>;
+  researchDisagreements!: EntityTable<Disagreement, 'id'>;
+  researchDisagreementPositions!: EntityTable<DisagreementPosition, 'id'>;
 
   constructor() {
     super('StudyKit');
@@ -430,6 +435,14 @@ export class StudyKitDB extends Dexie {
       researchAiThreads: 'id, projectId, updatedAt, [projectId+updatedAt]',
       researchAiMessages: 'id, projectId, threadId, createdAt, [threadId+createdAt]',
       researchAiDraftDecisions: 'id, projectId, threadId, messageId, draftId',
+    });
+
+    // v0.5 P5: brainstorming and disagreements.
+    this.version(13).stores({
+      researchBrainstorms: 'id, projectId, updatedAt',
+      researchIdeas: 'id, projectId, brainstormId, groupId',
+      researchDisagreements: 'id, projectId, claimId, status',
+      researchDisagreementPositions: 'id, projectId, disagreementId',
     });
 
     // Defensive: Dexie `EntityTable<FreeNode, 'id'>` typing

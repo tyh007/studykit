@@ -33,6 +33,7 @@ import type {
 } from '../../domain/output';
 import type { StatementCitation } from '../../domain/citation';
 import type { AiDraftDecision, AiMessage, AiThread } from '../../domain/aiThread';
+import type { Brainstorm, Disagreement, DisagreementPosition, Idea } from '../../domain/brainstorm';
 import {
   deleteDomainRecord,
   DesktopDomainRecordStore,
@@ -65,7 +66,11 @@ type ResearchEntity =
   | 'statement_citation'
   | 'ai_thread'
   | 'ai_message'
-  | 'ai_draft_decision';
+  | 'ai_draft_decision'
+  | 'brainstorm'
+  | 'idea'
+  | 'disagreement'
+  | 'disagreement_position';
 
 function put(
   entityType: ResearchEntity,
@@ -116,6 +121,10 @@ function hydrate(
     case 'ai_thread': tx.putAiThread(value as unknown as AiThread); break;
     case 'ai_message': tx.appendAiMessage(value as unknown as AiMessage); break;
     case 'ai_draft_decision': tx.appendAiDraftDecision(value as unknown as AiDraftDecision); break;
+    case 'brainstorm': tx.putBrainstorm(value as unknown as Brainstorm); break;
+    case 'idea': tx.putIdea(value as unknown as Idea); break;
+    case 'disagreement': tx.putDisagreement(value as unknown as Disagreement); break;
+    case 'disagreement_position': tx.putDisagreementPosition(value as unknown as DisagreementPosition); break;
     default: throw new Error(`Unsupported Research entity type: ${entityType}`);
   }
 }
@@ -284,6 +293,30 @@ export class SqliteResearchRepository implements ResearchRepository {
     return (await this.ready()).listAiDraftDecisions(...args);
   }
 
+  async getBrainstorm(...args: Parameters<ResearchRepository['getBrainstorm']>) {
+    return (await this.ready()).getBrainstorm(...args);
+  }
+
+  async listBrainstorms(...args: Parameters<ResearchRepository['listBrainstorms']>) {
+    return (await this.ready()).listBrainstorms(...args);
+  }
+
+  async listIdeas(...args: Parameters<ResearchRepository['listIdeas']>) {
+    return (await this.ready()).listIdeas(...args);
+  }
+
+  async getDisagreement(...args: Parameters<ResearchRepository['getDisagreement']>) {
+    return (await this.ready()).getDisagreement(...args);
+  }
+
+  async listDisagreements(...args: Parameters<ResearchRepository['listDisagreements']>) {
+    return (await this.ready()).listDisagreements(...args);
+  }
+
+  async listDisagreementPositions(...args: Parameters<ResearchRepository['listDisagreementPositions']>) {
+    return (await this.ready()).listDisagreementPositions(...args);
+  }
+
   async transact<T>(
     fn: (tx: ResearchRepositoryTransaction) => T | Promise<T>,
   ): Promise<T> {
@@ -358,6 +391,14 @@ export class SqliteResearchRepository implements ResearchRepository {
         },
         appendAiMessage: putMethod<AiMessage>('appendAiMessage', 'ai_message'),
         appendAiDraftDecision: putMethod<AiDraftDecision>('appendAiDraftDecision', 'ai_draft_decision'),
+        putBrainstorm: putMethod<Brainstorm>('putBrainstorm', 'brainstorm'),
+        deleteBrainstorm: deleteMethod('deleteBrainstorm', 'brainstorm'),
+        putIdea: putMethod<Idea>('putIdea', 'idea'),
+        deleteIdea: deleteMethod('deleteIdea', 'idea'),
+        putDisagreement: putMethod<Disagreement>('putDisagreement', 'disagreement'),
+        deleteDisagreement: deleteMethod('deleteDisagreement', 'disagreement'),
+        putDisagreementPosition: putMethod<DisagreementPosition>('putDisagreementPosition', 'disagreement_position'),
+        deleteDisagreementPosition: deleteMethod('deleteDisagreementPosition', 'disagreement_position'),
       });
       const removedThreads: string[] = [];
       const result = await fn(tx);

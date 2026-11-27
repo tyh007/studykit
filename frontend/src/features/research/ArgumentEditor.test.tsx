@@ -22,6 +22,7 @@ import { ResearchProvider, type ResearchContextValue } from './researchContext';
 import { MemoryResearchRepository } from '../../application/research/researchRepository';
 import { OpenAlexSearchProvider } from '../../application/research/openAlexProvider';
 import { addPoint } from '../../application/research/argument';
+import { openDisagreement } from '../../application/research/brainstorm';
 import {
   makeEvidence,
   makeResearchLocator,
@@ -31,7 +32,7 @@ import {
 
 const P = 'p-001';
 
-async function mount(opts: { focusPointId?: string } = {}) {
+async function mount(opts: Partial<React.ComponentProps<typeof ArgumentEditor>> = {}) {
   const repo = new MemoryResearchRepository();
   await repo.transact(async (tx) => {
     tx.putProject(makeResearchProject({ id: P, livingBrief: 'Does sleep help memory?' }));
@@ -182,5 +183,25 @@ describe('ArgumentEditor', () => {
       ]),
     );
     expect(screen.getByRole('button', { name: 'Move “Second” up' })).toBeDisabled();
+  });
+
+  it('raises a disagreement on a point and shows the open ones', async () => {
+    const onRaiseDisagreement = vi.fn();
+    const onOpenDisagreement = vi.fn();
+    const onStartBrainstorm = vi.fn();
+    const { repo } = await mount({ onRaiseDisagreement, onOpenDisagreement, onStartBrainstorm });
+    fireEvent.click(await screen.findByTestId('argument-brainstorm'));
+    expect(onStartBrainstorm).toHaveBeenCalled();
+
+    const claim = await act(() => addPoint(repo, { projectId: P, title: 'Sleep helps memory' }));
+    const point = await screen.findByTestId('argument-point');
+    fireEvent.click(within(point).getByTestId('argument-raise'));
+    fireEvent.change(within(point).getByTestId('argument-raise-input'), { target: { value: 'Older adults?' } });
+    fireEvent.submit(within(point).getByTestId('argument-raise-input').closest('form')!);
+    expect(onRaiseDisagreement).toHaveBeenCalledWith(claim.id, 'Older adults?');
+
+    const d = await act(() => openDisagreement(repo, { projectId: P, claimId: claim.id, question: 'Older adults?' }, { userId: 'u-1' }));
+    fireEvent.click(await within(point).findByTestId('argument-disagreement'));
+    expect(onOpenDisagreement).toHaveBeenCalledWith(d.id);
   });
 });

@@ -98,6 +98,16 @@ import {
   type AiThread,
 } from '../../domain/aiThread';
 import {
+  isBrainstorm,
+  isDisagreement,
+  isDisagreementPosition,
+  isIdea,
+  type Brainstorm,
+  type Disagreement,
+  type DisagreementPosition,
+  type Idea,
+} from '../../domain/brainstorm';
+import {
   citationDedupKey,
   isStatementCitation,
 } from '../../domain/citation';
@@ -162,6 +172,15 @@ export interface ResearchRepositoryTransaction {
   deleteAiThread(id: string): void;
   appendAiMessage(m: AiMessage): void;
   appendAiDraftDecision(d: AiDraftDecision): void;
+  // v0.5 P5: brainstorming and disagreements.
+  putBrainstorm(b: Brainstorm): void;
+  deleteBrainstorm(id: string): void;
+  putIdea(i: Idea): void;
+  deleteIdea(id: string): void;
+  putDisagreement(d: Disagreement): void;
+  deleteDisagreement(id: string): void;
+  putDisagreementPosition(p: DisagreementPosition): void;
+  deleteDisagreementPosition(id: string): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -308,6 +327,16 @@ export interface AiMessageQuery {
   readonly projectId?: string;
 }
 
+export interface IdeaQuery {
+  readonly projectId?: string;
+  readonly brainstormId?: string;
+}
+
+export interface DisagreementPositionQuery {
+  readonly projectId?: string;
+  readonly disagreementId?: string;
+}
+
 export interface StatementCitationQuery {
   readonly statementId?: string;
   readonly outputId?: string;
@@ -353,6 +382,10 @@ export interface ResearchSnapshot {
   readonly aiThreads: readonly AiThread[];
   readonly aiMessages: readonly AiMessage[];
   readonly aiDraftDecisions: readonly AiDraftDecision[];
+  readonly brainstorms: readonly Brainstorm[];
+  readonly ideas: readonly Idea[];
+  readonly disagreements: readonly Disagreement[];
+  readonly disagreementPositions: readonly DisagreementPosition[];
 }
 
 // ---------------------------------------------------------------------------
@@ -408,6 +441,12 @@ export interface ResearchRepository {
   listAiThreads(query: AiThreadQuery): Promise<AiThread[]>;
   listAiMessages(query: AiMessageQuery): Promise<AiMessage[]>;
   listAiDraftDecisions(query: AiMessageQuery): Promise<AiDraftDecision[]>;
+  getBrainstorm(id: string): Promise<Brainstorm | null>;
+  listBrainstorms(query: { readonly projectId: string }): Promise<Brainstorm[]>;
+  listIdeas(query: IdeaQuery): Promise<Idea[]>;
+  getDisagreement(id: string): Promise<Disagreement | null>;
+  listDisagreements(query: { readonly projectId: string }): Promise<Disagreement[]>;
+  listDisagreementPositions(query: DisagreementPositionQuery): Promise<DisagreementPosition[]>;
 
   // --- atomic writes
   transact<T>(fn: (tx: ResearchRepositoryTransaction) => T | Promise<T>): Promise<T>;
@@ -651,6 +690,38 @@ export function sortByCreated<T extends { createdAt?: string; decidedAt?: string
   return all.sort((a, b) => at(a).localeCompare(at(b)) || a.id.localeCompare(b.id));
 }
 
+export function assertBrainstormInvariants(b: Brainstorm): void {
+  if (!isBrainstorm(b)) throw new Error('Brainstorm does not satisfy the domain contract.');
+}
+
+export function assertIdeaInvariants(i: Idea): void {
+  if (!isIdea(i)) throw new Error('Idea does not satisfy the domain contract.');
+}
+
+export function assertDisagreementInvariants(d: Disagreement): void {
+  if (!isDisagreement(d)) throw new Error('Disagreement does not satisfy the domain contract.');
+}
+
+export function assertDisagreementPositionInvariants(p: DisagreementPosition): void {
+  if (!isDisagreementPosition(p)) throw new Error('DisagreementPosition does not satisfy the domain contract.');
+}
+
+/** Shared filters/sorts so every adapter answers P5 queries the same way. */
+export const p5Queries = {
+  brainstorms: (all: Brainstorm[], projectId: string): Brainstorm[] =>
+    all.filter((b) => b.projectId === projectId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)),
+  ideas: (all: Idea[], q: IdeaQuery): Idea[] =>
+    all
+      .filter((i) => (!q.projectId || i.projectId === q.projectId) && (!q.brainstormId || i.brainstormId === q.brainstormId))
+      .sort((a, b) => a.order - b.order || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)),
+  disagreements: (all: Disagreement[], projectId: string): Disagreement[] =>
+    all.filter((d) => d.projectId === projectId).sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)),
+  positions: (all: DisagreementPosition[], q: DisagreementPositionQuery): DisagreementPosition[] =>
+    all
+      .filter((p) => (!q.projectId || p.projectId === q.projectId) && (!q.disagreementId || p.disagreementId === q.disagreementId))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)),
+};
+
 export function assertStatementCitationInvariants(c: StatementCitation): void {
   if (!isStatementCitation(c)) {
     throw new Error('StatementCitation does not satisfy the canonical domain contract.');
@@ -696,6 +767,10 @@ export class MemoryResearchRepository implements ResearchRepository {
   private readonly aiThreads = new Map<string, AiThread>();
   private readonly aiMessages = new Map<string, AiMessage>();
   private readonly aiDraftDecisions = new Map<string, AiDraftDecision>();
+  private readonly brainstorms = new Map<string, Brainstorm>();
+  private readonly ideas = new Map<string, Idea>();
+  private readonly disagreements = new Map<string, Disagreement>();
+  private readonly disagreementPositions = new Map<string, DisagreementPosition>();
   private readonly listeners = new Set<ResearchQueryListener>();
 
   async getProject(id: string): Promise<ResearchProject | null> {
@@ -1005,6 +1080,30 @@ export class MemoryResearchRepository implements ResearchRepository {
     return sortByCreated(all);
   }
 
+  async getBrainstorm(id: string): Promise<Brainstorm | null> {
+    return this.brainstorms.get(id) ?? null;
+  }
+
+  async listBrainstorms(query: { readonly projectId: string }): Promise<Brainstorm[]> {
+    return p5Queries.brainstorms(Array.from(this.brainstorms.values()), query.projectId);
+  }
+
+  async listIdeas(query: IdeaQuery): Promise<Idea[]> {
+    return p5Queries.ideas(Array.from(this.ideas.values()), query);
+  }
+
+  async getDisagreement(id: string): Promise<Disagreement | null> {
+    return this.disagreements.get(id) ?? null;
+  }
+
+  async listDisagreements(query: { readonly projectId: string }): Promise<Disagreement[]> {
+    return p5Queries.disagreements(Array.from(this.disagreements.values()), query.projectId);
+  }
+
+  async listDisagreementPositions(query: DisagreementPositionQuery): Promise<DisagreementPosition[]> {
+    return p5Queries.positions(Array.from(this.disagreementPositions.values()), query);
+  }
+
   async transact<T>(fn: (tx: ResearchRepositoryTransaction) => T | Promise<T>): Promise<T> {
     const staged = {
       projects: new Map<string, ResearchProject | null>(),
@@ -1032,6 +1131,10 @@ export class MemoryResearchRepository implements ResearchRepository {
       aiThreads: new Map<string, AiThread | null>(),
       aiMessages: new Map<string, AiMessage>(),
       aiDraftDecisions: new Map<string, AiDraftDecision>(),
+      brainstorms: new Map<string, Brainstorm | null>(),
+      ideas: new Map<string, Idea | null>(),
+      disagreements: new Map<string, Disagreement | null>(),
+      disagreementPositions: new Map<string, DisagreementPosition | null>(),
     };
     const tx: ResearchRepositoryTransaction = {
       putProject: (p) => {
@@ -1204,6 +1307,26 @@ export class MemoryResearchRepository implements ResearchRepository {
         }
         staged.aiDraftDecisions.set(d.id, d);
       },
+      putBrainstorm: (b) => {
+        assertBrainstormInvariants(b);
+        staged.brainstorms.set(b.id, b);
+      },
+      deleteBrainstorm: (id) => staged.brainstorms.set(id, null),
+      putIdea: (i) => {
+        assertIdeaInvariants(i);
+        staged.ideas.set(i.id, i);
+      },
+      deleteIdea: (id) => staged.ideas.set(id, null),
+      putDisagreement: (d) => {
+        assertDisagreementInvariants(d);
+        staged.disagreements.set(d.id, d);
+      },
+      deleteDisagreement: (id) => staged.disagreements.set(id, null),
+      putDisagreementPosition: (p) => {
+        assertDisagreementPositionInvariants(p);
+        staged.disagreementPositions.set(p.id, p);
+      },
+      deleteDisagreementPosition: (id) => staged.disagreementPositions.set(id, null),
     };
     const result = await fn(tx);
     for (const [id, v] of staged.projects) apply(this.projects, id, v);
@@ -1238,6 +1361,10 @@ export class MemoryResearchRepository implements ResearchRepository {
     }
     for (const [id, v] of staged.aiMessages) this.aiMessages.set(id, v);
     for (const [id, v] of staged.aiDraftDecisions) this.aiDraftDecisions.set(id, v);
+    for (const [id, v] of staged.brainstorms) apply(this.brainstorms, id, v);
+    for (const [id, v] of staged.ideas) apply(this.ideas, id, v);
+    for (const [id, v] of staged.disagreements) apply(this.disagreements, id, v);
+    for (const [id, v] of staged.disagreementPositions) apply(this.disagreementPositions, id, v);
     this.notify();
     return result;
   }
@@ -1276,6 +1403,10 @@ export class MemoryResearchRepository implements ResearchRepository {
       aiThreads: Array.from(this.aiThreads.values()),
       aiMessages: Array.from(this.aiMessages.values()),
       aiDraftDecisions: Array.from(this.aiDraftDecisions.values()),
+      brainstorms: Array.from(this.brainstorms.values()),
+      ideas: Array.from(this.ideas.values()),
+      disagreements: Array.from(this.disagreements.values()),
+      disagreementPositions: Array.from(this.disagreementPositions.values()),
     };
     for (const l of this.listeners) l(snap);
   }

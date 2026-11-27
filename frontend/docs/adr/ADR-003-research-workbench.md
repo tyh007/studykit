@@ -295,6 +295,17 @@ P4 is delivered in two steps. **P4a** (this one) is local: threads, the panel an
 - **Draft actions.** Cards are accepted through one typed table, `AI_DRAFT_ACTIONS` in `aiPartner.ts`, that runs the same use case a user action would. They don't go through the capsule's `ActionRegistry`: those actions create new drafts from a context packet and appear as capsule chips, while a card is already a draft being accepted.
 - **Not verified end to end in two browsers.** The Playwright collaboration smoke's API phase passes against the real backend. Its browser phase needs a Playwright browser download that was not done.
 
+## P5a implementation notes (2026-11-26)
+
+P5 is delivered in two steps. **P5a** (this one) works for one person: brainstorming that turns into the argument, and disagreements as records. **P5b** adds the group parts: brainwriting (write separately, reveal together), syncing ideas and disagreements to members, the AI moderator and the meeting agenda.
+
+- **Not the spatial canvas.** The existing cognitive canvas (React Flow, its own store, `v04Canvas`) has no groups and needs pointer skill to use. Brainstorming is a new `brainstorm` editor instead: type an idea and press Enter (one card each), name groups, and move cards into them with each card's Group menu. The canvas stays as it is, reachable from the explorer; unifying the two is P7 work.
+- **Storage.** New Research entity types `brainstorm` (groups embedded), `idea`, `disagreement` and `disagreement_position`, with the same adapters as P4 (memory, Dexie v13, desktop `domain_records`, Rust allow-list).
+- **Clusters → argument in one step.** "Turn into argument" makes each group that has ideas a point, in group order, after the existing points, in one transaction. A group remembers its point (`claimId`), so running it again adds only new groups. Ideas are not copied into "Why it holds": that slot stays a gap until the user writes the reasoning.
+- **Think first.** "What am I missing?" appears after three of the user's own ideas. "Show me now" is always offered; using it sets `askedAiEarly` on the brainstorm. Suggestions are temporary cards; **Add** stores them as ideas with `authorType: 'ai'`.
+- **Disagreements.** Raised from a point ("Someone disagrees") or free-standing. Each view (`DisagreementPosition`) states a stance, optionally whose view it is ("Supervisor"), and is backed only by checked excerpts. Settling requires a written outcome. A view can prevail only if it has evidence, or the outcome can be "neither outright / both in part". Settled disagreements are read-only records; to revisit, open a new one. Open disagreements appear on their point, in "What's missing" and in the explorer's **Thinking** group (which also offers **+ Brainstorm** once the project has a source or a point).
+- **Found while testing.** Fast typing in the idea box merged ideas, because the box was cleared only after the save. It now clears at once and restores the text if the save fails. Idea order stays in typing order even when saves overlap.
+
 ## Alternatives rejected
 
 - **Keep page routing and add a side AI panel.** Fixes AI scope but not the one-object-at-a-time problem.

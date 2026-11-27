@@ -29,6 +29,8 @@ import { contextForFocus } from '../../application/research/aiContext';
 import { setCapsuleOverride } from '../../features/ai/ui/openCapsule';
 import { useCurrentUserId } from '../../lib/auth';
 import { useAiSync } from './useAiSync';
+import { openDisagreement, startBrainstorm } from '../../application/research/brainstorm';
+import type { Disagreement } from '../../domain/brainstorm';
 
 const ProjectHome = React.lazy(() => import('../../features/research/ProjectHome').then((m) => ({ default: m.ProjectHome })));
 const Sources = React.lazy(() => import('../../features/research/Sources').then((m) => ({ default: m.Sources })));
@@ -36,6 +38,8 @@ const Discovery = React.lazy(() => import('../../features/research/Discovery').t
 const ResearchReader = React.lazy(() => import('../../features/research/ResearchReader').then((m) => ({ default: m.ResearchReader })));
 const EvidenceWorkspace = React.lazy(() => import('../../features/research/EvidenceWorkspace').then((m) => ({ default: m.EvidenceWorkspace })));
 const ProjectAiPanel = React.lazy(() => import('../../features/research/ProjectAiPanel').then((m) => ({ default: m.ProjectAiPanel })));
+const BrainstormEditor = React.lazy(() => import('../../features/research/BrainstormEditor').then((m) => ({ default: m.BrainstormEditor })));
+const DisagreementEditor = React.lazy(() => import('../../features/research/DisagreementEditor').then((m) => ({ default: m.DisagreementEditor })));
 const ArgumentEditor = React.lazy(() => import('../../features/research/ArgumentEditor').then((m) => ({ default: m.ArgumentEditor })));
 const OutputWorkspace = React.lazy(() => import('../../features/research/OutputWorkspace').then((m) => ({ default: m.OutputWorkspace })));
 const DesignWorkspace = React.lazy(() => import('../../features/research/DesignWorkspace').then((m) => ({ default: m.DesignWorkspace })));
@@ -54,6 +58,8 @@ interface ProjectIndex {
   readonly claims: readonly Claim[];
   readonly evidence: readonly Evidence[];
   readonly links: readonly ClaimEvidenceLink[];
+  readonly brainstorms: readonly { id: string; title: string }[];
+  readonly disagreements: readonly Disagreement[];
 }
 
 const TRANSIENT_PARAMS: readonly string[] = ['add', 'details', 'point'];
@@ -70,6 +76,8 @@ const EMPTY_INDEX: ProjectIndex = {
   claims: [],
   evidence: [],
   links: [],
+  brainstorms: [],
+  disagreements: [],
 };
 
 /** Live index of the project's objects for the explorer and tab titles. */
@@ -79,7 +87,7 @@ function useProjectIndex(projectId: string): ProjectIndex {
   React.useEffect(() => {
     let cancelled = false;
     const refresh = async (): Promise<void> => {
-      const [project, works, outputs, tasks, evidence, claims, links] = await Promise.all([
+      const [project, works, outputs, tasks, evidence, claims, links, brainstorms, disagreements] = await Promise.all([
         repository.getProject(projectId),
         repository.listWorks({ projectId }),
         repository.listOutputs({ projectId }),
@@ -87,6 +95,8 @@ function useProjectIndex(projectId: string): ProjectIndex {
         repository.listEvidence({ projectId }),
         repository.listClaims({ projectId }),
         repository.listLinks({ projectId }),
+        repository.listBrainstorms({ projectId }),
+        repository.listDisagreements({ projectId }),
       ]);
       if (cancelled) return;
       const byTitle = (a: { title: string }, b: { title: string }): number => a.title.localeCompare(b.title);
@@ -102,6 +112,8 @@ function useProjectIndex(projectId: string): ProjectIndex {
         claims,
         evidence,
         links,
+        brainstorms: brainstorms.map((b) => ({ id: b.id, title: b.prompt || 'Brainstorm' })),
+        disagreements,
       });
     };
     void refresh().catch(() => {
@@ -188,15 +200,24 @@ export function ResearchWorkbench(props: ResearchWorkbenchProps): React.ReactEle
   // Editors are memoised; they read the latest excerpts through a ref.
   const evidenceRef = React.useRef(index.evidence);
   evidenceRef.current = index.evidence;
-  const editors = useResearchEditors(projectId, open, canvasRuntime, evidenceRef);
+  const { repository } = useResearchDeps();
+  const userIdRef = React.useRef('local');
+  const newBrainstorm = React.useCallback(() => {
+    void startBrainstorm(repository, { projectId, prompt: '' }, { userId: userIdRef.current }).then((b) =>
+      open({ kind: 'brainstorm', id: b.id }),
+    );
+  }, [repository, projectId, open]);
+  const editors = useResearchEditors(projectId, open, canvasRuntime, evidenceRef, userIdRef);
   const ledger = React.useMemo(
     () => buildLedger({ claims: index.claims, evidence: index.evidence, links: index.links }),
     [index.claims, index.evidence, index.links],
   );
+  const openDisagreements = React.useMemo(() => index.disagreements.filter((d) => d.status === 'open'), [index.disagreements]);
 
   // The project AI (P4). The header's Ask button and Cmd/Ctrl+K open the
   // docked panel here instead of the global capsule.
   const userId = useCurrentUserId();
+  userIdRef.current = userId;
   const aiSync = useAiSync(projectId, userId);
   const setAiOpen = controller.setAiOpen;
   React.useEffect(
@@ -243,6 +264,10 @@ export function ResearchWorkbench(props: ResearchWorkbenchProps): React.ReactEle
         return index.outputs.find((o) => o.id === input.id)?.title ?? 'Writing';
       case 'argument':
         return 'Argument';
+      case 'brainstorm':
+        return index.brainstorms.find((b) => b.id === input.id)?.title ?? 'Brainstorm';
+      case 'disagreement':
+        return index.disagreements.find((d) => d.id === input.id)?.question ?? 'Disagreement';
       case 'design':
         return 'Research design';
       case 'task':
@@ -279,13 +304,17 @@ export function ResearchWorkbench(props: ResearchWorkbenchProps): React.ReactEle
           </React.Suspense>
         ),
       }}
-      explorer={<ResearchExplorer projectId={projectId} index={index} controller={controller} open={open} />}
+      explorer={
+        <ResearchExplorer projectId={projectId} index={index} controller={controller} open={open} onNewBrainstorm={newBrainstorm} />
+      }
       panel={
-        ledger.points.length > 0 || ledger.excerptCount > 0
+        ledger.points.length > 0 || ledger.excerptCount > 0 || openDisagreements.length > 0
           ? {
               title: 'What’s missing',
-              summary: ledgerSummary(ledger),
-              content: <LedgerPanel ledger={ledger} index={index} projectId={projectId} open={open} />,
+              summary: ledgerSummary(ledger, openDisagreements.length),
+              content: (
+                <LedgerPanel ledger={ledger} index={index} projectId={projectId} open={open} disagreements={openDisagreements} />
+              ),
             }
           : undefined
       }
@@ -324,6 +353,7 @@ interface ExplorerProps {
   readonly index: ProjectIndex;
   readonly controller: WorkbenchController;
   readonly open: (input: EditorInput) => void;
+  readonly onNewBrainstorm: () => void;
 }
 
 function ResearchExplorer(props: ExplorerProps): React.ReactElement {
@@ -419,12 +449,34 @@ function ResearchExplorer(props: ExplorerProps): React.ReactElement {
         </section>
       )}
 
-      {(isRevealed(controller.state, 'canvas') || isRevealed(controller.state, 'design')) && (
+      {(isRevealed(controller.state, 'canvas') ||
+        isRevealed(controller.state, 'design') ||
+        index.brainstorms.length > 0 ||
+        index.disagreements.length > 0 ||
+        index.works.length > 0 ||
+        points > 0) && (
         <section className="workbench-explorer-group" aria-labelledby="workbench-group-thinking">
           <div className="workbench-explorer-group-header">
             <h2 id="workbench-group-thinking">Thinking</h2>
+            <button
+              type="button"
+              className="workbench-explorer-add"
+              onClick={props.onNewBrainstorm}
+              aria-label="New brainstorm"
+              data-testid="workbench-explorer-new-brainstorm"
+            >
+              + Brainstorm
+            </button>
           </div>
-          <ul className="workbench-explorer-list">
+          <ul className="workbench-explorer-list" data-testid="workbench-explorer-thinking">
+            {index.brainstorms.map((b) => item({ kind: 'brainstorm', id: b.id }, b.title, 'workbench-explorer-brainstorm'))}
+            {index.disagreements.map((d) =>
+              item(
+                { kind: 'disagreement', id: d.id },
+                `${d.status === 'open' ? 'Disagreement' : 'Settled'}: ${d.question}`,
+                'workbench-explorer-disagreement',
+              ),
+            )}
             {isRevealed(controller.state, 'canvas') &&
               item({ kind: 'canvas', id: `canvas-${projectId}` }, 'Canvas', 'workbench-explorer-canvas')}
             {isRevealed(controller.state, 'design') &&
@@ -444,9 +496,10 @@ function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-export function ledgerSummary(ledger: Ledger): string {
+export function ledgerSummary(ledger: Ledger, openDisagreements = 0): string {
   const parts = [plural(ledger.points.length, 'point', 'points')];
   if (ledger.points.length > 0) parts.push(`${ledger.supportedCount} well supported`);
+  if (openDisagreements > 0) parts.push(plural(openDisagreements, 'open disagreement', 'open disagreements'));
   parts.push(ledger.gaps.length === 0 ? 'nothing missing' : plural(ledger.gaps.length, 'thing to look at', 'things to look at'));
   return parts.join(' · ');
 }
@@ -475,9 +528,29 @@ function LedgerPanel(props: {
   readonly index: ProjectIndex;
   readonly projectId: string;
   readonly open: (input: EditorInput) => void;
+  readonly disagreements?: readonly Disagreement[];
 }): React.ReactElement {
   const { ledger } = props;
+  const disagreements = props.disagreements ?? [];
+  const disputes =
+    disagreements.length > 0 ? (
+      <ul className="workbench-ledger" data-testid="ledger-disagreements">
+        {disagreements.map((d) => (
+          <li key={d.id}>
+            <button
+              type="button"
+              className="workbench-ledger-item workbench-ledger-item--disagreement"
+              onClick={() => props.open({ kind: 'disagreement', id: d.id })}
+              data-testid="ledger-disagreement"
+            >
+              <span className="workbench-ledger-label">Open disagreement: {d.question}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    ) : null;
   if (ledger.gaps.length === 0) {
+    if (disputes) return disputes;
     return (
       <p className="workbench-ledger-done" data-testid="ledger-done">
         Every point is backed by two or more sources, and every excerpt is connected.
@@ -485,6 +558,8 @@ function LedgerPanel(props: {
     );
   }
   return (
+    <>
+    {disputes}
     <ul className="workbench-ledger" data-testid="ledger-gaps">
       {ledger.gaps.map((gap) => {
         const { label, detail } = gapText(gap, props.index);
@@ -509,6 +584,7 @@ function LedgerPanel(props: {
         );
       })}
     </ul>
+    </>
   );
 }
 
@@ -521,7 +597,9 @@ function useResearchEditors(
   open: (input: EditorInput) => void,
   canvasRuntime: ReturnType<typeof useCanvasRuntime>,
   evidenceRef: React.MutableRefObject<readonly Evidence[]>,
+  userIdRef: React.MutableRefObject<string>,
 ): Readonly<Record<string, EditorDefinition>> {
+  const { repository } = useResearchDeps();
   return React.useMemo(() => {
     const overview = (): void => open({ kind: 'overview', id: projectId });
     const library = (): void => open({ kind: 'library', id: projectId });
@@ -529,6 +607,18 @@ function useResearchEditors(
     const work = (workId: string): void => open({ kind: 'work', id: workId });
     const source = (workId: string, pageNumber?: number): void =>
       open({ kind: 'work', id: workId, ...(pageNumber ? { params: { page: String(pageNumber) } } : {}) });
+    const p5 = { get userId() { return userIdRef.current; } };
+    const newBrainstorm = (): void => {
+      void startBrainstorm(repository, { projectId, prompt: '' }, { userId: p5.userId }).then((b) =>
+        open({ kind: 'brainstorm', id: b.id }),
+      );
+    };
+    const raiseDisagreement = (claimId: string, question: string): void => {
+      void openDisagreement(repository, { projectId, claimId, question }, { userId: p5.userId }).then((d) =>
+        open({ kind: 'disagreement', id: d.id }),
+      );
+    };
+    const argumentAt = (claimId: string): void => open({ kind: 'argument', id: projectId, params: { point: claimId } });
     // A citation in a draft opens its source at the cited page.
     const excerpt = ({ evidenceId }: { evidenceId: string }): void => {
       const e = evidenceRef.current.find((x) => x.id === evidenceId);
@@ -617,6 +707,29 @@ function useResearchEditors(
             onOpenSource={({ workId, pageNumber }) => source(workId, pageNumber)}
             onOpenOutput={(outputId) => open({ kind: 'output', id: outputId })}
             onOpenSources={library}
+            onStartBrainstorm={newBrainstorm}
+            onRaiseDisagreement={raiseDisagreement}
+            onOpenDisagreement={(id) => open({ kind: 'disagreement', id })}
+          />
+        ),
+      },
+      brainstorm: {
+        render: (input) => (
+          <BrainstormEditor
+            brainstormId={input.id}
+            userId={p5.userId}
+            onOpenArgument={() => open({ kind: 'argument', id: projectId })}
+          />
+        ),
+      },
+      disagreement: {
+        render: (input) => (
+          <DisagreementEditor
+            disagreementId={input.id}
+            userId={p5.userId}
+            onOpenSource={({ workId, pageNumber }) => source(workId, pageNumber)}
+            onOpenPoint={argumentAt}
+            onOpenSources={library}
           />
         ),
       },
@@ -671,5 +784,5 @@ function useResearchEditors(
       },
     };
     return editors;
-  }, [projectId, open, canvasRuntime]);
+  }, [projectId, open, canvasRuntime, repository]);
 }

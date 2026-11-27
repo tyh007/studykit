@@ -27,6 +27,7 @@ import {
   type CiteSlot,
 } from "../../application/research/argument";
 import type { Evidence } from "../../domain/research";
+import type { Disagreement } from "../../domain/brainstorm";
 import { Button } from "../../shared/ui/Button";
 
 const ResearchReader = React.lazy(() =>
@@ -43,6 +44,11 @@ export interface ArgumentEditorProps {
   }) => void;
   readonly onOpenOutput: (outputId: string) => void;
   readonly onOpenSources: () => void;
+  /** P5: start a brainstorm (diverge before structuring). */
+  readonly onStartBrainstorm?: () => void;
+  /** P5: record that someone disagrees with a point, then open it. */
+  readonly onRaiseDisagreement?: (claimId: string, question: string) => void;
+  readonly onOpenDisagreement?: (disagreementId: string) => void;
 }
 
 interface ArgumentData {
@@ -51,6 +57,7 @@ interface ArgumentData {
   readonly view: ArgumentView;
   readonly evidence: readonly Evidence[];
   readonly works: readonly { id: string; title: string }[];
+  readonly disagreements: readonly Disagreement[];
 }
 
 const EMPTY: ArgumentData = {
@@ -59,6 +66,7 @@ const EMPTY: ArgumentData = {
   view: { points: [], completeCount: 0, ready: false },
   evidence: [],
   works: [],
+  disagreements: [],
 };
 
 function useArgument(projectId: string): ArgumentData {
@@ -67,13 +75,15 @@ function useArgument(projectId: string): ArgumentData {
   React.useEffect(() => {
     let cancelled = false;
     const refresh = async (): Promise<void> => {
-      const [project, claims, evidence, links, works] = await Promise.all([
-        repository.getProject(projectId),
-        repository.listClaims({ projectId }),
-        repository.listEvidence({ projectId }),
-        repository.listLinks({ projectId }),
-        repository.listWorks({ projectId }),
-      ]);
+      const [project, claims, evidence, links, works, disagreements] =
+        await Promise.all([
+          repository.getProject(projectId),
+          repository.listClaims({ projectId }),
+          repository.listEvidence({ projectId }),
+          repository.listLinks({ projectId }),
+          repository.listWorks({ projectId }),
+          repository.listDisagreements({ projectId }),
+        ]);
       if (cancelled) return;
       const workList = works.map((w) => ({
         id: w.id,
@@ -85,6 +95,7 @@ function useArgument(projectId: string): ArgumentData {
         view: buildArgument({ claims, evidence, links, works: workList }),
         evidence,
         works: workList,
+        disagreements,
       });
     };
     void refresh().catch(
@@ -229,6 +240,20 @@ export function ArgumentEditor(props: ArgumentEditorProps): React.ReactElement {
             <p className="argument-empty" data-testid="argument-empty">
               Start with the first point you want to make. You’ll back it with
               excerpts next.
+              {props.onStartBrainstorm ? (
+                <>
+                  {" "}
+                  Not sure yet?{" "}
+                  <button
+                    type="button"
+                    className="argument-link"
+                    onClick={props.onStartBrainstorm}
+                    data-testid="argument-brainstorm"
+                  >
+                    Brainstorm first
+                  </button>
+                </>
+              ) : null}
             </p>
           ) : null}
 
@@ -244,6 +269,15 @@ export function ArgumentEditor(props: ArgumentEditorProps): React.ReactElement {
                 run={run}
                 onPeek={setPeek}
                 onOpenSources={props.onOpenSources}
+                disagreements={data.disagreements.filter(
+                  (d) => d.claimId === point.claim.id && d.status === "open",
+                )}
+                {...(props.onRaiseDisagreement
+                  ? { onRaiseDisagreement: props.onRaiseDisagreement }
+                  : {})}
+                {...(props.onOpenDisagreement
+                  ? { onOpenDisagreement: props.onOpenDisagreement }
+                  : {})}
               />
             ))}
           </ol>
@@ -321,6 +355,9 @@ interface PointCardProps {
   readonly run: (action: () => Promise<unknown>) => Promise<boolean>;
   readonly onPeek: (peek: Peek) => void;
   readonly onOpenSources: () => void;
+  readonly disagreements: readonly Disagreement[];
+  readonly onRaiseDisagreement?: (claimId: string, question: string) => void;
+  readonly onOpenDisagreement?: (disagreementId: string) => void;
 }
 
 function PointCard(props: PointCardProps): React.ReactElement {
@@ -555,7 +592,78 @@ function PointCard(props: PointCardProps): React.ReactElement {
         {citeSlot("counter")}
         {citeSlot("limits")}
       </div>
+      <DisagreementRow
+        claimId={claimId}
+        disagreements={props.disagreements}
+        {...(props.onRaiseDisagreement
+          ? { onRaise: props.onRaiseDisagreement }
+          : {})}
+        {...(props.onOpenDisagreement
+          ? { onOpen: props.onOpenDisagreement }
+          : {})}
+      />
     </li>
+  );
+}
+
+/** Open disagreements about a point, and a quiet way to raise one. */
+function DisagreementRow(props: {
+  readonly claimId: string;
+  readonly disagreements: readonly Disagreement[];
+  readonly onRaise?: (claimId: string, question: string) => void;
+  readonly onOpen?: (disagreementId: string) => void;
+}): React.ReactElement | null {
+  const [asking, setAsking] = React.useState(false);
+  const [question, setQuestion] = React.useState("");
+  if (!props.onRaise && props.disagreements.length === 0) return null;
+  return (
+    <div className="argument-disagreements">
+      {props.disagreements.map((d) => (
+        <button
+          key={d.id}
+          type="button"
+          className="argument-disagreement"
+          onClick={() => props.onOpen?.(d.id)}
+          data-testid="argument-disagreement"
+        >
+          Open disagreement: {d.question}
+        </button>
+      ))}
+      {props.onRaise ? (
+        asking ? (
+          <form
+            className="argument-raise"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const q = question.trim();
+              if (!q) return;
+              props.onRaise!(props.claimId, q);
+              setQuestion("");
+              setAsking(false);
+            }}
+          >
+            <input
+              autoFocus
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder="What is in dispute?"
+              aria-label="What is in dispute?"
+              onKeyDown={(e) => e.key === "Escape" && setAsking(false)}
+              data-testid="argument-raise-input"
+            />
+          </form>
+        ) : (
+          <button
+            type="button"
+            className="argument-link"
+            onClick={() => setAsking(true)}
+            data-testid="argument-raise"
+          >
+            Someone disagrees
+          </button>
+        )
+      ) : null}
+    </div>
   );
 }
 
@@ -667,7 +775,7 @@ function AddPointForm(props: {
   );
 }
 
-function ExcerptPicker(props: {
+export function ExcerptPicker(props: {
   readonly evidence: readonly Evidence[];
   readonly works: readonly { id: string; title: string }[];
   readonly exclude: ReadonlySet<string>;

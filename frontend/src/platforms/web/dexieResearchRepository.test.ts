@@ -147,10 +147,16 @@ beforeEach(() => {
   const fAiThreads = makeFakeTable();
   const fAiMessages = makeFakeTable();
   const fAiDraftDecisions = makeFakeTable();
+  const fP5 = ['researchBrainstorms', 'researchIdeas', 'researchDisagreements', 'researchDisagreementPositions'].map((name) => {
+    const t = makeFakeTable();
+    (prodDb as unknown as Record<string, unknown>)[name] = t;
+    return t;
+  });
   (prodDb as unknown as { researchAiThreads: unknown }).researchAiThreads = fAiThreads;
   (prodDb as unknown as { researchAiMessages: unknown }).researchAiMessages = fAiMessages;
   (prodDb as unknown as { researchAiDraftDecisions: unknown }).researchAiDraftDecisions = fAiDraftDecisions;
   const allTables: FakeTable<{ id: string }>[] = [
+    ...fP5,
     fAiThreads,
     fAiMessages,
     fAiDraftDecisions,

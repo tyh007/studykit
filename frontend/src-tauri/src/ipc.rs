@@ -329,6 +329,10 @@ fn validate_domain_pair(
                 | "ai_thread"
                 | "ai_message"
                 | "ai_draft_decision"
+                | "brainstorm"
+                | "idea"
+                | "disagreement"
+                | "disagreement_position"
         ),
         "canvas" => matches!(
             entity_type,
@@ -700,6 +704,10 @@ mod tests {
             "ai_thread",
             "ai_message",
             "ai_draft_decision",
+            "brainstorm",
+            "idea",
+            "disagreement",
+            "disagreement_position",
         ] {
             assert!(
                 validate_domain_pair("research", entity_type).is_ok(),
@@ -732,6 +740,10 @@ mod tests {
             "ai_thread",
             "ai_message",
             "ai_draft_decision",
+            "brainstorm",
+            "idea",
+            "disagreement",
+            "disagreement_position",
         ] {
             for namespace in ["study", "canvas", "legacy"] {
                 assert!(
