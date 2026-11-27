@@ -43,6 +43,9 @@ const EvidenceWorkspace = React.lazy(() => import('../../features/research/Evide
 const ProjectAiPanel = React.lazy(() => import('../../features/research/ProjectAiPanel').then((m) => ({ default: m.ProjectAiPanel })));
 const BrainstormEditor = React.lazy(() => import('../../features/research/BrainstormEditor').then((m) => ({ default: m.BrainstormEditor })));
 const DisagreementEditor = React.lazy(() => import('../../features/research/DisagreementEditor').then((m) => ({ default: m.DisagreementEditor })));
+const ProvenanceReportView = React.lazy(() =>
+  import('../../features/research/ProvenanceReportView').then((m) => ({ default: m.ProvenanceReportView })),
+);
 const AgendaEditor = React.lazy(() => import('../../features/research/AgendaEditor').then((m) => ({ default: m.AgendaEditor })));
 const ArgumentEditor = React.lazy(() => import('../../features/research/ArgumentEditor').then((m) => ({ default: m.ArgumentEditor })));
 const OutputWorkspace = React.lazy(() => import('../../features/research/OutputWorkspace').then((m) => ({ default: m.OutputWorkspace })));
@@ -275,6 +278,8 @@ export function ResearchWorkbench(props: ResearchWorkbenchProps): React.ReactEle
         return index.outputs.find((o) => o.id === input.id)?.title ?? 'Writing';
       case 'argument':
         return 'Argument';
+      case 'report':
+        return `Report: ${index.outputs.find((o) => o.id === input.id)?.title ?? 'Writing'}`;
       case 'brainstorm':
         return index.brainstorms.find((b) => b.id === input.id)?.title ?? 'Brainstorm';
       case 'disagreement':
@@ -722,6 +727,16 @@ function useResearchEditors(
             onJumpToEvidence={excerpt}
             onJumpToClaim={({ claimId }) => open({ kind: 'argument', id: projectId, params: { point: claimId } })}
             onOpenReader={({ workId }) => work(workId)}
+            onOpenReport={() => open({ kind: 'report', id: input.id })}
+          />
+        ),
+      },
+      report: {
+        render: (input) => (
+          <ProvenanceReportView
+            outputId={input.id}
+            onOpenOutput={() => open({ kind: 'output', id: input.id })}
+            onOpenSource={({ workId, pageNumber }) => source(workId, pageNumber)}
           />
         ),
       },

@@ -50,6 +50,7 @@
  *      not a persisted row.
  */
 
+import type { StatementOrigin } from '../../domain/provenance';
 import type { Claim, Evidence } from '../../domain/research';
 import {
   nowIso,
@@ -106,6 +107,8 @@ export interface AddStatementInput {
   readonly body: string;
   readonly authorType?: OutputAuthorType;
   readonly status?: OutputStatement['status'];
+  /** v0.5 P6: defaults to written (or imported for imported text). */
+  readonly origin?: StatementOrigin;
 }
 
 export interface UpdateStatementInput {
@@ -409,6 +412,7 @@ export async function addStatement(
     status,
     createdAt: ts,
     updatedAt: ts,
+    origin: input.origin ?? { kind: authorType === 'imported' ? 'imported' : 'written' },
   };
   await repository.transact(async (tx) => {
     tx.putOutputStatement(record);

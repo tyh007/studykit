@@ -65,6 +65,8 @@
 // OutputDocument
 // ---------------------------------------------------------------------------
 
+import { isStatementOrigin, type StatementOrigin } from './provenance';
+
 export type OutputStatus = 'outline' | 'draft' | 'final';
 
 export const OUTPUT_STATUSES: readonly OutputStatus[] = [
@@ -181,6 +183,8 @@ export interface OutputStatement {
   readonly status: StatementStatus;
   readonly createdAt: string;
   readonly updatedAt: string;
+  /** v0.5 P6: where the sentence came from; set once when it is written. */
+  readonly origin?: StatementOrigin;
 }
 
 export function isOutputStatement(value: unknown): value is OutputStatement {
@@ -194,6 +198,7 @@ export function isOutputStatement(value: unknown): value is OutputStatement {
   if (!isFiniteOrder(v.order)) return false;
   if (!isOutputAuthorType(v.authorType)) return false;
   if (!isStatementStatus(v.status)) return false;
+  if (v.origin !== undefined && !isStatementOrigin(v.origin)) return false;
   if (typeof v.createdAt !== 'string' || v.createdAt.length === 0) return false;
   if (typeof v.updatedAt !== 'string' || v.updatedAt.length === 0) return false;
   if (Number.isNaN(Date.parse(v.createdAt))) return false;

@@ -52,6 +52,8 @@
  *     Statement + Supports through `acceptOutputDraft`.
  */
 
+import { classifySentence, SENTENCE_SOURCE_LABEL } from '../../domain/provenance';
+import './provenance.css';
 import React from 'react';
 import { useResearchDeps } from './researchContext';
 import {
@@ -127,6 +129,8 @@ export interface OutputWorkspaceProps {
   readonly onJumpToEvidence: (input: { projectId: string; evidenceId: string }) => void;
   readonly onJumpToClaim: (input: { projectId: string; claimId: string }) => void;
   readonly onOpenReader: (input: { projectId: string; workId: string }) => void;
+  /** v0.5 P6: open the provenance report for this text. */
+  readonly onOpenReport?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -337,6 +341,11 @@ export function OutputWorkspace(props: OutputWorkspaceProps): React.ReactElement
         >
           Mark as final
         </Button>
+        {props.onOpenReport ? (
+          <Button variant="secondary" size="sm" onClick={props.onOpenReport} data-testid="output-open-report">
+            Provenance report
+          </Button>
+        ) : null}
         <Button variant="ghost" size="sm" onClick={() => void downloadExport('markdown')} data-testid="output-export-markdown">
           Markdown
         </Button>
@@ -810,6 +819,7 @@ function StatementsForSection(props: {
             data-statement-id={stmt.id}
           >
             <StatementEditor statement={stmt} onUpdate={props.onUpdate} />
+            <SourceTag statement={stmt} evidenceLookup={props.evidenceLookup} />
             <StatementControls
               statement={stmt}
               index={idx}
@@ -896,6 +906,21 @@ function StatementsForSection(props: {
         </Button>
       </form>
     </div>
+  );
+}
+
+/** v0.5 P6: where this paragraph came from, in plain words. */
+function SourceTag(props: { statement: OutputStatement; evidenceLookup: Map<string, Evidence> }): React.ReactElement {
+  // A word-for-word quote of any checked excerpt counts, linked or not.
+  const quotes = Array.from(props.evidenceLookup.values())
+    .filter((e) => e.status === 'verified')
+    .map((e) => e.exactQuote);
+  const source = classifySentence({ body: props.statement.body, origin: props.statement.origin, quotes });
+  return (
+    <p className="statement-source" data-testid="output-statement-source" data-source={source}>
+      <span className={`provenance-dot provenance-dot--${source}`} aria-hidden="true" />
+      {SENTENCE_SOURCE_LABEL[source]}
+    </p>
   );
 }
 

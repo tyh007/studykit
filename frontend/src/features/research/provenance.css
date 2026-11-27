@@ -1,0 +1,253 @@
+/* v0.5 P6 — sentence sources and the provenance report */
+
+.provenance {
+  height: 100%;
+  overflow: auto;
+  padding: 24px clamp(16px, 4vw, 40px) 48px;
+  box-sizing: border-box;
+  display: grid;
+  align-content: start;
+  gap: 20px;
+  max-width: 920px;
+}
+
+.provenance-header {
+  display: grid;
+  gap: 6px;
+}
+
+.provenance-header h1 {
+  margin: 0;
+  font-size: 1.3rem;
+  color: var(--text);
+}
+
+.provenance-kicker {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+.provenance-muted {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.provenance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.provenance-section {
+  display: grid;
+  gap: 8px;
+}
+
+.provenance-section h2 {
+  margin: 0;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+}
+
+.provenance-section > p {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.provenance-summary {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.provenance-summary > div {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.provenance-summary p {
+  margin: 0;
+  color: var(--text);
+}
+
+.provenance-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.provenance-legend li,
+.provenance-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.provenance-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.provenance-dot--own {
+  background: var(--success, #3f8f5e);
+}
+
+.provenance-dot--quoted {
+  background: var(--accent, #4a7bb7);
+}
+
+.provenance-dot--ai-edited {
+  background: var(--warning, #c08a2b);
+}
+
+.provenance-dot--ai-verbatim {
+  background: var(--danger, #b8524a);
+}
+
+.provenance-link {
+  justify-self: start;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.provenance-sentences {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.provenance-sentence {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-glass);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm, 8px);
+}
+
+.provenance-sentence--own {
+  border-left-color: var(--success, #3f8f5e);
+}
+
+.provenance-sentence--quoted {
+  border-left-color: var(--accent, #4a7bb7);
+}
+
+.provenance-sentence--ai-edited {
+  border-left-color: var(--warning, #c08a2b);
+}
+
+.provenance-sentence--ai-verbatim {
+  border-left-color: var(--danger, #b8524a);
+}
+
+.provenance-text {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.provenance-meta {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.provenance-excerpts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.provenance-excerpt {
+  width: 100%;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs, 6px);
+  padding: 4px 6px;
+  cursor: pointer;
+}
+
+.provenance-excerpt:hover {
+  background: var(--border-glass);
+}
+
+.provenance-gap {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+/* The sentence-source tag in the writing editor. */
+.statement-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin: 2px 0;
+}
+
+@media print {
+  .provenance {
+    height: auto;
+    overflow: visible;
+    max-width: none;
+  }
+
+  .provenance-actions,
+  .provenance-link {
+    display: none;
+  }
+}
+
+/* Print only the report, not the workbench around it. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .provenance,
+  .provenance * {
+    visibility: visible;
+  }
+
+  .provenance {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+  }
+}

@@ -429,6 +429,11 @@ export async function composeArgumentDraft(
         status: 'draft',
         createdAt: now,
         updatedAt: now,
+        origin: {
+          kind: 'argument',
+          claimId: point.claim.id,
+          ...(point.claim.authorType === 'ai' || point.claim.aiSuggested ? { pointFromAi: true } : {}),
+        },
       };
       statements.push(statement);
       for (const cite of para.cites) {

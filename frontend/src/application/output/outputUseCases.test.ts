@@ -857,6 +857,27 @@ describe('AI draft flow', () => {
     const audit = await auditStatement(repo, { statementId: accepted.statement.id });
     expect(audit.state).toBe('supported');
     expect(draftLayer.get(result.draft.id)?.status).toBe('accepted');
+    // v0.5 P6: the sentence remembers it began as an AI draft, and the AI's text.
+    expect(accepted.statement.origin).toMatchObject({ kind: 'ai', provider: 'ollama', model: 'llama3.1:8b', aiText: citedBody });
+    expect((await repo.getOutputStatement(accepted.statement.id))?.origin?.kind).toBe('ai');
+  });
+
+  it('v0.5 P6: an AI draft edited before Accept keeps the original AI text', async () => {
+    const router = makeRouter({ content: `T\n\nThe AI wrote this. [EVIDENCE ${evidenceIds[0]}]` });
+    const result = await draftOutputStatements(repo, {
+      projectId,
+      outputId: out.id,
+      sectionId: section.id,
+      selectedClaimIds: [],
+      selectedEvidenceIds: [evidenceIds[0]!],
+      providerRouter: router,
+      clock,
+      idFactory,
+    });
+    draftLayer.updateBody(result.draft.id, { kind: 'note-draft', title: 'T', body: `I rewrote this. [EVIDENCE ${evidenceIds[0]}]`, moduleId: section.id });
+    const accepted = await acceptOutputDraft({ draftId: result.draft.id, repository: repo, idFactory });
+    expect(accepted.statement.body).toBe(`I rewrote this. [EVIDENCE ${evidenceIds[0]}]`);
+    expect(accepted.statement.origin).toMatchObject({ kind: 'ai', aiText: `The AI wrote this. [EVIDENCE ${evidenceIds[0]}]` });
   });
 
   it('Reject transitions to rejected and writes nothing to the repository', async () => {

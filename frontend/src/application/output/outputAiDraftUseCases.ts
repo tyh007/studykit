@@ -339,6 +339,7 @@ export async function draftOutputStatements(
   //    the proposal unsupported rather than laundering
   //    an invented reference into a green audit state.
   const candidateBody = body.length > 0 ? body : title;
+  draftedText.set(draftId, { text: candidateBody, at: ts });
   const citedRefs = citedSelectedRefs(
     candidateBody,
     input.selectedClaimIds,
@@ -402,6 +403,13 @@ function makeSupport(
     updatedAt: ts,
   };
 }
+
+/**
+ * v0.5 P6: the AI's text as drafted, per draft, so the accepted sentence
+ * can record it (and later be told apart as "used as is" or "edited").
+ * Lives as long as the Draft Layer itself (this session).
+ */
+const draftedText = new Map<string, { readonly text: string; readonly at: string }>();
 
 // ---------------------------------------------------------------------------
 // acceptOutputDraft
@@ -529,6 +537,7 @@ export async function acceptOutputDraft(
     -1,
   );
   const ts = nowIso();
+  const drafted = draftedText.get(draft.id);
   const statement: OutputStatement = {
     id: makeId(input.idFactory, 'ost'),
     projectId,
@@ -540,6 +549,16 @@ export async function acceptOutputDraft(
     status: 'accepted',
     createdAt: ts,
     updatedAt: ts,
+    // The user accepts, so the canonical author is the user; the origin
+    // keeps that the text began as an AI draft, and what the AI wrote.
+    origin: {
+      kind: 'ai',
+      provider: draft.provenance.provider,
+      ...(draft.provenance.model ? { model: draft.provenance.model } : {}),
+      draftedAt: drafted?.at ?? draft.provenance.createdAt,
+      acceptedAt: ts,
+      aiText: (drafted?.text ?? finalBody).slice(0, 20_000),
+    },
   };
   const supports: StatementSupport[] = citedRefs.map((ref) => ({
       id: makeId(input.idFactory, 'sup'),
@@ -561,6 +580,7 @@ export async function acceptOutputDraft(
     }
   });
   draftLayer.transition(draft.id, 'accepted');
+  draftedText.delete(draft.id);
   return { statement, supports };
 }
 
