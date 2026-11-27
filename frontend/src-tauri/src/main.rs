@@ -18,5 +18,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
+    // v0.5 P6b: `StudyKit --mcp-stdio` is the MCP bridge that AI agents
+    // launch; it talks to the running app and never opens a window.
+    if std::env::args().any(|a| a == "--mcp-stdio") {
+        std::process::exit(studykit_desktop_lib::mcp::run_stdio_bridge());
+    }
     studykit_desktop_lib::run();
 }

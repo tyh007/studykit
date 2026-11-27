@@ -26,7 +26,8 @@ import { Button } from '../../shared/ui/Button';
 import { buildLedger, type Ledger, type LedgerGap } from '../../application/research/ledger';
 import type { Claim, ClaimEvidenceLink, Evidence } from '../../domain/research';
 import { contextForFocus } from '../../application/research/aiContext';
-import { setCapsuleOverride } from '../../features/ai/ui/openCapsule';
+import { openCapsule, setCapsuleOverride } from '../../features/ai/ui/openCapsule';
+import { isDesktopRuntime } from '../../platforms/runtime';
 import { useCurrentUserId } from '../../lib/auth';
 import { useAiSync } from './useAiSync';
 import { useThinkingSync } from './useThinkingSync';
@@ -45,6 +46,9 @@ const BrainstormEditor = React.lazy(() => import('../../features/research/Brains
 const DisagreementEditor = React.lazy(() => import('../../features/research/DisagreementEditor').then((m) => ({ default: m.DisagreementEditor })));
 const ProvenanceReportView = React.lazy(() =>
   import('../../features/research/ProvenanceReportView').then((m) => ({ default: m.ProvenanceReportView })),
+);
+const AgentAccessView = React.lazy(() =>
+  import('../../features/research/AgentAccessView').then((m) => ({ default: m.AgentAccessView })),
 );
 const AgendaEditor = React.lazy(() => import('../../features/research/AgendaEditor').then((m) => ({ default: m.AgendaEditor })));
 const ArgumentEditor = React.lazy(() => import('../../features/research/ArgumentEditor').then((m) => ({ default: m.ArgumentEditor })));
@@ -286,6 +290,8 @@ export function ResearchWorkbench(props: ResearchWorkbenchProps): React.ReactEle
         return index.disagreements.find((d) => d.id === input.id)?.question ?? 'Disagreement';
       case 'agenda':
         return 'Meeting agenda';
+      case 'agents':
+        return 'AI agents';
       case 'design':
         return 'Research design';
       case 'task':
@@ -331,6 +337,7 @@ export function ResearchWorkbench(props: ResearchWorkbenchProps): React.ReactEle
           open={open}
           onNewBrainstorm={newBrainstorm}
           showAgenda={aiSync.hasMembers || index.disagreements.length > 0}
+          showAgents={isDesktopRuntime()}
         />
       }
       panel={
@@ -383,6 +390,8 @@ interface ExplorerProps {
   readonly onNewBrainstorm: () => void;
   /** P5b: once the project has members or disagreements. */
   readonly showAgenda: boolean;
+  /** P6b: desktop only. */
+  readonly showAgents: boolean;
 }
 
 function ResearchExplorer(props: ExplorerProps): React.ReactElement {
@@ -483,6 +492,7 @@ function ResearchExplorer(props: ExplorerProps): React.ReactElement {
         index.brainstorms.length > 0 ||
         index.disagreements.length > 0 ||
         props.showAgenda ||
+        props.showAgents ||
         index.works.length > 0 ||
         points > 0) && (
         <section className="workbench-explorer-group" aria-labelledby="workbench-group-thinking">
@@ -500,6 +510,7 @@ function ResearchExplorer(props: ExplorerProps): React.ReactElement {
           </div>
           <ul className="workbench-explorer-list" data-testid="workbench-explorer-thinking">
             {props.showAgenda && item({ kind: 'agenda', id: projectId }, 'Meeting agenda', 'workbench-explorer-agenda')}
+            {props.showAgents && item({ kind: 'agents', id: projectId }, 'AI agents', 'workbench-explorer-agents')}
             {index.brainstorms.map((b) => item({ kind: 'brainstorm', id: b.id }, b.title, 'workbench-explorer-brainstorm'))}
             {index.disagreements.map((d) =>
               item(
@@ -760,6 +771,16 @@ function useResearchEditors(
             brainstormId={input.id}
             userId={p5.userId}
             onOpenArgument={() => open({ kind: 'argument', id: projectId })}
+          />
+        ),
+      },
+      agents: {
+        render: () => (
+          <AgentAccessView
+            projectId={projectId}
+            // A plain Ask opens the workbench's AI panel (P4 override).
+            onOpenAi={() => openCapsule({ surface: 'workspace' })}
+            onOpenExcerpts={evidence}
           />
         ),
       },

@@ -34,6 +34,7 @@ import { classifySentence, keptShare, SENTENCE_SOURCES, SENTENCE_SOURCE_LABEL, t
 import type { AiDraftDecision, AiMessage, AiThread } from '../../domain/aiThread';
 import type { Brainstorm, Idea } from '../../domain/brainstorm';
 import type { ResearchRepository } from './researchRepository';
+import { AGENT_DRAFT_PREFIX, AGENT_PROVIDER_ID } from './mcp/agentIds';
 
 export const REPORT_FORMAT_VERSION = 1;
 
@@ -86,6 +87,14 @@ export interface AiUse {
   readonly suggestionsApplied: number;
   readonly suggestionsRejected: number;
   readonly skippedOwnThinking: number;
+  /** v0.5 P6b: external agents connected over MCP. */
+  readonly agents: {
+    readonly names: readonly string[];
+    readonly excerptsProposed: number;
+    readonly excerptsChecked: number;
+    readonly pointsProposed: number;
+    readonly pointsAccepted: number;
+  };
 }
 
 export interface ProvenanceReport {
@@ -227,21 +236,35 @@ export function buildProvenanceReport(input: ReportInput): ProvenanceReport {
   // AI use across the project.
   const aiSentences = sentences.filter((s) => s.ai);
   const userQuestions = input.aiMessages.filter((m) => m.role === 'user');
+  // External agents (MCP) are counted on their own, not as the built-in partner.
+  const agentMessages = input.aiMessages.filter((m) => m.provider?.id === AGENT_PROVIDER_ID);
+  const agentDraftIds = new Set(agentMessages.flatMap((m) => m.drafts.map((d) => d.draftId)));
+  const partnerDecisions = input.aiDecisions.filter((d) => !agentDraftIds.has(d.draftId));
+  const agentExcerpts = input.evidence.filter((e) => e.draftId?.startsWith(AGENT_DRAFT_PREFIX) && e.status !== 'rejected');
   const ai: AiUse = {
     draftedSentences: aiSentences.length,
     editedSentences: bySource['ai-edited'],
     verbatimSentences: bySource['ai-verbatim'],
     models: [...new Set(aiSentences.map((s) => (s.ai!.model ? `${s.ai!.provider} (${s.ai!.model})` : s.ai!.provider)))].sort(),
     pointsSuggested: input.claims.filter((c) => c.authorType === 'ai' || c.aiSuggested).length,
-    excerptsSuggested: input.evidence.filter((e) => e.status === 'verified' && (e.authorType === 'ai' || e.draftId)).length,
+    excerptsSuggested: input.evidence.filter(
+      (e) => e.status === 'verified' && (e.authorType === 'ai' || e.draftId) && !e.draftId?.startsWith(AGENT_DRAFT_PREFIX),
+    ).length,
     brainstormIdeas: { fromAi: input.ideas.filter((i) => i.authorType === 'ai').length, total: input.ideas.length },
     askedBeforeOwnIdeas: input.brainstorms.filter((b) => b.askedAiEarly).length,
     conversations: new Set(userQuestions.map((m) => m.threadId)).size,
     questions: userQuestions.length,
     roles: [...new Set(input.aiMessages.map((m) => m.aiRole).filter((r): r is NonNullable<typeof r> => Boolean(r)))].sort(),
-    suggestionsApplied: input.aiDecisions.filter((d) => d.decision === 'applied').length,
-    suggestionsRejected: input.aiDecisions.filter((d) => d.decision === 'rejected').length,
+    suggestionsApplied: partnerDecisions.filter((d) => d.decision === 'applied').length,
+    suggestionsRejected: partnerDecisions.filter((d) => d.decision === 'rejected').length,
     skippedOwnThinking: userQuestions.filter((m) => m.skippedOwnThinking).length,
+    agents: {
+      names: [...new Set(agentMessages.map((m) => m.provider!.model))].sort(),
+      excerptsProposed: agentExcerpts.length,
+      excerptsChecked: agentExcerpts.filter((e) => e.status === 'verified').length,
+      pointsProposed: agentDraftIds.size,
+      pointsAccepted: input.aiDecisions.filter((d) => agentDraftIds.has(d.draftId) && d.decision === 'applied').length,
+    },
   };
 
   return {
@@ -306,6 +329,16 @@ export function aiUseStatement(ai: AiUse, facts: StatementFacts): string {
     parts.push(
       `The author asked the AI ${plural(ai.questions, 'question')} in ${plural(ai.conversations, 'conversation')}${ai.roles.length ? ` (roles: ${ai.roles.join(', ')})` : ''}; of its suggestions, ${ai.suggestionsApplied} ${ai.suggestionsApplied === 1 ? 'was' : 'were'} applied and ${ai.suggestionsRejected} rejected.`,
     );
+  }
+  const ag = ai.agents;
+  if (ag.names.length > 0) {
+    const did = [
+      ag.excerptsProposed ? `proposed ${plural(ag.excerptsProposed, 'excerpt')} (${ag.excerptsChecked} checked and kept by the author)` : '',
+      ag.pointsProposed ? `proposed ${plural(ag.pointsProposed, 'point')} (${ag.pointsAccepted} accepted by the author)` : '',
+    ]
+      .filter(Boolean)
+      .join(' and ');
+    parts.push(`External AI agents connected to StudyKit (${ag.names.join(', ')})${did ? ` ${did}` : ' took part'}; they could not change the project directly.`);
   }
   if (ai.skippedOwnThinking > 0) parts.push(`${plural(ai.skippedOwnThinking, 'question')} skipped the author's own attempt first.`);
   if (facts.unknown > 0 && known > 0) {

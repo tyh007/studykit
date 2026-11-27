@@ -15,6 +15,7 @@
 pub mod desktop_bridge;
 pub mod ipc;
 pub mod local_ai;
+pub mod mcp;
 pub mod workspace;
 
 /// Boot the Tauri application. Called from `main.rs`.
@@ -25,6 +26,8 @@ pub fn run() {
         .plugin(desktop_bridge::plugin())
         .setup(|app| {
             desktop_bridge::register(app.handle());
+            // v0.5 P6b: local MCP access, if the user turned it on.
+            mcp::setup(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -51,6 +54,9 @@ pub fn run() {
             ipc::discover_local_ai_v1,
             ipc::local_ai_chat_v1,
             desktop_bridge::get_global_shortcut_status_v1,
+            mcp::mcp_status_v1,
+            mcp::mcp_set_enabled_v1,
+            mcp::mcp_respond_v1,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application");

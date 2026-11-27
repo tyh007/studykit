@@ -8,6 +8,7 @@
  * saved with the project and shared with its members by default.
  */
 
+import { AGENT_PROVIDER_ID } from '../../application/research/mcp/agentIds';
 import React from 'react';
 import './projectAi.css';
 import { useResearchDeps } from './researchContext';
@@ -479,8 +480,9 @@ function MessageItem(props: {
       })}
       {m.provider ? (
         <p className="ai-meta ai-provenance">
-          {m.provider.id === 'ollama' ? 'Local AI' : 'Cloud AI'}
-          {m.provider.model ? ` · ${m.provider.model}` : ''}
+          {m.provider.id === AGENT_PROVIDER_ID
+            ? `From ${m.provider.model}, an AI agent on this computer`
+            : `${m.provider.id === 'ollama' ? 'Local AI' : 'Cloud AI'}${m.provider.model ? ` · ${m.provider.model}` : ''}`}
           {props.authorName ? ` · asked by ${props.authorName}` : ''}
           {m.context.length > 0 ? ` · saw ${m.context.map((c) => c.label).join(', ')}` : ''}
         </p>

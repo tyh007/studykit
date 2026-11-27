@@ -16,6 +16,7 @@ import type { AiContextRef } from '../../domain/aiThread';
 import { makeResearchProject } from '../../domain/__fixtures__/domain-fixtures';
 import type { AiSyncOp, AiSyncPort } from '../../application/research/aiSync';
 import { askPartner } from '../../application/research/aiPartner';
+import { McpHost } from '../../application/research/mcp/mcpServer';
 
 const P = 'p-001';
 const CONTEXT: AiContextRef[] = [
@@ -208,3 +209,25 @@ describe('ProjectAiPanel', () => {
     });
   });
 });
+
+describe('P6b: proposals from AI agents', () => {
+  it('shows an agent’s proposed point as a card, even with the built-in AI off, and adds it only when applied', async () => {
+    const host = new McpHost({ repository: repo, sharedProjectIds: () => new Set([P]), userId: () => 'u-1' });
+    const init = await host.handle(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { clientInfo: { name: 'Claude Code' } } }), null);
+    await host.handle(
+      JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'propose_point', arguments: { projectId: P, title: 'Naps help too', why: 'Two nap studies agree.' } } }),
+      init.sessionId!,
+    );
+    const [thread] = await repo.listAiThreads({ projectId: P });
+    localStorage.setItem(`studykit.ai.activeThread.${P}`, thread!.id);
+    mount(undefined);
+    const card = await screen.findByTestId('ai-draft');
+    expect(card).toHaveTextContent('Naps help too');
+    expect(screen.getByText('Two nap studies agree.')).toBeInTheDocument();
+    expect(screen.getByText(/From Claude Code, an AI agent on this computer/)).toBeInTheDocument();
+    expect(await repo.listClaims({ projectId: P })).toHaveLength(0);
+    fireEvent.click(within(card).getByTestId('ai-draft-apply'));
+    await waitFor(async () => expect((await repo.listClaims({ projectId: P })).map((c) => c.title)).toEqual(['Naps help too']));
+  });
+});
+

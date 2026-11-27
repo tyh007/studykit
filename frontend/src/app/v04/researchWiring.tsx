@@ -31,6 +31,7 @@
  *     reaches the Research slice.
  */
 
+import { McpHostBridge } from './McpHost';
 import React from 'react';
 import { createDexieResearchRepository } from '../../platforms/web';
 import { OpenAlexSearchProvider } from '../../application/research/openAlexProvider';
@@ -136,5 +137,11 @@ export function ResearchWiring(props: ResearchWiringProps): React.ReactElement {
   if (!flagOn || !deps) {
     return <>{props.children}</>;
   }
-  return <ResearchProvider value={deps}>{props.children}</ResearchProvider>;
+  return (
+    <ResearchProvider value={deps}>
+      {/* v0.5 P6b: answers local AI agents (desktop only). */}
+      <McpHostBridge />
+      {props.children}
+    </ResearchProvider>
+  );
 }

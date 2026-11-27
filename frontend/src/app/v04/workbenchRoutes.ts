@@ -27,12 +27,13 @@ export type ResearchEditorKind =
   | 'brainstorm'
   | 'disagreement'
   | 'agenda'
+  | 'agents'
   | 'design'
   | 'task'
   | 'canvas';
 
 const RESEARCH_EDITOR_KINDS: ReadonlySet<string> = new Set<ResearchEditorKind>([
-  'overview', 'library', 'search', 'work', 'evidence', 'output', 'report', 'argument', 'brainstorm', 'disagreement', 'agenda', 'design', 'task', 'canvas',
+  'overview', 'library', 'search', 'work', 'evidence', 'output', 'report', 'argument', 'brainstorm', 'disagreement', 'agenda', 'agents', 'design', 'task', 'canvas',
 ]);
 
 /** Project-scoped Research surfaces the workbench replaces. */
