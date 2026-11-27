@@ -71,16 +71,19 @@ export type SentenceSource =
   | 'ai-edited'
   /** An AI draft used word for word. */
   | 'ai-verbatim'
+  /** Brought in from elsewhere (e.g. the old literature hub); who wrote it isn't recorded. */
+  | 'imported'
   /** Written before StudyKit recorded sources. */
   | 'unknown';
 
-export const SENTENCE_SOURCES: readonly SentenceSource[] = ['own', 'quoted', 'ai-edited', 'ai-verbatim', 'unknown'];
+export const SENTENCE_SOURCES: readonly SentenceSource[] = ['own', 'quoted', 'ai-edited', 'ai-verbatim', 'imported', 'unknown'];
 
 export const SENTENCE_SOURCE_LABEL: Readonly<Record<SentenceSource, string>> = {
   own: 'Your own words',
   quoted: 'Quotes a source',
   'ai-edited': 'AI draft, edited by you',
   'ai-verbatim': 'AI draft, used as is',
+  imported: 'Imported from elsewhere',
   unknown: 'Written before sources were recorded',
 };
 
@@ -139,5 +142,6 @@ export function classifySentence(input: {
   if (origin?.kind === 'ai') return squash(origin.aiText) === squash(body) ? 'ai-verbatim' : 'ai-edited';
   if (input.quotes.some((q) => quotesExcerpt(body, q))) return 'quoted';
   if (!origin) return 'unknown';
+  if (origin.kind === 'imported') return 'imported';
   return 'own';
 }

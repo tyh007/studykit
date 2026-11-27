@@ -279,6 +279,7 @@ export function buildProvenanceReport(input: ReportInput): ProvenanceReport {
     aiStatement: aiUseStatement(ai, {
       sentences: sentences.length,
       unknown: bySource.unknown,
+      imported: bySource.imported,
       citedExcerpts: new Set(sentences.flatMap((s) => s.excerpts.map((e) => e.evidenceId))).size,
       uncheckedExcerpts: new Set(sentences.flatMap((s) => s.excerpts.filter((e) => !e.checked).map((e) => e.evidenceId))).size,
     }),
@@ -289,6 +290,8 @@ export interface StatementFacts {
   readonly sentences: number;
   /** Paragraphs written before sources were recorded. */
   readonly unknown: number;
+  /** Paragraphs imported from elsewhere: how they were written wasn't seen. */
+  readonly imported?: number;
   readonly citedExcerpts: number;
   readonly uncheckedExcerpts: number;
 }
@@ -300,15 +303,18 @@ export interface StatementFacts {
  */
 export function aiUseStatement(ai: AiUse, facts: StatementFacts): string {
   const sentenceCount = facts.sentences;
-  const known = sentenceCount - facts.unknown;
+  const imported = facts.imported ?? 0;
+  const known = sentenceCount - facts.unknown - imported;
   const parts: string[] = [];
   if (ai.draftedSentences === 0) {
     parts.push(
-      facts.unknown === 0
+      facts.unknown === 0 && imported === 0
         ? `None of the ${plural(sentenceCount, 'paragraph')} in this text began as an AI draft.`
-        : known === 0
+        : known === 0 && imported === 0
           ? `This text was written before StudyKit recorded where paragraphs came from, so their origin is not known.`
-          : `None of the ${plural(known, 'paragraph')} with a recorded source began as an AI draft.`,
+          : known === 0
+            ? `StudyKit did not see how this text was written.`
+            : `None of the ${plural(known, 'paragraph')} written in StudyKit began as an AI draft.`,
     );
   } else {
     const how = [ai.editedSentences ? `${ai.editedSentences} edited by the author` : '', ai.verbatimSentences ? `${ai.verbatimSentences} used as drafted` : '']
@@ -341,7 +347,10 @@ export function aiUseStatement(ai: AiUse, facts: StatementFacts): string {
     parts.push(`External AI agents connected to StudyKit (${ag.names.join(', ')})${did ? ` ${did}` : ' took part'}; they could not change the project directly.`);
   }
   if (ai.skippedOwnThinking > 0) parts.push(`${plural(ai.skippedOwnThinking, 'question')} skipped the author's own attempt first.`);
-  if (facts.unknown > 0 && known > 0) {
+  if (imported > 0) {
+    parts.push(`${plural(imported, 'paragraph')} ${imported === 1 ? 'was' : 'were'} imported from elsewhere, so StudyKit did not see how ${imported === 1 ? 'it was' : 'they were'} written.`);
+  }
+  if (facts.unknown > 0 && (known > 0 || imported > 0)) {
     parts.push(`${plural(facts.unknown, 'paragraph')} ${facts.unknown === 1 ? 'was' : 'were'} written before StudyKit recorded sources, so ${facts.unknown === 1 ? 'its' : 'their'} origin is not known.`);
   }
   if (facts.citedExcerpts > 0) {

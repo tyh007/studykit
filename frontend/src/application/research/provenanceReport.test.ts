@@ -109,7 +109,7 @@ describe('provenance report', () => {
     expect(report.aiStatement).toMatch(/^This text was written before StudyKit recorded where paragraphs came from, so their origin is not known\./);
     await addStatement(repo, { sectionId: section.id, body: 'Written today.' });
     const mixed = await loadProvenanceReport(repo, output.id);
-    expect(mixed.aiStatement).toMatch(/^None of the 1 paragraph with a recorded source began as an AI draft\./);
+    expect(mixed.aiStatement).toMatch(/^None of the 1 paragraph written in StudyKit began as an AI draft\./);
     expect(mixed.aiStatement).toContain('1 paragraph was written before StudyKit recorded sources, so its origin is not known.');
   });
 });

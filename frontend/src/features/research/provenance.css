@@ -120,6 +120,10 @@
   background: var(--danger, #b8524a);
 }
 
+.provenance-dot--imported {
+  background: var(--text-secondary);
+}
+
 .provenance-link {
   justify-self: start;
   font: inherit;

@@ -176,6 +176,7 @@ describe('brainwriting (group brainstorm)', () => {
     const b = await startBrainstorm(repo, { projectId: P, prompt: 'Why?' }, host);
     await setBrainstormMode(repo, b.id, 'group', host);
     const theirs = await addIdea(repo, { brainstormId: b.id, text: 'Host idea' }, host);
+    const hostRowBefore = (await repo.getBrainstorm(b.id))!.updatedAt;
     await expect(editIdea(repo, theirs.id, 'Changed', b.id, member)).rejects.toThrow(/only change your own ideas/);
     for (const t of ['One', 'Two', 'Three']) await addIdea(repo, { brainstormId: b.id, text: t }, member);
     const chat = vi.fn(async () => ({ content: 'Circadian timing', provider: 'cloud' as const }));
@@ -185,7 +186,7 @@ describe('brainwriting (group brainstorm)', () => {
     expect(sent).toContain('Three');
     expect(sent).not.toContain('Host idea');
     // Members adding ideas never rewrite the host's brainstorm row.
-    expect((await repo.getBrainstorm(b.id))?.updatedAt).toBe((await repo.getBrainstorm(b.id))?.createdAt);
+    expect((await repo.getBrainstorm(b.id))?.updatedAt).toBe(hostRowBefore);
   });
 });
 

@@ -29,15 +29,30 @@ import { useResearchDeps } from './researchContext';
 import { createProject } from '../../application/research/researchUseCases';
 import { type ResearchProject } from '../../domain/research';
 import { useCollaborationDepsOptional } from '../collaboration/collaborationContext';
+import { useCurrentUserId } from '../../lib/auth';
+import { isWorkbenchEnabled } from '../../app/v04/workbenchRoutes';
+import { legacyLiteratureSource } from '../../application/research/legacyLiteratureSource';
+import type { LegacyLiteratureSource } from '../../application/research/importLegacyLiterature';
+import { LegacyLiteratureImport } from './LegacyLiteratureImport';
 
 export interface ResearchHomeProps {
   readonly initialAddOpen?: boolean;
   readonly onOpenProject: (projectId: string) => void;
+  /**
+   * v0.5 P7a: where to read the old literature hub. Defaults to the
+   * data gateway when the workbench is on; null hides the section.
+   */
+  readonly legacySource?: LegacyLiteratureSource | null;
 }
 
 export function ResearchHome(props: ResearchHomeProps): React.ReactElement {
   const deps = useResearchDeps();
   const collab = useCollaborationDepsOptional();
+  const userId = useCurrentUserId();
+  const legacySource = React.useMemo(
+    () => (props.legacySource !== undefined ? props.legacySource : isWorkbenchEnabled() ? legacyLiteratureSource() : null),
+    [props.legacySource],
+  );
   const [projects, setProjects] = React.useState<readonly ResearchProject[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -270,6 +285,8 @@ export function ResearchHome(props: ResearchHomeProps): React.ReactElement {
           </ul>
         )}
       </section>
+
+      {legacySource ? <LegacyLiteratureImport source={legacySource} userId={userId} onOpenProject={props.onOpenProject} /> : null}
 
       {showNew && (
         <Surface

@@ -9,6 +9,7 @@
  */
 
 import { AGENT_PROVIDER_ID } from '../../application/research/mcp/agentIds';
+import { LEGACY_AI_PROVIDER_ID } from '../../application/research/legacyIds';
 import React from 'react';
 import './projectAi.css';
 import { useResearchDeps } from './researchContext';
@@ -482,7 +483,9 @@ function MessageItem(props: {
         <p className="ai-meta ai-provenance">
           {m.provider.id === AGENT_PROVIDER_ID
             ? `From ${m.provider.model}, an AI agent on this computer`
-            : `${m.provider.id === 'ollama' ? 'Local AI' : 'Cloud AI'}${m.provider.model ? ` · ${m.provider.model}` : ''}`}
+            : m.provider.id === LEGACY_AI_PROVIDER_ID
+              ? 'AI summary imported from the old literature hub, not checked'
+              : `${m.provider.id === 'ollama' ? 'Local AI' : 'Cloud AI'}${m.provider.model ? ` · ${m.provider.model}` : ''}`}
           {props.authorName ? ` · asked by ${props.authorName}` : ''}
           {m.context.length > 0 ? ` · saw ${m.context.map((c) => c.label).join(', ')}` : ''}
         </p>

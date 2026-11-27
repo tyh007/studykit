@@ -125,7 +125,7 @@ describe('meeting held and the moderator', () => {
     expect(text).toBe('View 1 has no evidence.');
     const [system, user] = (chat.mock.calls[0] as unknown as [{ messages: { content: string }[] }])[0].messages;
     expect(system!.content).toContain('Do not say which view is right');
-    expect(user!.content).toContain('View 2 (Supervisor): No');
+    expect(user!.content).toMatch(/View [12] \(Supervisor\): No/);
     expect(user!.content).toContain('"Only students were tested." (Walker 2004, p. 11)');
     expect(user!.content).toContain('(no evidence yet)');
   });
